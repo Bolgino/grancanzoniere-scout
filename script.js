@@ -164,11 +164,15 @@ async function loadData() {
     try {
         // 1. Carica Sezioni
         const secSnap = await getDocs(collection(db, "sections"));
-        allSections=[]; secSnap.forEach(d=>allSections.push({id:d.id, ...d.data()}));
+        allSections = [];
+        secSnap.forEach(d => allSections.push({id: d.id, ...d.data()}));
         
         // 2. Carica Canzoni
         const songSnap = await getDocs(collection(db, "songs"));
-        allSongs=[]; songSnap.forEach(d=>{if(!d.data().title.startsWith("Info"))allSongs.push({id:d.id,...d.data()})});
+        allSongs = [];
+        songSnap.forEach(d => {
+            if(!d.data().title.startsWith("Info")) allSongs.push({id: d.id, ...d.data()})
+        });
         
         // 3. Carica Scalette
         const setlistSnap = await getDocs(collection(db, "setlists"));
@@ -176,9 +180,11 @@ async function loadData() {
         setlistSnap.forEach(d => allSetlists.push({id: d.id, ...d.data()}));
         allSetlists.sort((a,b) => a.name.localeCompare(b.name));
 
-        document.getElementById("totalSongsCount").innerText = allSongs.length;
+        // Aggiorna il contatore
+        const countEl = document.getElementById("totalSongsCount");
+        if(countEl) countEl.innerText = allSongs.length;
 
-        allSections.sort((a,b)=>a.name.localeCompare(b.name));
+        allSections.sort((a,b) => a.name.localeCompare(b.name));
         sectionOrder = allSections.map(s => s.name); 
         
         // Refresh delle viste
@@ -186,17 +192,24 @@ async function loadData() {
             window.renderSetlistsList();
             if(currentSetlistId) window.renderActiveSetlistSongs();
         } else if(!currentCategory) {
-            renderDashboard();
+            window.renderDashboard(); // Assicurati di chiamare window.renderDashboard
         } else {
             openList(currentCategory); 
         }
 
     } catch(e) { 
-        console.error(e);
-        // showToast("Offline: visualizzo dati salvati", 'info'); 
+        console.error("Errore caricamento:", e);
+        // Mostra l'errore all'utente così capisce cosa succede
+        window.showToast("Errore caricamento: " + e.message, 'danger');
+    } finally {
+        // --- QUI SPEGNIAMO IL TELESCOPIO ---
+        const loader = document.getElementById("loadingOverlay");
+        if(loader) loader.style.display = "none";
+        
+        // Fermiamo le scritte che cambiano
+        if(loaderInterval) clearInterval(loaderInterval);
     }
 }
-
 async function loadProposals() {
     if(!isAdmin) return;
     const snap = await getDocs(collection(db, "proposals"));
@@ -1761,5 +1774,8 @@ window.toggleAutoScroll = () => {
         }, 50); 
     }
 
-};
+    function updateThemeIcon() {
+        return;
+    };
+
 
