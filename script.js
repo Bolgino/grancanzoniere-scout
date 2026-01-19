@@ -1764,7 +1764,7 @@ window.toggleAutoScroll = () => {
         area.addEventListener('touchstart', setInteractingTrue, {passive: true});
         area.addEventListener('touchend', setInteractingFalse);
 
-        autoScrollInterval = setInterval(() => {
+       autoScrollInterval = setInterval(() => {
             if (isUserInteracting) return;
             if (Math.ceil(area.scrollTop + area.clientHeight) >= area.scrollHeight - 1) {
                 window.toggleAutoScroll(); 
@@ -1773,17 +1773,8 @@ window.toggleAutoScroll = () => {
             area.scrollTop += 1; 
         }, 50); 
     }
-autoScrollInterval = setInterval(() => {
-            if (isUserInteracting) return;
-            if (Math.ceil(area.scrollTop + area.clientHeight) >= area.scrollHeight - 1) {
-                window.toggleAutoScroll(); 
-                return;
-            }
-            area.scrollTop += 1; 
-        }, 50); 
-    }
+};
 
-}; 
 
 function updateThemeIcon() {
     return;
