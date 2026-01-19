@@ -1606,7 +1606,7 @@ function createStarryBackground() {
         overlay.appendChild(star);
     }
 }
-// Variabili globali per lo scroll (assicurati siano fuori dalla funzione)
+// Variabili globali (mettile all'inizio del file JS se non ci sono)
 let scrollInterval = null;
 
 window.toggleAutoScroll = () => {
@@ -1669,3 +1669,4 @@ window.switchView = (viewId) => {
         console.error("Vista non trovata:", viewId);
     }
 };
+
