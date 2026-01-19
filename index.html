@@ -71,21 +71,17 @@
         <input type="text" name="fake_email_trap" tabindex="-1">
         <input type="password" name="fake_password_trap" tabindex="-1">
     </div>
-    <div id="loadingOverlay">
-        <svg class="constellation-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-            <path class="constellation-path" d="M 40 60 L 70 90 L 90 110 L 120 100 L 140 130 L 170 130 L 170 100" />
-            
-            <circle cx="40" cy="60" r="3" class="constellation-star c-star-7" /> <circle cx="70" cy="90" r="3" class="constellation-star c-star-6" />
-            <circle cx="90" cy="110" r="3" class="constellation-star c-star-5" />
-            <circle cx="120" cy="100" r="3" class="constellation-star c-star-4" /> <circle cx="140" cy="130" r="3" class="constellation-star c-star-3" />
-            <circle cx="170" cy="130" r="3" class="constellation-star c-star-2" />
-            <circle cx="170" cy="100" r="3" class="constellation-star c-star-1" />
-        </svg>
-
-        <h5 class="mt-3">Orientamento in corso...</h5>
-        
-        <div id="starsContainer"></div>
+<div id="loadingOverlay">
+    <div class="telescope-lens">
+        <div class="lens-star" style="top: 20%; left: 30%; width: 2px; height: 2px; animation-delay: 0s;"></div>
+        <div class="lens-star" style="top: 50%; left: 60%; width: 3px; height: 3px; animation-delay: 0.5s;"></div>
+        <div class="lens-star" style="top: 70%; left: 20%; width: 2px; height: 2px; animation-delay: 1s;"></div>
+        <div class="lens-star" style="top: 30%; left: 80%; width: 1px; height: 1px; animation-delay: 1.5s;"></div>
+        <div class="lens-star" style="top: 80%; left: 70%; width: 2px; height: 2px; animation-delay: 0.2s;"></div>
     </div>
+
+    <h5 id="loaderText" class="typing-cursor">Inizializzazione...</h5>
+</div>
 
     <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer" style="z-index: 1100"></div>
 
@@ -100,10 +96,6 @@
                     <i class="bi bi-music-note-list"></i> 
                     <span id="totalSongsCount" class="fw-bold">...</span>
                 </span>
-                <button class="btn btn-sm btn-outline-light border-0" onclick="window.toggleTheme()" title="Cambia Tema">
-                    <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
-                </button>
-
                 <button class="btn btn-warning btn-sm fw-bold position-relative admin-only" onclick="window.openProposalsView()">
                     <i class="bi bi-inbox-fill"></i> <span class="d-none d-md-inline">Proposte</span>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="proposalsBadge" style="display:none">0</span>
@@ -463,4 +455,5 @@
       }
     </script>
 </body>
+
 </html>
