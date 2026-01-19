@@ -49,14 +49,27 @@ let editingSectionId=null, currentCoverUrl="", sectionOrder=[];
 let favorites = JSON.parse(localStorage.getItem('scoutFavorites')) || [];
 let currentSetlistId = null;
 let autoScrollInterval = null;
+// Variabili per il Loader
+const loaderPhrases = [
+    "Allineo gli astri...",
+    "Accordo la chitarra...",
+    "Scaldo le corde vocali...",
+    "Cerco il Nord...",
+    "Preparo il fuoco...",
+    "Consulto la mappa..."
+];
+let loaderInterval;
 
 // Modals
 let mLogin, mAddSong, mAddSection, mEditSection, mEditSongMeta, mConfirm, mExport, mSearchSetlist, mExportSetlist, mAddToSetlist;
 
-// --- 1. SETUP UI (Modali e Tema) - Parte subito ---
 window.addEventListener('load', () => {
-    createStarryBackground();
+    // Avvia animazione testo loader
+    startLoaderAnimation();
+    
+    // Forza sfondo notturno (Senza controlli tema)
     manageDynamicBackgrounds();
+    
     // Init Modals
     mLogin = new bootstrap.Modal(document.getElementById('loginModal'));
     mAddSong = new bootstrap.Modal(document.getElementById('addSongModal'));
@@ -68,13 +81,29 @@ window.addEventListener('load', () => {
     mSearchSetlist = new bootstrap.Modal(document.getElementById('searchForSetlistModal'));
     mExportSetlist = new bootstrap.Modal(document.getElementById('exportSetlistModal'));
     mAddToSetlist = new bootstrap.Modal(document.getElementById('addToSetlistModal'));
-    
-    // Init Theme
-    if(localStorage.getItem('theme')==='dark') document.body.setAttribute('data-theme','dark');
-    updateThemeIcon();
-
-    // NOTA: Ho rimosso onAuthStateChanged da qui per evitare il caricamento doppio!
 });
+// --- FUNZIONE ANIMAZIONE LOADER ---
+function startLoaderAnimation() {
+    const textEl = document.getElementById('loaderText');
+    let i = 0;
+    
+    // Funzione per cambiare testo
+    const changeText = () => {
+        textEl.style.opacity = 0; // Fade out
+        setTimeout(() => {
+            textEl.innerText = loaderPhrases[i];
+            textEl.style.opacity = 1; // Fade in
+            i = (i + 1) % loaderPhrases.length;
+        }, 200); // Aspetta che sia invisibile per cambiare testo
+    };
+
+    // Primo testo subito
+    textEl.innerText = loaderPhrases[0];
+    i = 1;
+
+    // Cambia ogni 1.5 secondi
+    loaderInterval = setInterval(changeText, 1500);
+}
 
 // --- 2. AVVIO PERSISTENZA E DATI (Cuore del sistema) ---
 // Questo blocco gestisce l'avvio in sequenza corretta: Offline DB -> Auth -> Caricamento Dati
@@ -613,16 +642,7 @@ window.generateFullLatex=()=>{if(!isAdmin)return;let l=`\\documentclass{article}
 
 // UTILS & EXTRAS
 const fileToBase64 = file => new Promise((resolve, reject) => { const r = new FileReader(); r.readAsDataURL(file); r.onload = () => resolve(r.result); r.onerror = error => reject(error); });
-window.toggleTheme = () => {
-    const isDark = document.body.getAttribute('data-theme') === 'dark';
-    const newTheme = isDark ? 'light' : 'dark';
-    
-    document.body.setAttribute('data-theme', newTheme);
-    localStorage.setItem('theme', newTheme);
-    
-    updateThemeIcon();
-    manageDynamicBackgrounds(); // <--- Aggiunto questo
-};
+
 function updateThemeIcon() {
     const isDark = document.body.getAttribute('data-theme') === 'dark';
     const icon = document.getElementById('themeIcon');
@@ -636,15 +656,23 @@ window.openLoginModal=()=>mLogin.show();
 let shootingStarInterval;
 
 function manageDynamicBackgrounds() {
-    const isDark = document.body.getAttribute('data-theme') === 'dark';
     const bg = document.getElementById('dynamic-background');
-
-    if (isDark) {
-        if(bg) bg.style.display = 'block';
-        initNightStars(); // Genera le 80 stelle casuali
-    } else {
-        if(bg) bg.style.display = 'none';
-        // Di giorno non serve fare nulla: il CSS mette lo sfondo bianco
+    if(bg) bg.style.display = 'block';
+    
+    // Genera stelle fisse sfondo
+    const container = document.getElementById('night-stars-container');
+    if (container && container.innerHTML === "") {
+        for (let i = 0; i < 100; i++) {
+            const s = document.createElement('div');
+            s.className = 'bg-star';
+            s.style.left = Math.random() * 100 + '%';
+            s.style.top = Math.random() * 100 + '%';
+            const size = Math.random() * 2; 
+            s.style.width = size + 'px'; s.style.height = size + 'px';
+            s.style.animationDelay = (Math.random() * 5) + 's';
+            s.style.opacity = Math.random();
+            container.appendChild(s);
+        }
     }
 }
 
@@ -689,11 +717,7 @@ function stopShootingStars() {
 
 // Hook caricamento e cambio tema
 window.addEventListener('load', manageDynamicBackgrounds);
-const originalToggleTheme = window.toggleTheme;
-window.toggleTheme = () => {
-    if(originalToggleTheme) originalToggleTheme();
-    setTimeout(manageDynamicBackgrounds, 50);
-};
+
 window.performLogin = async () => {
     if (document.activeElement) document.activeElement.blur();
     const emailField = document.getElementById('loginEmail');
@@ -763,6 +787,7 @@ window.triggerDeleteSection = () => window.confirmModal("Eliminare sezione e tut
         showToast("Errore: " + e.message, 'danger');
     } finally {
         document.getElementById("loadingOverlay").style.display = "none";
+        if(loaderInterval) clearInterval(loaderInterval);
     }
 });
 window.showAddModal=()=>{const s=document.getElementById("newSongCategorySelect");s.innerHTML="";allSections.forEach(sec=>s.innerHTML+=`<option value="${sec.name}">${sec.name}</option>`);document.getElementById("newSongTitle").value="";document.getElementById("newSongAuthor").value="";document.getElementById("newSongLyrics").value="";mAddSong.show();};
@@ -1741,4 +1766,5 @@ window.toggleAutoScroll = () => {
             area.scrollTop += 1; 
         }, 50); 
     }
+
 };
