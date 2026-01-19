@@ -1607,58 +1607,65 @@ function createStarryBackground() {
     }
 }
 // Variabili globali per lo scroll (assicurati siano fuori dalla funzione)
-let autoScrollTimer = null;
-let isUserInteracting = false;
+let scrollInterval = null;
 
 window.toggleAutoScroll = () => {
     const area = document.getElementById('previewArea');
     const btn = document.getElementById('btnAutoScroll');
     
-    const setInteractingTrue = () => { isUserInteracting = true; };
-    const setInteractingFalse = () => { isUserInteracting = false; };
-
-    if (autoScrollInterval) { // Usa la variabile globale definita a inizio file
-        clearInterval(autoScrollInterval);
-        autoScrollInterval = null;
-        isUserInteracting = false;
-        
+    // Se è già attivo, lo fermiamo
+    if (scrollInterval) {
+        clearInterval(scrollInterval);
+        scrollInterval = null;
         if(btn) {
             btn.classList.replace('btn-success', 'btn-outline-success');
-            btn.innerHTML = '<i class="bi bi-mouse3"></i>';
+            btn.innerHTML = '<i class="bi bi-mouse3"></i> Auto-Scroll';
         }
-
-        area.removeEventListener('mousedown', setInteractingTrue);
-        area.removeEventListener('mouseup', setInteractingFalse);
-        area.removeEventListener('touchstart', setInteractingTrue);
-        area.removeEventListener('touchend', setInteractingFalse);
-    } else {
-        if (area.scrollHeight <= area.clientHeight) {
-            window.showToast("Testo troppo breve", "warning");
-            return;
-        }
-
-        if(btn) {
-            btn.classList.replace('btn-outline-success', 'btn-success');
-            btn.innerHTML = '<i class="bi bi-pause-fill"></i>';
-        }
-
-        area.addEventListener('mousedown', setInteractingTrue);
-        area.addEventListener('mouseup', setInteractingFalse);
-        area.addEventListener('touchstart', setInteractingTrue, {passive: true});
-        area.addEventListener('touchend', setInteractingFalse);
-
-        autoScrollInterval = setInterval(() => {
-            if (isUserInteracting) return;
-            if (Math.ceil(area.scrollTop + area.clientHeight) >= area.scrollHeight - 1) {
-                window.toggleAutoScroll(); 
-                return;
-            }
-            area.scrollTop += 1; 
-        }, 50); 
+        return;
     }
 
+    // AVVIO
+    if(btn) {
+        btn.classList.replace('btn-outline-success', 'btn-success');
+        btn.innerHTML = '<i class="bi bi-pause-fill"></i> Stop';
+    }
+
+    // Rimuoviamo il controllo "troppo corto" che dava fastidio.
+    // Semplicemente se non c'è nulla da scrollare, non succederà nulla visivamente, ma il bottone si accende.
+    
+    scrollInterval = setInterval(() => {
+        // Logica migliorata: controlla se è arrivato in fondo
+        if (area.scrollTop + area.clientHeight >= area.scrollHeight - 1) {
+            // Arrivato in fondo: ferma tutto
+            window.toggleAutoScroll();
+        } else {
+            // Scorre di 1 pixel
+            area.scrollTop += 1;
+        }
+    }, 50); // Velocità (50ms è standard, abbassa per velocizzare)
 };
 
 function updateThemeIcon() {
     return;
 }
+window.switchView = (viewId) => {
+    // 1. Prende tutte le schermate
+    const allViews = document.querySelectorAll('.view-screen');
+    
+    // 2. Rimuove la classe 'active' da TUTTE
+    allViews.forEach(view => {
+        view.classList.remove('active');
+        view.style.display = 'none'; // Sicurezza aggiuntiva
+    });
+
+    // 3. Attiva solo quella richiesta
+    const target = document.getElementById(viewId);
+    if (target) {
+        target.style.display = 'block';
+        // Piccolo timeout per permettere l'animazione opacity
+        setTimeout(() => target.classList.add('active'), 10);
+        window.scrollTo(0, 0);
+    } else {
+        console.error("Vista non trovata:", viewId);
+    }
+};
