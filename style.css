@@ -1,140 +1,117 @@
 :root {
-    /* TEMA SCURO FISSO */
     --bg-color: #050505;
-    --text-color: #ffffff;
-    
-    /* MODIFICA: Sfondo solido nero per massima leggibilità */
-    --card-bg: #000000; 
-    
-    /* MODIFICA: Accordi rossi come richiesto */
-    --chord-color: #ff3333; 
-    
-    --border-color: #444;
-    --primary-blue: #3d8bfd; /* Un blu ben visibile su nero */
+    --card-bg: #151515; 
+    --text-main: #ffffff;
+    --text-muted: #aaaaaa;
+    --accent-color: #0d6efd;
+    --border-color: #333333;
+    --chord-color: #ff3333; /* Rosso acceso per accordi */
 }
 
 body {
     background-color: var(--bg-color) !important;
-    color: var(--text-color) !important;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    padding-bottom: 80px;
+    color: var(--text-main) !important;
+    font-family: 'Segoe UI', sans-serif;
+    padding-bottom: 50px;
     overflow-x: hidden;
 }
 
-/* --- SFONDO (NON TOCCATO) --- */
-#dynamic-background {
-    display: block !important;
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    z-index: -1; pointer-events: none; overflow: hidden;
-    background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
+/* --- 1. GESTIONE VISTE (Il fix per l'obrobrio) --- */
+.view-screen {
+    display: none !important; /* Nasconde tutto di base */
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
 }
-/* ... resto del CSS delle stelle/costellazioni invariato ... */
-.night-core-bg, .constellation-wrapper, .bg-star { /* ... lascia come sono ... */ }
 
-/* --- INTERFACCIA UTENTE (SISTEMATA) --- */
+.view-screen.active {
+    display: block !important; /* Mostra solo quella attiva */
+    opacity: 1;
+}
 
-/* Navbar - Più scura */
+/* --- 2. BOTTONI LEGGIBILI --- */
+.btn {
+    color: #fff !important; /* Testo sempre bianco */
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+}
+
+/* Bottoni Outline (quelli che non si vedevano) */
+.btn-outline-light, .btn-outline-secondary, .btn-light {
+    background: transparent !important;
+    border: 1px solid #666 !important;
+    color: #ccc !important;
+}
+.btn-outline-light:hover, .btn-outline-secondary:hover {
+    background: #333 !important;
+    color: #fff !important;
+    border-color: #fff !important;
+}
+
+/* Bottoni Primari/Action */
+.btn-primary, .btn-success, .btn-warning, .btn-danger {
+    border: none !important;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+}
+
+/* Navbar e Input */
 .navbar {
-    background: rgba(0, 0, 0, 0.9) !important;
+    background: rgba(10, 10, 10, 0.95) !important;
     border-bottom: 1px solid var(--border-color);
+    backdrop-filter: blur(10px);
 }
-
-/* MODIFICA: Card, Liste e Bottoni - Sfondo NERO solido e scritte BIANCHE */
-.card, .list-group-item, .category-card {
-    background-color: #000000 !important; /* Nero puro */
-    border: 1px solid var(--border-color) !important;
+input.form-control, textarea.form-control, select.form-select {
+    background-color: #1a1a1a !important;
+    border: 1px solid #444 !important;
     color: #fff !important;
 }
+input::placeholder { color: #666 !important; }
 
-/* Effetto Hover leggermente più chiaro per capire che è cliccabile */
-.list-group-item:hover, .category-card:hover {
-    background-color: #1a1a1a !important; 
-    transform: translateY(-2px);
-    transition: all 0.2s;
-}
-
-/* MODIFICA: Risoluzione testo tagliato (Wrapping) */
-.list-group-item .text-truncate, 
-.text-truncate {
-    white-space: normal !important; /* Va a capo invece di tagliare */
-    overflow: visible !important;
-    text-overflow: clip !important;
-    word-break: break-word; /* Spezza le parole lunghe se serve */
-}
-
-/* MODIFICA: Titoli BLU */
-h1, h2, h3, h4, h5, h6, .fw-bold { 
-    color: var(--primary-blue) !important; 
-}
-
-/* Testi secondari (autori, ecc) bianchi o grigio chiaro */
-.text-muted, small { color: #cccccc !important; }
-.bi { color: #fff !important; }
-
-/* MODIFICA: Input e Textarea (Editor e Ricerca) - Tutto nero */
-input, textarea, select, .form-control, .form-select, .input-group-text {
-    background-color: #000000 !important;
-    border: 1px solid #555 !important;
-    color: #fff !important;
-}
-
-input:focus, textarea:focus, select:focus {
-    background-color: #111 !important;
-    color: #fff !important;
-    border-color: var(--primary-blue) !important;
-    box-shadow: none !important;
-}
-
-/* Placeholder più visibile */
-input::placeholder, textarea::placeholder { color: #bbbbbb !important; }
-
-/* --- AREA TESTO E ACCORDI --- */
+/* --- 3. EDITOR E TESTO CANZONE --- */
 .preview-area {
-    background: #000000 !important; /* Sfondo nero */
-    color: #ffffff !important; /* Testo bianco */
-    padding: 20px; 
-    border-radius: 8px; 
-    min-height: 500px;
-    border: 1px solid #444;
-    font-size: 16px; 
-    line-height: 2.8 !important;
-    white-space: pre-wrap !important; 
-    font-family: monospace !important; 
-    overflow-x: auto;
-}
-
-/* MODIFICA: Stile Accordi ROSSO */
-.chord-span {
-    color: var(--chord-color) !important; /* Rosso */
-    font-weight: bold; 
-    font-size: 0.95em;
-    display: inline-block;
-    width: 0; 
-    overflow: visible; 
-    white-space: nowrap; 
-    vertical-align: top; 
-    position: relative; 
-    top: -1.2em; 
-    left: -1px; 
-    margin: 0;              
-}
-
-/* Bottoni generali */
-.btn-outline-light {
-    border-color: #fff;
-    color: #fff;
-}
-.btn-outline-light:hover {
-    background-color: #fff;
-    color: #000;
-}
-
-/* Correzione specifica per il badge tono */
-.badge.bg-light {
-    background-color: #333 !important;
+    background: #000 !important;
     color: #fff !important;
-    border: 1px solid #555 !important;
+    padding: 25px;
+    border: 1px solid #333;
+    border-radius: 8px;
+    
+    /* Dimensioni e Scroll */
+    height: 65vh; /* Altezza fissa per far funzionare lo scroll */
+    overflow-y: auto; /* Abilita lo scroll verticale */
+    
+    /* Formattazione Testo */
+    font-family: 'Courier New', monospace !important;
+    font-size: 18px;
+    line-height: 2.2 !important;
+    
+    /* FIX TESTO TAGLIATO */
+    white-space: pre-wrap !important;       /* Mantiene gli a capo */
+    overflow-wrap: break-word !important;   /* Spezza le parole lunghe */
+    word-wrap: break-word !important;       /* Compatibilità */
+    max-width: 100%;
 }
 
-/* Nascondi accordi */
-.hide-chords .chord-span { display: none; }
+/* Accordi */
+.chord-span {
+    color: var(--chord-color) !important;
+    font-weight: bold;
+    position: relative;
+    top: -1.0em; /* Regola questo se si sovrappone troppo */
+    font-size: 0.9em;
+}
+
+/* Card Sezioni */
+.card, .category-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+}
+.cat-cover {
+    height: 120px;
+    background-color: #222;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 3rem; color: #555;
+    border-bottom: 1px solid #333;
+}
