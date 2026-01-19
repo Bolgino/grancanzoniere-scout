@@ -1,0 +1,522 @@
+:root {
+    --bg-color: #f8f9fa;
+    --text-color: #212529;
+    --card-bg: #ffffff;
+    --chord-color: #d63384;
+}
+
+[data-theme="dark"] {
+    --bg-color: #212529;
+    --text-color: #f8f9fa;
+    --card-bg: #343a40;
+    --chord-color: #ff85c0;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    transition: background 0.3s, color 0.3s;
+    padding-bottom: 80px;
+}
+/* Opzionale: Rendi anche le icone delle card più visibili se necessario */
+[data-theme="dark"] .cat-icon {
+    color: rgba(255, 255, 255, 0.9);
+}
+/* Gestione visibilità Admin */
+.admin-only { display: none !important; }
+body.user-admin .admin-only { display: inline-block !important; }
+body.user-admin .admin-block { display: block !important; }
+
+/* Gestione Schermate */
+.view-screen { display: none; padding: 20px; animation: fadeIn 0.3s; }
+.view-screen.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* Cards Sezioni */
+.category-card {
+    cursor: pointer; transition: transform 0.2s; border: none; border-radius: 12px;
+    background: var(--card-bg); color: var(--text-color);
+    overflow: hidden; position: relative; height: 220px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+.category-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
+
+.cat-cover {
+    height: 140px; background-color: #6c757d;
+    background-size: cover; background-position: center;
+    display: flex; align-items: center; justify-content: center;
+}
+.cat-icon { font-size: 3rem; color: rgba(255,255,255,0.7); }
+
+.cat-actions {
+    position: absolute; top: 10px; right: 10px; z-index: 10;
+    display: none; /* Visibile solo agli admin via JS/CSS */
+}
+body.user-admin .cat-actions { display: block; }
+
+/* Lista Canzoni */
+.song-list-item {
+    cursor: pointer; background: var(--card-bg); color: var(--text-color);
+    border-radius: 8px; margin-bottom: 8px; transition: background 0.2s;
+    border: 1px solid rgba(0,0,0,0.05);
+}
+.song-list-item:hover { background-color: rgba(0,0,0,0.05); }
+
+/* Editor e Preview */
+.preview-area {
+    background: var(--card-bg); 
+    color: var(--text-color);
+    padding: 20px; 
+    border-radius: 8px; 
+    min-height: 500px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05); 
+    border: 1px solid rgba(0,0,0,0.1);
+    font-size: 16px; 
+    
+    /* AUMENTIAMO LEGGERMENTE L'INTERLINEA PER GLI ACCORDI */
+    line-height: 2.8; 
+    
+    white-space: pre-wrap; 
+    font-family: monospace;
+}
+
+/* --- NUOVO: STILE PER IL BOX NOTE NELL'EDITOR --- */
+#editorMeta {
+    white-space: normal !important; /* Forza il ritorno a capo */
+    word-wrap: break-word;
+    background-color: rgba(0,0,0,0.05); /* Sfondo grigio leggero */
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-top: 5px;
+    border-left: 4px solid var(--chord-color); /* Accento estetico */
+    font-size: 0.9em;
+    line-height: 1.4;
+    max-width: 100%;
+}
+[data-theme="dark"] #editorMeta {
+    background-color: rgba(255,255,255,0.1);
+}
+
+/* Accordi sopra il testo */
+.chord-span {
+    color: var(--chord-color);
+    font-weight: bold; 
+    font-size: 0.85em;
+    
+    /* TRUCCO PER NON SPEZZARE LA PAROLA: */
+    display: inline-block;
+    width: 0;              /* Occupa 0 spazio orizzontale nel flusso del testo */
+    overflow: visible;     /* Mostra l'accordo anche se la width è 0 */
+    white-space: nowrap;   /* Impedisce all'accordo di andare a capo */
+    vertical-align: top;   /* Allineamento */
+
+    /* POSIZIONAMENTO SOPRA */
+    position: relative; 
+    top: -1.1em;           /* Sposta l'accordo sopra la riga */
+    left: -1px;            /* Micro-aggiustamento per centrarlo sulla lettera */
+    
+    /* Rimuoviamo i margini che creavano buchi */
+    margin: 0;             
+}
+.hide-chords .chord-span { display: none; }
+
+/* Drag & Drop lista ordinamento */
+.order-list-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px; background: #fff; border: 1px solid #ddd; margin-bottom: 5px; border-radius: 5px;
+}
+
+/* Loading Overlay */
+/* --- COSMIC LOADER & CONSTELLATION --- */
+
+/* Sfondo "Spazio Profondo" */
+#loadingOverlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    /* Gradiente radiale che simula il cielo notturno */
+    background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
+    z-index: 9999; color: white;
+    display: none; /* Gestito via JS */
+    align-items: center; justify-content: center; flex-direction: column;
+    overflow: hidden;
+}
+
+/* Testo di caricamento */
+#loadingOverlay h5 {
+    margin-top: 20px;
+    font-weight: 300;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+    opacity: 0.8;
+    animation: pulseText 2s infinite ease-in-out;
+    z-index: 10;
+}
+
+/* Animazione Pulsazione Testo */
+@keyframes pulseText {
+    0%, 100% { opacity: 0.5; transform: scale(0.95); }
+    50% { opacity: 1; transform: scale(1); }
+}
+
+/* STELLE DI SFONDO (Generate via JS o fisse) */
+.star {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+    opacity: 0;
+    animation: twinkle var(--duration) ease-in-out infinite;
+    animation-delay: var(--delay);
+}
+
+@keyframes twinkle {
+    0% { opacity: 0; transform: scale(0.5); }
+    50% { opacity: var(--opacity); transform: scale(1.2); }
+    100% { opacity: 0; transform: scale(0.5); }
+}
+
+/* COSTELLAZIONE SVG */
+.constellation-svg {
+    width: 180px;
+    height: 180px;
+    z-index: 10;
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.6));
+}
+
+/* Linee della costellazione */
+.constellation-path {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.6);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 400; /* Lunghezza approssimativa del tracciato */
+    stroke-dashoffset: 400;
+    animation: drawLines 3s ease-out forwards infinite;
+}
+
+/* Stelle principali della costellazione */
+.constellation-star {
+    fill: #fff;
+    opacity: 0;
+    animation: starAppear 3s forwards infinite;
+}
+
+/* Ritardi per far apparire le stelle in sequenza */
+.c-star-1 { animation-delay: 0.0s; }
+.c-star-2 { animation-delay: 0.3s; }
+.c-star-3 { animation-delay: 0.6s; }
+.c-star-4 { animation-delay: 0.9s; }
+.c-star-5 { animation-delay: 1.2s; }
+.c-star-6 { animation-delay: 1.5s; }
+.c-star-7 { animation-delay: 1.8s; } /* Stella Polare/Punta */
+
+@keyframes drawLines {
+    0% { stroke-dashoffset: 400; opacity: 0; }
+    10% { opacity: 1; }
+    80% { stroke-dashoffset: 0; opacity: 1; }
+    100% { stroke-dashoffset: 0; opacity: 0; } /* Fade out alla fine */
+}
+
+@keyframes starAppear {
+    0% { opacity: 0; transform: scale(0); transform-box: fill-box; transform-origin: center; }
+    10% { opacity: 1; transform: scale(1.5); }
+    20% { transform: scale(1); }
+    90% { opacity: 1; }
+    100% { opacity: 0; }
+}
+/* --- GESTIONE SFONDI E TEMI (VERSIONE SENZA GRIGLIA) --- */
+
+/* 1. TEMA GIORNO (DEFAULT) - BIANCO PULITO */
+body {
+    background-color: #ffffff !important; 
+    color: #212529;
+}
+
+#dynamic-background {
+    display: none; 
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    z-index: -1; pointer-events: none; overflow: hidden;
+}
+.sky-layer { width: 100%; height: 100%; position: absolute; }
+
+/* --- GESTIONE SFONDI E TEMI (CIELO PROFONDO + NUVOLE) --- */
+
+/* 1. TEMA GIORNO (DEFAULT) */
+body {
+    /* Rendiamo il body trasparente per vedere il cielo sotto */
+    background-color: transparent !important; 
+    color: #212529;
+}
+
+/* Il contenitore dello sfondo è sempre attivo ora, gestiamo i figli */
+#dynamic-background {
+    display: block;
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    z-index: -1; pointer-events: none; overflow: hidden;
+}
+
+/* I livelli cielo sono nascosti di base */
+.sky-layer { display: none; width: 100%; height: 100%; position: absolute; top:0; left:0; }
+
+/* SE È GIORNO: Mostra il cielo diurno */
+body:not([data-theme="dark"]) #day-sky {
+    display: block;
+}
+
+/* --- STILI CIELO GIORNO --- */
+.deep-sky-gradient {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    /* Gradiente cielo profondo: da blu scuro in alto a azzurro all'orizzonte */
+    background: linear-gradient(to bottom, #003366 0%, #336699 60%, #6699cc 100%);
+}
+
+.clouds-layer {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    /* Immagine nuvole seamless (ripetibile) e trasparente */
+    background-image: url('https://images.unsplash.com/photo-1569428034239-f9565e32e224?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1920&q=80');
+    background-repeat: repeat-x;
+    background-position: 0 bottom;
+    opacity: 0.9;
+}
+
+/* Nuvole posteriori: più lente, più in alto, più trasparenti */
+.clouds-back {
+    background-size: 150% auto;
+    opacity: 0.6;
+    animation: moveClouds 120s linear infinite;
+}
+
+/* Nuvole frontali: più veloci, più in basso, più definite */
+.clouds-front {
+    background-size: 200% auto;
+    bottom: -10%; /* Un po' più basse */
+    animation: moveClouds 60s linear infinite;
+}
+
+@keyframes moveClouds {
+    0% { background-position: 0 bottom; }
+    100% { background-position: 200% bottom; }
+}
+
+
+/* 2. TEMA NOTTE - NERO PROFONDO CON BOX BIANCHI */
+[data-theme="dark"] {
+    --bg-color: #000000;
+    --text-color: #212529;
+    --card-bg: #ffffff;
+    --chord-color: #d63384;
+}
+
+[data-theme="dark"] body {
+    background-color: #000000 !important; 
+    color: #f8f9fa;
+}
+
+/* SE È NOTTE: Mostra il cielo notturno */
+[data-theme="dark"] #night-sky {
+    display: block;
+}
+
+/* Sfondo Notte: Puro nero con leggero bagliore centrale */
+.night-core-bg {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: radial-gradient(circle at center, #0a0a0a 0%, #000000 100%);
+}
+
+/* --- LISTE E PREVIEW --- */
+/* Giorno: Leggera trasparenza per vedere le nuvole sotto */
+.list-group-item {
+    background-color: rgba(255, 255, 255, 0.85) !important;
+    color: #212529 !important;
+    border: 1px solid rgba(0,0,0,0.1);
+    backdrop-filter: blur(5px); /* Effetto vetro smerigliato */
+}
+.preview-area {
+    background: rgba(255, 255, 255, 0.9) !important; 
+    color: #212529 !important;
+    /* ... resto uguale ... */
+    padding: 20px; border-radius: 8px; min-height: 500px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.1);
+    line-height: 2.8; white-space: pre-wrap; font-family: monospace;
+    backdrop-filter: blur(5px);
+}
+
+/* Notte: Bianco solido per massimo contrasto */
+[data-theme="dark"] .list-group-item,
+[data-theme="dark"] .preview-area {
+    background-color: #ffffff !important;
+    backdrop-filter: none;
+}
+
+/* --- COSTELLAZIONI (INVARIATO) --- */
+.constellation-wrapper { position: absolute; opacity: 0.8; }
+.constellation-path {
+    fill: none; stroke: rgba(255, 255, 255, 0.3); stroke-width: 0.8px;
+    stroke-dasharray: 500; stroke-dashoffset: 500; animation: drawLines 4s ease-out forwards 0.5s;
+}
+.c-star { fill: #fff; opacity: 0; animation: fadeIn 1s forwards; }
+.main-star { filter: drop-shadow(0 0 5px white); }
+/* NOMI IN CORSIVO */
+.constellation-name {
+    color: rgba(255, 255, 255, 0.5); font-size: 0.75rem; text-align: center;
+    margin-top: -10px; font-family: serif; font-style: italic; letter-spacing: 1px;
+    opacity: 0; animation: fadeIn 2s forwards 2s;
+}
+@keyframes drawLines { to { stroke-dashoffset: 0; } }
+@keyframes fadeIn { to { opacity: 1; } }
+
+/* --- GESTIONE SFONDI E VISIBILITÀ (VERSIONE FINALE PULITA) --- */
+
+/* 1. TEMA GIORNO (DEFAULT) */
+body {
+    background-color: #ffffff !important; 
+    color: #212529;
+}
+
+/* Nascondiamo lo sfondo dinamico di giorno */
+#dynamic-background {
+    display: none; 
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    z-index: -1; pointer-events: none; overflow: hidden;
+}
+
+/* 2. TEMA NOTTE (NERO PROFONDO + BOX BIANCHI) */
+[data-theme="dark"] body {
+    background-color: #000000 !important;
+}
+
+[data-theme="dark"] #dynamic-background {
+    display: block;
+}
+
+/* Sfondo Notte: Solo nero con bagliore centrale */
+.night-core-bg {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: radial-gradient(circle at center, #0a0a0a 0%, #000000 100%);
+}
+
+/* --- FIX VISIBILITÀ: LENTE E NUMERI (NERI SU BIANCO) --- */
+/* Dato che i box sono bianchi anche di notte, forziamo icone e testi a essere scuri */
+
+/* Lente di ricerca */
+.bi-search {
+    color: #212529 !important;
+    opacity: 1 !important;
+}
+
+/* Numeri canzoni e testi piccoli */
+.text-muted, .text-secondary, small, .category-card small {
+    color: #6c757d !important; /* Grigio scuro leggibile su bianco */
+    opacity: 1 !important;
+}
+
+/* Titoli delle sezioni nelle card */
+.category-card h5 {
+    color: #212529 !important;
+}
+
+/* --- LISTE E PREVIEW (SEMPRE BIANCHE) --- */
+.list-group-item, .preview-area {
+    background-color: #ffffff !important;
+    color: #212529 !important;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+
+/* --- COSTELLAZIONI --- */
+.constellation-wrapper { position: absolute; opacity: 0.8; }
+.constellation-path {
+    fill: none; stroke: rgba(255, 255, 255, 0.3); stroke-width: 0.8px;
+    stroke-dasharray: 500; stroke-dashoffset: 500; animation: drawLines 4s ease-out forwards 0.5s;
+}
+.c-star { fill: #fff; opacity: 0; animation: fadeIn 1s forwards; }
+.main-star { filter: drop-shadow(0 0 5px white); }
+
+/* Nomi in corsivo */
+.constellation-name {
+    color: rgba(255, 255, 255, 0.5); font-size: 0.75rem; text-align: center;
+    margin-top: -10px; font-family: serif; font-style: italic; letter-spacing: 1px;
+    opacity: 0; animation: fadeIn 2s forwards 2s;
+}
+
+@keyframes drawLines { to { stroke-dashoffset: 0; } }
+@keyframes fadeIn { to { opacity: 1; } }
+
+/* Stelle casuali */
+.bg-star {
+    position: absolute; background: white; border-radius: 50%;
+    animation: twinkleStar 4s infinite ease-in-out;
+}
+@keyframes twinkleStar { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.8; } }
+/* --- FIX VISIBILITÀ DEFINITIVO --- */
+
+/* Forza la lente di ricerca e il numero canzoni a essere sempre scuri 
+   perché si trovano su sfondi bianchi (card e input) */
+
+/* 1. La lente di ricerca */
+.bi-search, 
+#view-dashboard .input-group-text i,
+#view-dashboard .bi-search {
+    color: #212529 !important;
+    opacity: 1 !important;
+    -webkit-text-fill-color: #212529 !important; /* Fix per alcuni browser */
+}
+
+/* 2. Il numero delle canzoni nelle sezioni e testi piccoli nelle card */
+.category-card small, 
+.category-card .text-muted,
+#categoriesContainer .text-muted {
+    color: #6c757d !important; /* Grigio scuro/Nero */
+    opacity: 1 !important;
+    font-weight: 500 !important;
+}
+
+/* 3. Eventuali icone nelle card se non le vedi */
+.category-card .bi-chevron-right {
+    color: #212529 !important;
+}
+/* --- FIX AUTOSCROLL --- */
+#previewArea {
+    /* Calcola l'altezza: 100% dello schermo meno lo spazio per header e controlli */
+    height: calc(100vh - 220px) !important; 
+    overflow-y: auto !important;
+    scroll-behavior: auto !important; /* Evita conflitti con lo scroll JS */
+    display: block !important;
+}
+
+/* Su mobile diamo un po' più di spazio */
+@media (max-width: 768px) {
+    #previewArea {
+        height: calc(100vh - 280px) !important;
+    }
+}
+
+/* Stile per i tastini + e - nella scaletta */
+.btn-xxs {
+    padding: 1px 6px;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    border-radius: 3px;
+}
+
+/* Bollini Admin per stato canzone */
+.admin-badge {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: bold;
+    color: white;
+    margin-left: 5px;
+    vertical-align: middle;
+}
+.badge-testo { background-color: #ffc107; color: #212529; } /* Giallo (T) */
+.badge-accordi { background-color: #198754; } /* Verde (A) */
+
+/* Fix visivo per l'autoscroll */
+#previewArea {
+    scroll-behavior: auto !important; /* Disabilita scroll smooth che rompe l'automatismo */
+}
