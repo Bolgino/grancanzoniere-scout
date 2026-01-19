@@ -1,12 +1,12 @@
 :root {
-    /* TEMA SCURO FISSO */
-    --bg-color: #050505;
-    --text-color: #f8f9fa;
-    --card-bg: #1e1e1e; /* Sfondo solido scuro per leggibilità */
-    --chord-color: #ff85c0; /* Rosa ben visibile per accordi */
-    --border-color: #333;
+    --bg-color: #0b0d17; /* Blu notte molto scuro */
+    --text-color: #ffffff;
+    --card-bg: rgba(30, 32, 40, 0.85); /* Sfondo scuro semi-trasparente */
+    --chord-color: #ff85c0; /* Rosa fluo per gli accordi */
+    --border-color: rgba(255, 255, 255, 0.1);
 }
 
+/* FORZA TEMA SCURO SU TUTTO */
 body {
     background-color: var(--bg-color) !important;
     color: var(--text-color) !important;
@@ -15,21 +15,20 @@ body {
     overflow-x: hidden;
 }
 
-/* --- SFONDO COSTELLAZIONI (RIPRISTINATO) --- */
+/* --- SFONDO ORIGINALE (COSTELLAZIONI) --- */
 #dynamic-background {
     display: block !important;
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     z-index: -1; pointer-events: none; overflow: hidden;
-    /* Gradiente notte profonda */
+    /* Gradiente notte originale */
     background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
 }
 
 .night-core-bg {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background: radial-gradient(circle at 50% 80%, rgba(20, 30, 60, 0.4) 0%, transparent 70%);
 }
 
-/* Animazioni Costellazioni (Quelle originali) */
+/* Ripristino animazioni costellazioni */
 .constellation-wrapper { position: absolute; opacity: 0.8; }
 .constellation-path {
     fill: none; stroke: rgba(255, 255, 255, 0.3); stroke-width: 0.8px;
@@ -47,51 +46,51 @@ body {
 @keyframes drawLines { to { stroke-dashoffset: 0; } }
 @keyframes fadeIn { to { opacity: 1; } }
 
-/* Stelle casuali sfondo */
+/* Stelle casuali */
 .bg-star {
     position: absolute; background: white; border-radius: 50%;
     animation: twinkleStar 4s infinite ease-in-out;
 }
 @keyframes twinkleStar { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.8; } }
 
-/* --- INTERFACCIA UTENTE (CORRETTA) --- */
+/* --- INTERFACCIA LEGGIBILE --- */
 
 /* Navbar */
 .navbar {
-    background: rgba(13, 110, 253, 0.15) !important;
+    background: rgba(13, 110, 253, 0.3) !important;
     backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--border-color);
 }
 
-/* Card e Liste */
+/* Card e Liste - Sfondo scuro per leggere il testo bianco */
 .card, .list-group-item, .category-card {
-    background-color: rgba(30, 30, 30, 0.7) !important; /* Scuro semitrasparente */
+    background-color: var(--card-bg) !important;
     border: 1px solid var(--border-color) !important;
     color: #fff !important;
     backdrop-filter: blur(5px);
 }
 
 .list-group-item:hover, .category-card:hover {
-    background-color: rgba(50, 50, 50, 0.9) !important;
+    background-color: rgba(60, 64, 80, 0.95) !important;
     transform: translateY(-2px);
     transition: all 0.2s;
 }
 
-/* Testi e Icone - Forziamo il bianco/grigio chiaro */
+/* Forza colori testi */
 h1, h2, h3, h4, h5, h6, .fw-bold { color: #fff !important; }
 .text-muted, small { color: #adb5bd !important; }
-.bi { color: #fff !important; }
-.text-primary { color: #6ea8fe !important; } /* Blu più chiaro per leggibilità su scuro */
+.text-secondary { color: #ccc !important; }
+.bi { color: #fff !important; } /* Icone bianche */
 
-/* Input Form */
-input, textarea, select, .form-control, .form-select {
+/* Input Form - Sfondo scuro */
+input, textarea, select, .form-control, .form-select, .input-group-text {
     background-color: #2b2b2b !important;
-    border: 1px solid #444 !important;
+    border: 1px solid #555 !important;
     color: #fff !important;
 }
-input::placeholder, textarea::placeholder { color: #888 !important; }
+input::placeholder, textarea::placeholder { color: #bbb !important; }
 
-/* --- AREA TESTO E ACCORDI (FONDAMENTALE: NON MODIFICARE) --- */
+/* --- AREA TESTO E ACCORDI (SISTEMATA) --- */
 .preview-area {
     background: #121212 !important; 
     color: #e0e0e0 !important;
@@ -101,45 +100,33 @@ input::placeholder, textarea::placeholder { color: #888 !important; }
     border: 1px solid #333;
     font-size: 16px; 
     
-    /* PARAMETRI CRITICI PER ALLINEAMENTO */
-    line-height: 2.8 !important; /* Spazio per l'accordo */
+    /* PARAMETRI FONDAMENTALI PER GLI ACCORDI */
+    line-height: 2.8 !important; 
     white-space: pre-wrap !important; 
-    font-family: monospace !important; /* Obbligatorio per allineare */
+    font-family: monospace !important; /* Questo allinea gli accordi */
     overflow-x: auto;
 }
 
-/* Stile Accordi */
 .chord-span {
     color: var(--chord-color);
     font-weight: bold; 
     font-size: 0.9em;
-    
-    /* Logica posizionamento */
     display: inline-block;
     width: 0; 
     overflow: visible; 
     white-space: nowrap; 
     vertical-align: top; 
-
     position: relative; 
-    top: -1.2em; /* Sposta l'accordo sopra */
+    top: -1.2em; /* Sposta l'accordo sopra la riga */
     left: -1px; 
     margin: 0;              
 }
 .hide-chords .chord-span { display: none; }
 
-/* Box note editor */
-#editorMeta {
-    background-color: rgba(255,255,255,0.1);
-    color: #ddd;
-    padding: 8px; border-radius: 6px;
-    border-left: 4px solid var(--chord-color);
-}
-
-/* --- LOADER TELESCOPIO (NUOVO) --- */
+/* --- NUOVO LOADER TELESCOPIO (Quello che volevi) --- */
 #loadingOverlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: #050505;
+    background: #000; /* Nero totale mentre carica */
     z-index: 9999;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
 }
@@ -151,7 +138,7 @@ input::placeholder, textarea::placeholder { color: #888 !important; }
     border: 2px solid #444;
     position: relative;
     overflow: hidden;
-    box-shadow: 0 0 30px rgba(13, 110, 253, 0.3);
+    box-shadow: 0 0 30px rgba(13, 110, 253, 0.4);
     margin-bottom: 30px;
 }
 
@@ -170,7 +157,7 @@ input::placeholder, textarea::placeholder { color: #888 !important; }
 #loaderText {
     font-family: 'Courier New', monospace;
     font-size: 1.1rem;
-    color: var(--primary-color);
+    color: #0d6efd;
     text-transform: uppercase;
     letter-spacing: 2px;
     min-height: 25px;
@@ -181,12 +168,11 @@ input::placeholder, textarea::placeholder { color: #888 !important; }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 @keyframes twinkle { 0%, 100% { opacity: 0.2; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
 
-/* Utility */
+/* Utility e Admin */
 .view-screen { display: none; animation: fadeIn 0.3s; }
 .view-screen.active { display: block; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-/* Gestione Admin */
 .admin-only { display: none !important; }
 body.user-admin .admin-only { display: inline-block !important; }
 body.user-admin .admin-block { display: block !important; }
