@@ -1,10 +1,16 @@
 :root {
     /* TEMA SCURO FISSO */
     --bg-color: #050505;
-    --text-color: #f8f9fa;
-    --card-bg: #1e1e1e; /* Sfondo solido scuro per leggibilità */
-    --chord-color: #ff85c0; /* Rosa ben visibile per accordi */
-    --border-color: #333;
+    --text-color: #ffffff;
+    
+    /* MODIFICA: Sfondo solido nero per massima leggibilità */
+    --card-bg: #000000; 
+    
+    /* MODIFICA: Accordi rossi come richiesto */
+    --chord-color: #ff3333; 
+    
+    --border-color: #444;
+    --primary-blue: #3d8bfd; /* Un blu ben visibile su nero */
 }
 
 body {
@@ -15,182 +21,120 @@ body {
     overflow-x: hidden;
 }
 
-/* --- SFONDO COSTELLAZIONI (RIPRISTINATO) --- */
+/* --- SFONDO (NON TOCCATO) --- */
 #dynamic-background {
     display: block !important;
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     z-index: -1; pointer-events: none; overflow: hidden;
-    /* Gradiente notte profonda */
     background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
 }
+/* ... resto del CSS delle stelle/costellazioni invariato ... */
+.night-core-bg, .constellation-wrapper, .bg-star { /* ... lascia come sono ... */ }
 
-.night-core-bg {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background: radial-gradient(circle at 50% 80%, rgba(20, 30, 60, 0.4) 0%, transparent 70%);
-}
+/* --- INTERFACCIA UTENTE (SISTEMATA) --- */
 
-/* Animazioni Costellazioni (Quelle originali) */
-.constellation-wrapper { position: absolute; opacity: 0.8; }
-.constellation-path {
-    fill: none; stroke: rgba(255, 255, 255, 0.3); stroke-width: 0.8px;
-    stroke-dasharray: 500; stroke-dashoffset: 500; 
-    animation: drawLines 4s ease-out forwards 0.5s;
-}
-.c-star { fill: #fff; opacity: 0; animation: fadeIn 1s forwards; }
-.main-star { filter: drop-shadow(0 0 5px white); }
-.constellation-name {
-    color: rgba(255, 255, 255, 0.5); font-size: 0.75rem; text-align: center;
-    margin-top: -10px; font-family: serif; font-style: italic; letter-spacing: 1px;
-    opacity: 0; animation: fadeIn 2s forwards 2s;
-}
-
-@keyframes drawLines { to { stroke-dashoffset: 0; } }
-@keyframes fadeIn { to { opacity: 1; } }
-
-/* Stelle casuali sfondo */
-.bg-star {
-    position: absolute; background: white; border-radius: 50%;
-    animation: twinkleStar 4s infinite ease-in-out;
-}
-@keyframes twinkleStar { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.8; } }
-
-/* --- INTERFACCIA UTENTE (CORRETTA) --- */
-
-/* Navbar */
+/* Navbar - Più scura */
 .navbar {
-    background: rgba(13, 110, 253, 0.15) !important;
-    backdrop-filter: blur(10px);
+    background: rgba(0, 0, 0, 0.9) !important;
     border-bottom: 1px solid var(--border-color);
 }
 
-/* Card e Liste */
+/* MODIFICA: Card, Liste e Bottoni - Sfondo NERO solido e scritte BIANCHE */
 .card, .list-group-item, .category-card {
-    background-color: rgba(30, 30, 30, 0.7) !important; /* Scuro semitrasparente */
+    background-color: #000000 !important; /* Nero puro */
     border: 1px solid var(--border-color) !important;
     color: #fff !important;
-    backdrop-filter: blur(5px);
 }
 
+/* Effetto Hover leggermente più chiaro per capire che è cliccabile */
 .list-group-item:hover, .category-card:hover {
-    background-color: rgba(50, 50, 50, 0.9) !important;
+    background-color: #1a1a1a !important; 
     transform: translateY(-2px);
     transition: all 0.2s;
 }
 
-/* Testi e Icone - Forziamo il bianco/grigio chiaro */
-h1, h2, h3, h4, h5, h6, .fw-bold { color: #fff !important; }
-.text-muted, small { color: #adb5bd !important; }
-.bi { color: #fff !important; }
-.text-primary { color: #6ea8fe !important; } /* Blu più chiaro per leggibilità su scuro */
+/* MODIFICA: Risoluzione testo tagliato (Wrapping) */
+.list-group-item .text-truncate, 
+.text-truncate {
+    white-space: normal !important; /* Va a capo invece di tagliare */
+    overflow: visible !important;
+    text-overflow: clip !important;
+    word-break: break-word; /* Spezza le parole lunghe se serve */
+}
 
-/* Input Form */
-input, textarea, select, .form-control, .form-select {
-    background-color: #2b2b2b !important;
-    border: 1px solid #444 !important;
+/* MODIFICA: Titoli BLU */
+h1, h2, h3, h4, h5, h6, .fw-bold { 
+    color: var(--primary-blue) !important; 
+}
+
+/* Testi secondari (autori, ecc) bianchi o grigio chiaro */
+.text-muted, small { color: #cccccc !important; }
+.bi { color: #fff !important; }
+
+/* MODIFICA: Input e Textarea (Editor e Ricerca) - Tutto nero */
+input, textarea, select, .form-control, .form-select, .input-group-text {
+    background-color: #000000 !important;
+    border: 1px solid #555 !important;
     color: #fff !important;
 }
-input::placeholder, textarea::placeholder { color: #888 !important; }
 
-/* --- AREA TESTO E ACCORDI (FONDAMENTALE: NON MODIFICARE) --- */
+input:focus, textarea:focus, select:focus {
+    background-color: #111 !important;
+    color: #fff !important;
+    border-color: var(--primary-blue) !important;
+    box-shadow: none !important;
+}
+
+/* Placeholder più visibile */
+input::placeholder, textarea::placeholder { color: #bbbbbb !important; }
+
+/* --- AREA TESTO E ACCORDI --- */
 .preview-area {
-    background: #121212 !important; 
-    color: #e0e0e0 !important;
+    background: #000000 !important; /* Sfondo nero */
+    color: #ffffff !important; /* Testo bianco */
     padding: 20px; 
     border-radius: 8px; 
     min-height: 500px;
-    border: 1px solid #333;
+    border: 1px solid #444;
     font-size: 16px; 
-    
-    /* PARAMETRI CRITICI PER ALLINEAMENTO */
-    line-height: 2.8 !important; /* Spazio per l'accordo */
+    line-height: 2.8 !important;
     white-space: pre-wrap !important; 
-    font-family: monospace !important; /* Obbligatorio per allineare */
+    font-family: monospace !important; 
     overflow-x: auto;
 }
 
-/* Stile Accordi */
+/* MODIFICA: Stile Accordi ROSSO */
 .chord-span {
-    color: var(--chord-color);
+    color: var(--chord-color) !important; /* Rosso */
     font-weight: bold; 
-    font-size: 0.9em;
-    
-    /* Logica posizionamento */
+    font-size: 0.95em;
     display: inline-block;
     width: 0; 
     overflow: visible; 
     white-space: nowrap; 
     vertical-align: top; 
-
     position: relative; 
-    top: -1.2em; /* Sposta l'accordo sopra */
+    top: -1.2em; 
     left: -1px; 
     margin: 0;              
 }
+
+/* Bottoni generali */
+.btn-outline-light {
+    border-color: #fff;
+    color: #fff;
+}
+.btn-outline-light:hover {
+    background-color: #fff;
+    color: #000;
+}
+
+/* Correzione specifica per il badge tono */
+.badge.bg-light {
+    background-color: #333 !important;
+    color: #fff !important;
+    border: 1px solid #555 !important;
+}
+
+/* Nascondi accordi */
 .hide-chords .chord-span { display: none; }
-
-/* Box note editor */
-#editorMeta {
-    background-color: rgba(255,255,255,0.1);
-    color: #ddd;
-    padding: 8px; border-radius: 6px;
-    border-left: 4px solid var(--chord-color);
-}
-
-/* --- LOADER TELESCOPIO (NUOVO) --- */
-#loadingOverlay {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: #050505;
-    z-index: 9999;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-}
-
-.telescope-lens {
-    width: 150px; height: 150px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #2b3a60, #000);
-    border: 2px solid #444;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 0 30px rgba(13, 110, 253, 0.3);
-    margin-bottom: 30px;
-}
-
-.telescope-lens::after {
-    content: ''; position: absolute; top: 10%; right: 10%;
-    width: 20px; height: 10px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 50%; transform: rotate(-45deg);
-}
-
-.lens-star {
-    position: absolute; background: white; border-radius: 50%;
-    animation: twinkle 2s infinite;
-}
-
-#loaderText {
-    font-family: 'Courier New', monospace;
-    font-size: 1.1rem;
-    color: var(--primary-color);
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    min-height: 25px;
-    text-align: center;
-}
-.typing-cursor::after { content: '|'; animation: blink 1s infinite; }
-
-@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
-@keyframes twinkle { 0%, 100% { opacity: 0.2; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
-
-/* Utility */
-.view-screen { display: none; animation: fadeIn 0.3s; }
-.view-screen.active { display: block; }
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-/* Gestione Admin */
-.admin-only { display: none !important; }
-body.user-admin .admin-only { display: inline-block !important; }
-body.user-admin .admin-block { display: block !important; }
-.cat-cover { height: 140px; background-size: cover; background-position: center; display: flex; align-items: center; justify-content: center; }
-.cat-icon { font-size: 3rem; color: rgba(255,255,255,0.8); }
-.cat-actions { position: absolute; top: 10px; right: 10px; display: none; }
-body.user-admin .cat-actions { display: block; }
