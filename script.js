@@ -3,7 +3,7 @@ import { getFirestore, collection, getDocs, doc, updateDoc, addDoc, deleteDoc, w
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, inMemoryPersistence } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 import { extractChords, normalizeChord, transposeChord } from "./music-utils.js";
 
-// --- 1. FUNZIONI DI UTILITÀ (DEFINITE SUBITO) ---
+// --- 1. FUNZIONI DI UTILITÀ ---
 function debounce(func, wait) {
     let timeout;
     return function(...args) {
@@ -13,16 +13,12 @@ function debounce(func, wait) {
 }
 
 // --- 2. DEFINIZIONE DELLA RICERCA ---
-// Definiamo la costante PRIMA di usarla
 const debouncedGlobalSearch = debounce(() => {
-    // Controllo di sicurezza: esegui solo se la funzione target esiste
     if (typeof window.performGlobalSearch === 'function') {
         window.performGlobalSearch();
     }
 }, 300);
 
-// --- 3. ESPOSIZIONE WINDOW (SUBITO DOPO) ---
-// Ora possiamo assegnarla senza errori
 window.debouncedGlobalSearch = debouncedGlobalSearch;
 window.extractChords = extractChords;
 
@@ -49,7 +45,8 @@ let editingSectionId=null, currentCoverUrl="", sectionOrder=[];
 let favorites = JSON.parse(localStorage.getItem('scoutFavorites')) || [];
 let currentSetlistId = null;
 let autoScrollInterval = null;
-// Variabili per il Loader
+
+// Loader
 const loaderPhrases = [
     "Allineo gli astri...",
     "Accordo la chitarra...",
@@ -64,13 +61,9 @@ let loaderInterval;
 let mLogin, mAddSong, mAddSection, mEditSection, mEditSongMeta, mConfirm, mExport, mSearchSetlist, mExportSetlist, mAddToSetlist;
 
 window.addEventListener('load', () => {
-    // Avvia animazione testo loader
     startLoaderAnimation();
-    
-    // Forza sfondo notturno (Senza controlli tema)
     manageDynamicBackgrounds();
     
-    // Init Modals
     mLogin = new bootstrap.Modal(document.getElementById('loginModal'));
     mAddSong = new bootstrap.Modal(document.getElementById('addSongModal'));
     mAddSection = new bootstrap.Modal(document.getElementById('addSectionModal'));
@@ -82,48 +75,34 @@ window.addEventListener('load', () => {
     mExportSetlist = new bootstrap.Modal(document.getElementById('exportSetlistModal'));
     mAddToSetlist = new bootstrap.Modal(document.getElementById('addToSetlistModal'));
 });
-// --- FUNZIONE ANIMAZIONE LOADER ---
+
 function startLoaderAnimation() {
     const textEl = document.getElementById('loaderText');
     let i = 0;
-    
-    // Funzione per cambiare testo
     const changeText = () => {
-        textEl.style.opacity = 0; // Fade out
+        textEl.style.opacity = 0; 
         setTimeout(() => {
             textEl.innerText = loaderPhrases[i];
-            textEl.style.opacity = 1; // Fade in
+            textEl.style.opacity = 1; 
             i = (i + 1) % loaderPhrases.length;
-        }, 200); // Aspetta che sia invisibile per cambiare testo
+        }, 200); 
     };
-
-    // Primo testo subito
     textEl.innerText = loaderPhrases[0];
     i = 1;
-
-    // Cambia ogni 1.5 secondi
     loaderInterval = setInterval(changeText, 1500);
 }
 
-// --- 2. AVVIO PERSISTENZA E DATI (Cuore del sistema) ---
-// Questo blocco gestisce l'avvio in sequenza corretta: Offline DB -> Auth -> Caricamento Dati
+// AVVIO PERSISTENZA E DATI
 enableIndexedDbPersistence(db)
   .catch((err) => {
-      if (err.code == 'failed-precondition') {
-          console.warn("Persistenza fallita: Più tab aperti.");
-      } else if (err.code == 'unimplemented') {
-          console.warn("Browser non supportato.");
-      }
+      if (err.code == 'failed-precondition') console.warn("Persistenza fallita: Più tab aperti.");
+      else if (err.code == 'unimplemented') console.warn("Browser non supportato.");
   })
   .finally(() => {
-      // SOLO QUI, quando siamo sicuri che il DB offline è pronto (o fallito), avviamo tutto.
-      
-      // Imposta persistenza auth (Logout al refresh come volevi)
       setPersistence(auth, inMemoryPersistence)
         .then(() => console.log("Sessione In Memory"))
         .catch((error) => console.error("Errore auth:", error));
 
-      // Ascolta Login/Logout e Carica i Dati
       onAuthStateChanged(auth, (user) => {
           isAdmin = !!user;
           document.body.classList.toggle('user-admin', isAdmin);
@@ -151,65 +130,52 @@ enableIndexedDbPersistence(db)
               if(propField) propField.style.display = 'block';
               if(prevCol) prevCol.className = "col-md-12";
           }
-          
-          // ORA loadData() FUNZIONERÀ ANCHE OFFLINE AL PRIMO COLPO
           loadData();
       });
   });
 
-
-// --- LE ALTRE FUNZIONI (Core logic) ---
-
 async function loadData() {
     try {
-        // 1. Carica Sezioni
         const secSnap = await getDocs(collection(db, "sections"));
         allSections = [];
         secSnap.forEach(d => allSections.push({id: d.id, ...d.data()}));
         
-        // 2. Carica Canzoni
         const songSnap = await getDocs(collection(db, "songs"));
         allSongs = [];
         songSnap.forEach(d => {
             if(!d.data().title.startsWith("Info")) allSongs.push({id: d.id, ...d.data()})
         });
         
-        // 3. Carica Scalette
         const setlistSnap = await getDocs(collection(db, "setlists"));
         allSetlists = [];
         setlistSnap.forEach(d => allSetlists.push({id: d.id, ...d.data()}));
         allSetlists.sort((a,b) => a.name.localeCompare(b.name));
 
-        // Aggiorna il contatore
         const countEl = document.getElementById("totalSongsCount");
         if(countEl) countEl.innerText = allSongs.length;
 
         allSections.sort((a,b) => a.name.localeCompare(b.name));
         sectionOrder = allSections.map(s => s.name); 
         
-        // Refresh delle viste
         if(document.getElementById('view-setlists').classList.contains('active')) {
             window.renderSetlistsList();
             if(currentSetlistId) window.renderActiveSetlistSongs();
         } else if(!currentCategory) {
-            window.renderDashboard(); // Assicurati di chiamare window.renderDashboard
+            window.renderDashboard(); 
         } else {
             openList(currentCategory); 
         }
 
     } catch(e) { 
         console.error("Errore caricamento:", e);
-        // Mostra l'errore all'utente così capisce cosa succede
         window.showToast("Errore caricamento: " + e.message, 'danger');
     } finally {
-        // --- QUI SPEGNIAMO IL TELESCOPIO ---
         const loader = document.getElementById("loadingOverlay");
         if(loader) loader.style.display = "none";
-        
-        // Fermiamo le scritte che cambiano
         if(loaderInterval) clearInterval(loaderInterval);
     }
 }
+
 async function loadProposals() {
     if(!isAdmin) return;
     const snap = await getDocs(collection(db, "proposals"));
@@ -218,12 +184,10 @@ async function loadProposals() {
     if(allProposals.length>0){b.innerText=allProposals.length;b.style.display='inline-block';}else{b.style.display='none';}
 }
 
-// UI RENDERING & NAVIGATION
 window.renderDashboard = () => {
     switchView('view-dashboard');
     document.getElementById('globalSearch').value="";
     
-    // Render Favorites
     const favC=document.getElementById("favoritesContainer");
     const favS=document.getElementById("favoritesSection");
     const favs=allSongs.filter(s=>favorites.includes(s.id));
@@ -232,7 +196,6 @@ window.renderDashboard = () => {
         favC.innerHTML=favs.map(s=>`<button class="list-group-item list-group-item-action border-0 d-flex justify-content-between align-items-center" onclick="window.openEditor('${s.id}')"><div><i class="bi bi-star-fill text-warning me-2"></i> <strong>${s.title}</strong></div><small class="text-muted">${s.author}</small></button>`).join('');
     } else favS.style.display='none';
 
-    // Render Categories
     const c=document.getElementById("categoriesContainer"); c.innerHTML="";
     if(allSections.length===0) c.innerHTML=`<div class="text-center text-muted">Nessuna sezione presente.</div>`;
     
@@ -287,7 +250,6 @@ window.renderList = (songs) => {
     songs.sort((a, b) => a.title.localeCompare(b.title));
     
     songs.forEach(s => {
-        // Logica bollini
         let badgesHtml = "";
         if (isAdmin) {
             const hasLyrics = s.lyrics && s.lyrics.trim().length > 10;
@@ -312,14 +274,12 @@ window.renderList = (songs) => {
     });
 };
 
-// EDITOR
 window.openEditor = (id) => {
     currentSongId=id; const s=allSongs.find(x=>x.id===id);
     switchView('view-editor');
     document.getElementById("editorTitle").innerText=s.title;
     document.getElementById("editorAuthor").innerText=s.author;
     
-    // MOSTRA DESCRIZIONE E ANNO
     let metaText = [];
     if(s.description) metaText.push(s.description);
     if(s.year) metaText.push(`(${s.year})`);
@@ -328,10 +288,8 @@ window.openEditor = (id) => {
     const editor = document.getElementById("lyricsEditor");
     editor.value = s.lyrics || "";
     
-    // RESET STATO MODIFICHE
     hasUnsavedChanges = false; 
     
-    // RILEVA MODIFICHE (Input listener)
     editor.oninput = () => {
         hasUnsavedChanges = true;
         window.renderPreview();
@@ -349,11 +307,9 @@ window.renderPreview = () => {
     div.style.fontSize = currentFontSize + 'px';
     
     txt.split("\n").forEach(l => {
-        // 1. Gestione Formattazione
         let formattedLine = l.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
                              .replace(/__(.*?)__/g, '<i>$1</i>');
 
-        // 2. Gestione Accordi
         let pl = formattedLine.replace(/\[(.*?)\]/g, (m, p1) => 
             `<span class="chord-span">${transposeChord(normalizeChord(p1), currentTranspose)}</span>`
         );
@@ -362,7 +318,6 @@ window.renderPreview = () => {
     });
 };
 
-// ADMIN ACTIONS
 window.handleSongSubmission = async () => {
     const t = document.getElementById("newSongTitle").value;
     const a = document.getElementById("newSongAuthor").value; 
@@ -389,10 +344,8 @@ window.handleSongSubmission = async () => {
     try {
         if(isAdmin){ 
             const r = await addDoc(collection(db,"songs"), {...songData, added:true}); 
-            
             const newSongLocal = { id: r.id, ...songData, added: true };
             allSongs.push(newSongLocal);
-
             mAddSong.hide(); 
             showToast("Creata!", 'success'); 
             window.openEditor(r.id); 
@@ -410,7 +363,6 @@ window.handleSongSubmission = async () => {
     }
 };
 
-// EXPORT FULL PDF
 window.openExportModal = () => {
     const list = document.getElementById("sectionOrderList"); list.innerHTML = "";
     sectionOrder = allSections.map(s=>s.name);
@@ -434,7 +386,6 @@ window.generateFullPDF = async () => {
     document.getElementById("loadingOverlay").style.display="flex";
     const { jsPDF } = window.jspdf;
     
-    // LEGGI IL TICK
     const isTwoColumns = document.getElementById("pdfTwoColumns").checked;
 
     const doc = new jsPDF({ format: 'a4', orientation: 'portrait', unit: 'mm' });
@@ -445,7 +396,6 @@ window.generateFullPDF = async () => {
     const SIDE_MARGIN = 15;
     const GUTTER = 10;
 
-    // CALCOLO DINAMICO LARGHEZZA
     const COL_WIDTH = isTwoColumns ? (PAGE_WIDTH - (SIDE_MARGIN * 2) - GUTTER) / 2 : (PAGE_WIDTH - (SIDE_MARGIN * 2));
     const COL_1_X = SIDE_MARGIN;
     const COL_2_X = isTwoColumns ? (SIDE_MARGIN + COL_WIDTH + GUTTER) : SIDE_MARGIN;
@@ -457,13 +407,11 @@ window.generateFullPDF = async () => {
 
     const checkLimit = (heightNeeded) => {
         if (currentY + heightNeeded > MARGIN_BOTTOM) {
-            // SE DUE COLONNE E SONO NELLA PRIMA, PASSA ALLA SECONDA
             if (isTwoColumns && currentCol === 1) {
                 currentCol = 2;
                 currentX = COL_2_X;
                 currentY = MARGIN_TOP;
             } else {
-                // ALTRIMENTI CAMBIA PAGINA
                 doc.addPage();
                 pageNum++;
                 currentCol = 1;
@@ -477,7 +425,6 @@ window.generateFullPDF = async () => {
         return false;
     };
 
-    // --- 1. COPERTINA ---
     const coverInput = document.getElementById("globalCoverInput").files[0];
     if (coverInput) {
         const coverBase64 = await fileToBase64(coverInput);
@@ -494,7 +441,6 @@ window.generateFullPDF = async () => {
         doc.addPage(); pageNum++;
     }
 
-    // --- 2. LOOP SEZIONI ---
     for (const secName of sectionOrder) {
         const songs = allSongs.filter(s => s.category === secName).sort((a,b)=>a.title.localeCompare(b.title));
         if (songs.length === 0) continue;
@@ -511,26 +457,22 @@ window.generateFullPDF = async () => {
         doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(150);
         doc.text(String(pageNum), PAGE_WIDTH/2, 290, {align:'center'});
 
-        // --- 3. LOOP CANZONI ---
         for (const s of songs) {
             tocData.push({ type: 'song', text: s.title, subtext: s.author, page: pageNum });
 
             checkLimit(25);
 
-            // -- TITOLO --
             doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(0, 51, 102);
             const titleLines = doc.splitTextToSize(s.title.toUpperCase(), COL_WIDTH);
             doc.text(titleLines, currentX, currentY);
             currentY += (titleLines.length * 5);
 
-            // -- AUTORE --
             if(s.author) {
                 doc.setFont("helvetica", "italic"); doc.setFontSize(9); doc.setTextColor(100);
                 const authTxt = s.year ? `${s.author} (${s.year})` : s.author;
                 doc.text(authTxt, currentX + COL_WIDTH, currentY - 5, {align: 'right'}); 
             }
 
-            // -- NOTE --
             if (s.description) {
                 doc.setFont("helvetica", "italic"); 
                 doc.setFontSize(8); 
@@ -554,7 +496,6 @@ window.generateFullPDF = async () => {
             doc.setDrawColor(200); doc.setLineWidth(0.2);
             doc.line(currentX, currentY - 2, currentX + COL_WIDTH, currentY - 2);
             
-            // -- TESTO E ACCORDI --
             doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(0);
             
             const lines = (s.lyrics || "").split("\n");
@@ -598,7 +539,6 @@ window.generateFullPDF = async () => {
                     });
                     currentY += 9; 
                 } else {
-                    // Se showChords è false, pulisci la riga dalle parentesi quadre
                     const cleanLine = l.replace(/\[.*?\]/g, ''); 
                     doc.setFont(undefined, 'normal'); doc.setTextColor(0);
                     const splitText = doc.splitTextToSize(cleanLine, COL_WIDTH);
@@ -611,7 +551,6 @@ window.generateFullPDF = async () => {
         }
     }
 
-    // --- 4. INDICE FINALE ---
     doc.addPage();
     doc.setTextColor(0, 51, 102); doc.setFont("helvetica", "bold"); doc.setFontSize(22);
     doc.text("INDICE", PAGE_WIDTH/2, 20, {align: 'center'});
@@ -657,16 +596,11 @@ window.generateFullLatex=()=>{if(!isAdmin)return;let l=`\\documentclass{article}
 const fileToBase64 = file => new Promise((resolve, reject) => { const r = new FileReader(); r.readAsDataURL(file); r.onload = () => resolve(r.result); r.onerror = error => reject(error); });
 
 window.openLoginModal=()=>mLogin.show();
-// --- GESTIONE SFONDI DINAMICI E RETE ---
-// --- GESTIONE SFONDI (SOLO NOTTE) ---
-
-let shootingStarInterval;
 
 function manageDynamicBackgrounds() {
     const bg = document.getElementById('dynamic-background');
     if(bg) bg.style.display = 'block';
     
-    // Genera stelle fisse sfondo
     const container = document.getElementById('night-stars-container');
     if (container && container.innerHTML === "") {
         for (let i = 0; i < 100; i++) {
@@ -682,48 +616,6 @@ function manageDynamicBackgrounds() {
         }
     }
 }
-
-// Funzione per le 80 stelle casuali
-let nightStarsGenerated = false;
-function initNightStars() {
-    if (nightStarsGenerated || document.body.getAttribute('data-theme') !== 'dark') return;
-    const container = document.getElementById('night-stars-container');
-    if (!container) return;
-    
-    container.innerHTML = "";
-    for (let i = 0; i < 80; i++) {
-        const s = document.createElement('div');
-        s.className = 'bg-star';
-        s.style.left = Math.random() * 100 + '%';
-        s.style.top = Math.random() * 100 + '%';
-        const size = Math.random() * 2 + 1; 
-        s.style.width = size + 'px'; s.style.height = size + 'px';
-        s.style.animationDelay = (Math.random() * 5) + 's';
-        container.appendChild(s);
-    }
-    nightStarsGenerated = true;
-}
-function startShootingStars() {
-    if(shootingStarInterval) clearInterval(shootingStarInterval);
-    shootingStarInterval = setInterval(() => {
-        if (document.body.getAttribute('data-theme') !== 'dark') return;
-        const container = document.getElementById('night-sky');
-        if(!container) return;
-        const star = document.createElement('div');
-        star.className = 'shooting-star';
-        star.style.top = (Math.random() * 40) + '%'; 
-        star.style.right = (Math.random() * 40) + '%';
-        container.appendChild(star);
-        setTimeout(() => { star.remove(); }, 2000);
-    }, 8000); 
-}
-
-function stopShootingStars() {
-    if(shootingStarInterval) clearInterval(shootingStarInterval);
-}
-
-// Hook caricamento e cambio tema
-window.addEventListener('load', manageDynamicBackgrounds);
 
 window.performLogin = async () => {
     if (document.activeElement) document.activeElement.blur();
@@ -907,35 +799,26 @@ window.goBackToList = () => {
         hasUnsavedChanges = false; 
     }
 
-    // LOGICA INTELLIGENTE:
     if (currentSetlistId) {
-        // Se c'è un ID scaletta attivo, torna alla vista della scaletta specifica
         switchView('view-setlists');
-        document.getElementById('setlistsContainer').innerHTML = ""; // Nasconde la lista generale
-        document.getElementById('activeSetlistDetail').style.display = 'block'; // Mostra il dettaglio
-        // Ricarica la scaletta per sicurezza (così vedi le tonalità aggiornate)
+        document.getElementById('setlistsContainer').innerHTML = ""; 
+        document.getElementById('activeSetlistDetail').style.display = 'block'; 
         window.renderActiveSetlistSongs();
     } 
     else if (currentCategory) {
-        // Se c'è una categoria attiva, torna lì
         window.openList(currentCategory);
     } 
     else {
-        // Caso fallback (es. da ricerca globale o preferiti), torna alla dashboard
         window.goHome();
     }
 };
 window.handleSetlistBack = () => {
     const detail = document.getElementById('activeSetlistDetail');
-    
-    // Se il dettaglio è visibile, significa che siamo dentro una scaletta
     if (detail.style.display === 'block') {
-        // Chiudi il dettaglio e mostra la lista
         detail.style.display = 'none';
-        currentSetlistId = null; // Resetta l'ID scaletta attuale
-        window.renderSetlistsList(); // Mostra la lista di tutte le scalette
+        currentSetlistId = null; 
+        window.renderSetlistsList(); 
     } else {
-        // Se siamo già alla lista principale, torna alla Home
         window.goHome();
     }
 };
@@ -1734,7 +1617,7 @@ window.toggleAutoScroll = () => {
     const setInteractingTrue = () => { isUserInteracting = true; };
     const setInteractingFalse = () => { isUserInteracting = false; };
 
-    if (autoScrollInterval) { 
+    if (autoScrollInterval) { // Usa la variabile globale definita a inizio file
         clearInterval(autoScrollInterval);
         autoScrollInterval = null;
         isUserInteracting = false;
@@ -1773,14 +1656,9 @@ window.toggleAutoScroll = () => {
             area.scrollTop += 1; 
         }, 50); 
     }
-}; // <--- CHIUSURA CORRETTA DELLA FUNZIONE
 
-// Funzione helper vuota per evitare errori
+};
+
 function updateThemeIcon() {
     return;
 }
-
-
-
-
-
