@@ -643,12 +643,6 @@ window.generateFullLatex=()=>{if(!isAdmin)return;let l=`\\documentclass{article}
 // UTILS & EXTRAS
 const fileToBase64 = file => new Promise((resolve, reject) => { const r = new FileReader(); r.readAsDataURL(file); r.onload = () => resolve(r.result); r.onerror = error => reject(error); });
 
-function updateThemeIcon() {
-    const isDark = document.body.getAttribute('data-theme') === 'dark';
-    const icon = document.getElementById('themeIcon');
-    // Usa 'bi-stars' per la notte (costellazioni) e 'bi-sun-fill' per il giorno
-    icon.className = isDark ? 'bi bi-sun-fill' : 'bi bi-stars';
-}
 window.openLoginModal=()=>mLogin.show();
 // --- GESTIONE SFONDI DINAMICI E RETE ---
 // --- GESTIONE SFONDI (SOLO NOTTE) ---
@@ -1768,3 +1762,4 @@ window.toggleAutoScroll = () => {
     }
 
 };
+
