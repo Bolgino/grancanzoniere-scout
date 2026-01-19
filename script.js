@@ -1773,11 +1773,13 @@ window.toggleAutoScroll = () => {
             area.scrollTop += 1; 
         }, 50); 
     }
-};
+}; // <--- CHIUSURA CORRETTA DELLA FUNZIONE
 
+// Funzione helper vuota per evitare errori
 function updateThemeIcon() {
     return;
 }
+
 
 
 
