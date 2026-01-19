@@ -1734,7 +1734,7 @@ window.toggleAutoScroll = () => {
     const setInteractingTrue = () => { isUserInteracting = true; };
     const setInteractingFalse = () => { isUserInteracting = false; };
 
-    if (autoScrollInterval) { // Usa la variabile globale definita a inizio file
+    if (autoScrollInterval) { 
         clearInterval(autoScrollInterval);
         autoScrollInterval = null;
         isUserInteracting = false;
@@ -1764,7 +1764,7 @@ window.toggleAutoScroll = () => {
         area.addEventListener('touchstart', setInteractingTrue, {passive: true});
         area.addEventListener('touchend', setInteractingFalse);
 
-       autoScrollInterval = setInterval(() => {
+        autoScrollInterval = setInterval(() => {
             if (isUserInteracting) return;
             if (Math.ceil(area.scrollTop + area.clientHeight) >= area.scrollHeight - 1) {
                 window.toggleAutoScroll(); 
@@ -1775,10 +1775,10 @@ window.toggleAutoScroll = () => {
     }
 };
 
-
 function updateThemeIcon() {
     return;
 }
+
 
 
 
