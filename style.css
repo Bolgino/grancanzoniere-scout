@@ -1,196 +1,252 @@
 :root {
-    /* TEMA SCURO FISSO */
-    --bg-color: #050505;
-    --text-color: #f8f9fa;
-    --card-bg: #1e1e1e; /* Sfondo solido scuro per leggibilità */
-    --chord-color: #ff85c0; /* Rosa ben visibile per accordi */
-    --border-color: #333;
+    /* PALETTE COLORI AD ALTO CONTRASTO */
+    --bg-color: #000000;          /* Nero puro */
+    --card-bg: rgba(25, 25, 25, 0.95); /* Grigio scurissimo quasi opaco */
+    --text-main: #ffffff;         /* Bianco puro */
+    --text-muted: #cccccc;        /* Grigio chiaro per sottotitoli */
+    --chord-color: #ff3333;       /* ROSSO ACCESO per gli accordi */
+    --accent-color: #0d6efd;      /* Blu Bootstrap standard per elementi attivi */
+    --border-color: #444444;      /* Grigio medio per i bordi */
 }
 
+/* --- RESET GENERALE E SFONDO --- */
 body {
     background-color: var(--bg-color) !important;
-    color: var(--text-color) !important;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    padding-bottom: 80px;
+    color: var(--text-main) !important;
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    padding-bottom: 80px; /* Spazio per footer se necessario */
     overflow-x: hidden;
 }
 
-/* --- SFONDO COSTELLAZIONI (RIPRISTINATO) --- */
+/* Sfondo Costellazioni (Non toccato, rimane l'animazione) */
 #dynamic-background {
     display: block !important;
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     z-index: -1; pointer-events: none; overflow: hidden;
-    /* Gradiente notte profonda */
-    background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
+    background: radial-gradient(ellipse at bottom, #1b2735 0%, #000000 100%);
 }
-
 .night-core-bg {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background: radial-gradient(circle at 50% 80%, rgba(20, 30, 60, 0.4) 0%, transparent 70%);
+    background: radial-gradient(circle at 50% 80%, rgba(20, 30, 60, 0.2) 0%, transparent 70%);
 }
-
-/* Animazioni Costellazioni (Quelle originali) */
+/* Stili stelle e costellazioni precedenti rimangono validi qui... */
 .constellation-wrapper { position: absolute; opacity: 0.8; }
-.constellation-path {
-    fill: none; stroke: rgba(255, 255, 255, 0.3); stroke-width: 0.8px;
-    stroke-dasharray: 500; stroke-dashoffset: 500; 
-    animation: drawLines 4s ease-out forwards 0.5s;
-}
+.constellation-path { fill: none; stroke: rgba(255, 255, 255, 0.4); stroke-width: 1px; stroke-dasharray: 500; stroke-dashoffset: 500; animation: drawLines 4s ease-out forwards 0.5s; }
 .c-star { fill: #fff; opacity: 0; animation: fadeIn 1s forwards; }
-.main-star { filter: drop-shadow(0 0 5px white); }
-.constellation-name {
-    color: rgba(255, 255, 255, 0.5); font-size: 0.75rem; text-align: center;
-    margin-top: -10px; font-family: serif; font-style: italic; letter-spacing: 1px;
-    opacity: 0; animation: fadeIn 2s forwards 2s;
-}
-
+.main-star { filter: drop-shadow(0 0 6px white); }
+.constellation-name { color: rgba(255, 255, 255, 0.7); font-size: 0.8rem; text-align: center; margin-top: -10px; font-family: serif; font-style: italic; letter-spacing: 1px; opacity: 0; animation: fadeIn 2s forwards 2s; }
+.bg-star { position: absolute; background: white; border-radius: 50%; animation: twinkleStar 4s infinite ease-in-out; }
 @keyframes drawLines { to { stroke-dashoffset: 0; } }
 @keyframes fadeIn { to { opacity: 1; } }
+@keyframes twinkleStar { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
 
-/* Stelle casuali sfondo */
-.bg-star {
-    position: absolute; background: white; border-radius: 50%;
-    animation: twinkleStar 4s infinite ease-in-out;
+
+/* --- FIX BOOTSTRAP (RISOLVE I BLOCCHI BIANCHI) --- */
+
+/* 1. Testi e Titoli */
+h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6, strong, b {
+    color: var(--text-main) !important;
+    font-weight: 700 !important;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.8); /* Ombra per stacco */
 }
-@keyframes twinkleStar { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.8; } }
+.text-muted, small, .small {
+    color: var(--text-muted) !important;
+}
+.text-primary, .text-info {
+    color: #6ea8fe !important; /* Blu chiaro leggibile su nero */
+}
+.text-warning {
+    color: #ffc107 !important;
+}
 
-/* --- INTERFACCIA UTENTE (CORRETTA) --- */
+/* 2. Barra di Ricerca e Input */
+/* Forza lo sfondo scuro anche se nel HTML c'è 'bg-white' */
+.input-group-text, 
+input.form-control, 
+textarea.form-control, 
+select.form-select {
+    background-color: #222 !important; 
+    color: #fff !important;
+    border: 1px solid #555 !important;
+    box-shadow: none !important;
+}
+input::placeholder, textarea::placeholder {
+    color: #888 !important;
+}
+/* Rimuove il bordo bianco focus */
+input:focus, textarea:focus, select:focus {
+    border-color: var(--accent-color) !important;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+}
+/* Icona ricerca */
+.input-group-text i { color: #fff !important; }
+
+/* 3. Card e Liste (Sfondo semitrasparente scuro) */
+.card, .list-group-item, .category-card {
+    background-color: var(--card-bg) !important;
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-main) !important;
+    border-radius: 8px !important;
+    backdrop-filter: blur(4px); /* Effetto vetro */
+}
+.list-group-item-action:hover, .category-card:hover {
+    background-color: #333 !important;
+    cursor: pointer;
+    border-color: #666 !important;
+}
+
+/* 4. Modali e Popup (Login, Export, ecc) */
+.modal-content {
+    background-color: #1a1a1a !important; /* Sfondo scuro solido */
+    border: 1px solid #555 !important;
+    color: #fff !important;
+    box-shadow: 0 0 20px rgba(0,0,0,0.8);
+}
+.modal-header, .modal-footer {
+    border-color: #333 !important;
+}
+.btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%); /* Rende la X bianca */
+}
+
+/* 5. Bottoni */
+.btn-light, .btn-white {
+    background-color: #333 !important;
+    color: #fff !important;
+    border: 1px solid #555 !important;
+}
+.btn-light:hover {
+    background-color: #444 !important;
+}
+.btn-outline-light {
+    border-color: #fff !important;
+    color: #fff !important;
+}
+.btn-outline-secondary {
+    border-color: #666 !important;
+    color: #ccc !important;
+}
+.btn-outline-secondary:hover {
+    background-color: #444 !important;
+    color: #fff !important;
+}
+
+/* --- STILE SPECIFICO CANZONIERE --- */
+
+/* Badge Admin (Testo/Accordi) */
+.admin-badge {
+    font-size: 0.7em; padding: 2px 5px; border-radius: 4px; vertical-align: middle; margin-left: 5px;
+    font-weight: bold; color: #000;
+}
+.badge-accordi { background-color: #ff3333; color: #fff; }
+.badge-testo { background-color: #fff; color: #000; }
 
 /* Navbar */
 .navbar {
-    background: rgba(13, 110, 253, 0.15) !important;
+    background: rgba(0, 0, 0, 0.7) !important;
     backdrop-filter: blur(10px);
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid #333;
 }
+.navbar-brand { font-size: 1.5rem; text-shadow: 0 0 10px rgba(13, 110, 253, 0.8); }
 
-/* Card e Liste */
-.card, .list-group-item, .category-card {
-    background-color: rgba(30, 30, 30, 0.7) !important; /* Scuro semitrasparente */
-    border: 1px solid var(--border-color) !important;
-    color: #fff !important;
-    backdrop-filter: blur(5px);
+/* Categorie */
+.cat-cover {
+    height: 140px;
+    background-color: #111;
+    background-size: cover; background-position: center;
+    display: flex; align-items: center; justify-content: center;
+    border-bottom: 1px solid #333;
+    border-radius: 8px 8px 0 0;
 }
+.cat-icon { font-size: 3rem; color: rgba(255,255,255,0.9); drop-shadow: 0 0 5px #000; }
 
-.list-group-item:hover, .category-card:hover {
-    background-color: rgba(50, 50, 50, 0.9) !important;
-    transform: translateY(-2px);
-    transition: all 0.2s;
-}
-
-/* Testi e Icone - Forziamo il bianco/grigio chiaro */
-h1, h2, h3, h4, h5, h6, .fw-bold { color: #fff !important; }
-.text-muted, small { color: #adb5bd !important; }
-.bi { color: #fff !important; }
-.text-primary { color: #6ea8fe !important; } /* Blu più chiaro per leggibilità su scuro */
-
-/* Input Form */
-input, textarea, select, .form-control, .form-select {
-    background-color: #2b2b2b !important;
-    border: 1px solid #444 !important;
-    color: #fff !important;
-}
-input::placeholder, textarea::placeholder { color: #888 !important; }
-
-/* --- AREA TESTO E ACCORDI (FONDAMENTALE: NON MODIFICARE) --- */
+/* --- AREA VISUALIZZAZIONE TESTO E ACCORDI --- */
 .preview-area {
-    background: #121212 !important; 
-    color: #e0e0e0 !important;
-    padding: 20px; 
-    border-radius: 8px; 
-    min-height: 500px;
+    background: #000000 !important; /* Nero profondo per contrasto massimo */
+    color: #ffffff !important;
+    padding: 20px;
+    border-radius: 8px;
+    min-height: 60vh;
     border: 1px solid #333;
-    font-size: 16px; 
     
-    /* PARAMETRI CRITICI PER ALLINEAMENTO */
-    line-height: 2.8 !important; /* Spazio per l'accordo */
-    white-space: pre-wrap !important; 
-    font-family: monospace !important; /* Obbligatorio per allineare */
+    /* Font e Allineamento */
+    font-family: 'Courier New', Courier, monospace !important; /* Monospace essenziale per allineare */
+    font-size: 17px;
+    line-height: 2.8 !important; /* Spazio verticale per gli accordi */
+    white-space: pre-wrap !important;
     overflow-x: auto;
 }
 
-/* Stile Accordi */
+/* ACCORDI IN ROSSO */
 .chord-span {
-    color: var(--chord-color);
-    font-weight: bold; 
-    font-size: 0.9em;
+    color: var(--chord-color) !important; /* Rosso */
+    font-weight: bold;
+    font-size: 0.95em;
     
-    /* Logica posizionamento */
+    /* Posizionamento Assoluto Sopra il testo */
     display: inline-block;
-    width: 0; 
-    overflow: visible; 
-    white-space: nowrap; 
-    vertical-align: top; 
-
-    position: relative; 
-    top: -1.2em; /* Sposta l'accordo sopra */
-    left: -1px; 
-    margin: 0;              
+    width: 0;
+    overflow: visible;
+    white-space: nowrap;
+    vertical-align: top;
+    margin: 0;
+    
+    position: relative;
+    top: -1.3em; /* Alza l'accordo sopra la riga */
+    left: 0px;
+    text-shadow: 0 0 2px rgba(0,0,0,1); /* Bordo nero per leggere su sfondi misti */
 }
+
+/* Nascondi accordi se richiesto */
 .hide-chords .chord-span { display: none; }
 
-/* Box note editor */
+/* Box Meta Dati (Autore, Anno) */
 #editorMeta {
-    background-color: rgba(255,255,255,0.1);
-    color: #ddd;
-    padding: 8px; border-radius: 6px;
-    border-left: 4px solid var(--chord-color);
+    margin-top: 5px;
+    background: #111;
+    border-left: 3px solid var(--accent-color);
+    padding: 5px 10px;
+    font-size: 0.9rem;
+    color: #aaa !important;
 }
 
-/* --- LOADER TELESCOPIO (NUOVO) --- */
-#loadingOverlay {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: #050505;
-    z-index: 9999;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-}
-
-.telescope-lens {
-    width: 150px; height: 150px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #2b3a60, #000);
-    border: 2px solid #444;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 0 30px rgba(13, 110, 253, 0.3);
-    margin-bottom: 30px;
-}
-
-.telescope-lens::after {
-    content: ''; position: absolute; top: 10%; right: 10%;
-    width: 20px; height: 10px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 50%; transform: rotate(-45deg);
-}
-
-.lens-star {
-    position: absolute; background: white; border-radius: 50%;
-    animation: twinkle 2s infinite;
-}
-
-#loaderText {
-    font-family: 'Courier New', monospace;
-    font-size: 1.1rem;
-    color: var(--primary-color);
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    min-height: 25px;
-    text-align: center;
-}
-.typing-cursor::after { content: '|'; animation: blink 1s infinite; }
-
-@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
-@keyframes twinkle { 0%, 100% { opacity: 0.2; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
-
-/* Utility */
-.view-screen { display: none; animation: fadeIn 0.3s; }
-.view-screen.active { display: block; }
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-/* Gestione Admin */
+/* --- UTILITY ADMIN E LOADER --- */
 .admin-only { display: none !important; }
 body.user-admin .admin-only { display: inline-block !important; }
 body.user-admin .admin-block { display: block !important; }
-.cat-cover { height: 140px; background-size: cover; background-position: center; display: flex; align-items: center; justify-content: center; }
-.cat-icon { font-size: 3rem; color: rgba(255,255,255,0.8); }
-.cat-actions { position: absolute; top: 10px; right: 10px; display: none; }
-body.user-admin .cat-actions { display: block; }
+.cat-actions { position: absolute; top: 10px; right: 10px; z-index: 10; }
+
+/* Loader Telescopio */
+#loadingOverlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: #000; z-index: 9999;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.telescope-lens {
+    width: 140px; height: 140px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 40%, #1a2a4a, #000);
+    border: 4px solid #333;
+    position: relative; overflow: hidden;
+    box-shadow: 0 0 40px rgba(13, 110, 253, 0.4);
+    margin-bottom: 20px;
+}
+.telescope-lens::after {
+    content: ''; position: absolute; top: 10%; right: 15%; width: 25px; height: 12px;
+    background: rgba(255, 255, 255, 0.1); border-radius: 50%; transform: rotate(-45deg);
+}
+.lens-star { position: absolute; background: white; border-radius: 50%; animation: twinkle 1.5s infinite alternate; }
+#loaderText { font-family: monospace; color: #fff; letter-spacing: 2px; }
+.typing-cursor::after { content: '█'; animation: blink 1s infinite; color: var(--accent-color); margin-left: 5px;}
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes twinkle { 0% { opacity: 0.3; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1.2); } }
+
+/* Toast */
+.toast { background-color: #222 !important; color: #fff !important; border: 1px solid #444; }
+.btn-close-white { filter: invert(1); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #111; }
+::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #666; }
