@@ -217,18 +217,29 @@ window.performGlobalSearch = () => {
     if(!q) { window.renderDashboard(); return; }
     const res=allSongs.filter(s=>s.title.toLowerCase().includes(q) || (s.author&&s.author.toLowerCase().includes(q)));
     document.getElementById("favoritesSection").style.display='none';
+    
     document.getElementById("categoriesContainer").innerHTML = res.length ? res.map(s => {
-        let badgesHtml = "";
+        let badgeHtml = "";
         if (isAdmin) {
+            // LOGICA BOLLINI:
+            const hasLyrics = s.lyrics && s.lyrics.trim().length > 5;
             const hasChords = s.lyrics && s.lyrics.includes("[");
-            const hasLyrics = s.lyrics && s.lyrics.trim().length > 10;
-            if (hasChords) badgesHtml = `<span class="admin-badge badge-accordi">A</span>`;
-            else if (hasLyrics) badgesHtml = `<span class="admin-badge badge-testo">T</span>`;
+            
+            if (hasLyrics && hasChords) {
+                // VERDE: Completo
+                badgeHtml = `<span class="status-dot status-green" title="Completo"></span>`;
+            } else if (hasLyrics) {
+                // ARANCIO: Solo Testo
+                badgeHtml = `<span class="status-dot status-orange" title="Solo Testo"></span>`;
+            } else {
+                // ROSSO: Vuoto
+                badgeHtml = `<span class="status-dot status-red" title="Vuoto"></span>`;
+            }
         }
         return `<div class="col-12"><div class="card shadow-sm border-0" onclick="window.openEditor('${s.id}')" style="cursor:pointer">
             <div class="card-body d-flex justify-content-between align-items-center">
                 <div>
-                    <h6 class="fw-bold mb-0">${s.title} ${badgesHtml}</h6>
+                    <h6 class="fw-bold mb-0">${s.title} ${badgeHtml}</h6>
                     <small>${s.author} <span class="badge bg-light text-dark ms-2">${s.category}</span></small>
                 </div>
                 <i class="bi bi-chevron-right text-muted"></i>
@@ -526,3 +537,4 @@ window.addSongFromSearch = (songId) => { const sl = allSetlists.find(s => s.id =
 window.insertFormatting = (tag) => { const textarea = document.getElementById("lyricsEditor"); const start = textarea.selectionStart; const end = textarea.selectionEnd; textarea.value = textarea.value.substring(0, start) + tag + textarea.value.substring(start, end) + tag + textarea.value.substring(end); textarea.selectionStart = start + tag.length; textarea.selectionEnd = end + tag.length; textarea.focus(); window.renderPreview(); };
 window.toggleAutoScroll = () => { /* Logica AutoScroll (omessa, usare vecchia) */ };
 window.handleSetlistBack = () => { const detail = document.getElementById('activeSetlistDetail'); if (detail.style.display === 'block') { detail.style.display = 'none'; currentSetlistId = null; window.renderSetlistsList(); } else { window.goHome(); } };
+
