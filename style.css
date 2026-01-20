@@ -90,7 +90,16 @@ input, textarea, select, .form-control, .form-select {
     color: #fff !important;
 }
 input::placeholder, textarea::placeholder { color: #888 !important; }
+/* --- FIX PULSANTI ILLEGGIBILI --- */
+/* Forza il testo nero sui pulsanti chiari (Gialli e Bianchi) sovrascrivendo la regola globale del bianco */
+.btn-warning, .btn-light, .btn-white {
+    color: #000 !important;
+}
 
+/* Assicura che le icone dentro questi pulsanti siano scure */
+.btn-warning i, .btn-light i, .btn-white i {
+    color: #000 !important;
+}
 /* --- AREA TESTO E ACCORDI (FONDAMENTALE: NON MODIFICARE) --- */
 .preview-area {
     background: #121212 !important; 
@@ -194,3 +203,22 @@ body.user-admin .admin-block { display: block !important; }
 .cat-icon { font-size: 3rem; color: rgba(255,255,255,0.8); }
 .cat-actions { position: absolute; top: 10px; right: 10px; display: none; }
 body.user-admin .cat-actions { display: block; }
+/* --- FIX MODALI SCURI --- */
+.modal-content {
+    background-color: #2b2b2b !important; /* Sfondo grigio scuro */
+    color: #fff !important;
+    border: 1px solid #444;
+}
+
+.modal-header {
+    border-bottom: 1px solid #444;
+}
+
+.modal-footer {
+    border-top: 1px solid #444;
+}
+
+/* Corregge il pulsante "X" dei modali per farlo vedere su sfondo scuro */
+.btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
