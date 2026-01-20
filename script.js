@@ -605,27 +605,33 @@ window.exportSinglePDF = () => { showToast("PDF Canzone in arrivo...", "warning"
 window.exportSingleLatex = () => { showToast("LaTeX Canzone in arrivo...", "warning"); };
 
 /* ==========================================
-   NUOVA GESTIONE SEZIONI CON ORDINAMENTO
+   LOGICA GESTIONE SEZIONI (FIX LISTA VUOTA)
    ========================================== */
 
-// Apre la vista e aggiorna i dati
+// Apre la vista e FORZA IL CARICAMENTO DATI
 window.openManageSectionsView = async () => {
     switchView('view-manage-sections');
-    // Ricarichiamo per sicurezza per avere l'ordine aggiornato
-    await window.loadData(); 
+    // Mostra caricamento mentre recupera i dati freschi
+    const container = document.getElementById("manageSectionsContainer");
+    container.innerHTML = '<div class="text-center text-muted mt-5">Caricamento...</div>';
+    
+    await window.loadData(); // Recupera le sezioni dal DB
     window.renderManageSections();
 };
 
-// Renderizza la lista con frecce SU/GIU
 window.renderManageSections = () => {
     const c = document.getElementById("manageSectionsContainer");
     c.innerHTML = "";
     
-    // Ordina le sezioni in base al campo 'order' (se esiste) o al nome
-    const sortedSections = [...allSections].sort((a, b) => (a.order || 0) - (b.order || 0));
+    // Ordina: se 'order' manca, mette la sezione alla fine (9999)
+    const sortedSections = [...allSections].sort((a, b) => {
+        const orderA = (a.order !== undefined) ? a.order : 9999;
+        const orderB = (b.order !== undefined) ? b.order : 9999;
+        return orderA - orderB;
+    });
 
     if (sortedSections.length === 0) {
-        c.innerHTML = `<div class="text-center text-muted py-5">Nessuna sezione presente.</div>`;
+        c.innerHTML = `<div class="text-center text-muted py-5">Nessuna sezione trovata. Creane una nuova!</div>`;
         return;
     }
 
@@ -633,40 +639,40 @@ window.renderManageSections = () => {
         const bg = sec.coverUrl ? `background-image:url('${sec.coverUrl}')` : "";
         const songCount = allSongs.filter(s => s.category === sec.name).length;
         
-        // Determina se mostrare le frecce (prima e ultima posizione)
+        // Gestione pulsanti freccia (disabilitati se primo o ultimo)
         const isFirst = index === 0;
         const isLast = index === sortedSections.length - 1;
 
         c.innerHTML += `
-        <div class="card bg-dark text-white border-secondary shadow-sm p-2">
+        <div class="card bg-dark text-white border-secondary shadow-sm p-2 mb-2">
             <div class="d-flex align-items-center gap-3">
                 
-                <div class="d-flex flex-column gap-1">
-                    <button class="btn btn-sm btn-outline-secondary ${isFirst ? 'disabled opacity-25' : ''}" 
-                        onclick="window.moveSection('${sec.id}', -1)" title="Sposta Su">
-                        <i class="bi bi-caret-up-fill"></i>
+                <div class="d-flex flex-column justify-content-center">
+                    <button class="btn btn-sm btn-link text-secondary p-0 mb-1 ${isFirst ? 'disabled opacity-25' : ''}" 
+                        onclick="window.moveSection('${sec.id}', -1)" style="line-height:1">
+                        <i class="bi bi-caret-up-fill fs-5"></i>
                     </button>
-                    <button class="btn btn-sm btn-outline-secondary ${isLast ? 'disabled opacity-25' : ''}" 
-                        onclick="window.moveSection('${sec.id}', 1)" title="Sposta Giù">
-                        <i class="bi bi-caret-down-fill"></i>
+                    <button class="btn btn-sm btn-link text-secondary p-0 ${isLast ? 'disabled opacity-25' : ''}" 
+                        onclick="window.moveSection('${sec.id}', 1)" style="line-height:1">
+                        <i class="bi bi-caret-down-fill fs-5"></i>
                     </button>
                 </div>
 
-                <div style="width: 60px; height: 60px; background-color: #333; background-size: cover; background-position: center; border-radius: 8px; ${bg}" 
-                     class="d-flex align-items-center justify-content-center flex-shrink-0">
-                    ${sec.coverUrl ? '' : '<i class="bi bi-image text-muted fs-5"></i>'}
+                <div style="width: 50px; height: 50px; background-color: #333; background-size: cover; background-position: center; border-radius: 6px; ${bg}" 
+                     class="d-flex align-items-center justify-content-center flex-shrink-0 border border-secondary">
+                    ${sec.coverUrl ? '' : '<i class="bi bi-image text-muted"></i>'}
                 </div>
 
                 <div class="flex-grow-1 overflow-hidden">
-                    <h5 class="fw-bold mb-0 text-truncate">${sec.name}</h5>
-                    <small class="text-white-50">${songCount} canzoni</small>
+                    <h6 class="fw-bold mb-0 text-truncate text-white">${sec.name}</h6>
+                    <small class="text-white-50" style="font-size: 0.8rem">${songCount} canzoni</small>
                 </div>
 
-                <div class="d-flex gap-2">
-                    <button class="btn btn-outline-light btn-sm" onclick="window.openSectionSettings('${sec.id}','${sec.name}','${sec.coverUrl||''}', event)">
+                <div class="d-flex gap-1">
+                    <button class="btn btn-outline-secondary btn-sm" title="Modifica" onclick="window.openSectionSettings('${sec.id}','${sec.name}','${sec.coverUrl||''}', event)">
                         <i class="bi bi-pencil"></i>
                     </button>
-                    <button class="btn btn-outline-danger btn-sm" onclick="editingSectionId='${sec.id}'; currentCategory='${sec.name}'; window.triggerDeleteSection()">
+                    <button class="btn btn-outline-danger btn-sm" title="Elimina" onclick="editingSectionId='${sec.id}'; currentCategory='${sec.name}'; window.triggerDeleteSection()">
                         <i class="bi bi-trash"></i>
                     </button>
                 </div>
@@ -675,51 +681,44 @@ window.renderManageSections = () => {
     });
 };
 
-// Funzione per spostare le sezioni
 window.moveSection = async (sectionId, direction) => {
-    // 1. Prepara l'array ordinato attuale
-    let sorted = [...allSections].sort((a, b) => (a.order || 0) - (b.order || 0));
+    // 1. Prepara la lista ordinata corrente
+    let sorted = [...allSections].sort((a, b) => {
+        const orderA = (a.order !== undefined) ? a.order : 9999;
+        const orderB = (b.order !== undefined) ? b.order : 9999;
+        return orderA - orderB;
+    });
     
-    // 2. Trova l'indice
+    // 2. Trova indici
     const idx = sorted.findIndex(s => s.id === sectionId);
     if (idx === -1) return;
-
-    // 3. Calcola il nuovo indice
     const newIdx = idx + direction;
     if (newIdx < 0 || newIdx >= sorted.length) return;
 
-    // 4. Scambia nell'array locale
+    // 3. Scambia localmente per feedback immediato
     const temp = sorted[idx];
     sorted[idx] = sorted[newIdx];
     sorted[newIdx] = temp;
 
-    // 5. Aggiorna TUTTI gli ordini su Firebase (per sicurezza e consistenza)
+    // 4. Salva su Firebase
     const batch = writeBatch(db);
     sorted.forEach((sec, i) => {
         const ref = doc(db, "sections", sec.id);
         batch.update(ref, { order: i });
-        // Aggiorniamo anche l'oggetto locale
-        sec.order = i;
+        sec.order = i; // Aggiorna anche locale
     });
 
     await batch.commit();
-    
-    // 6. Ricarica la vista
     window.renderManageSections();
-    // Aggiorna anche la dashboard principale in background
-    window.renderDashboard(); 
-    showToast("Ordine aggiornato", "success");
+    showToast("Ordine salvato", "success");
 };
 
+// Funzione Creazione (invariata ma reinserita per sicurezza)
 window.createNewSection = async () => {
     const n = document.getElementById("newSectionName").value.trim();
     const fileInput = document.getElementById("newSectionCoverInput");
     
-    if (!n) return showToast("Inserisci un nome per la sezione", "warning");
-    
-    // Calcola il nuovo 'order' (mettilo in fondo)
-    const maxOrder = allSections.reduce((max, s) => Math.max(max, s.order || 0), 0);
-    const newOrder = maxOrder + 1;
+    if (!n) return showToast("Manca il nome", "warning");
 
     if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display = "flex";
     
@@ -734,10 +733,13 @@ window.createNewSection = async () => {
             });
         }
 
+        // Calcola ordine (in fondo alla lista)
+        const maxOrder = allSections.reduce((max, s) => Math.max(max, s.order || 0), 0);
+
         await addDoc(collection(db, "sections"), { 
             name: n, 
             coverUrl: coverUrl,
-            order: newOrder 
+            order: maxOrder + 1
         });
         
         const modalEl = document.getElementById('addSectionModal');
@@ -745,9 +747,8 @@ window.createNewSection = async () => {
         if(modal) modal.hide();
 
         showToast("Sezione creata!", "success");
-        await loadData();
-        window.renderManageSections(); // Aggiorna la gestione
-        window.renderDashboard();      // Aggiorna la home
+        await window.loadData();
+        window.renderManageSections();
     } catch (e) {
         console.error(e);
         showToast("Errore: " + e.message, "danger");
@@ -756,10 +757,3 @@ window.createNewSection = async () => {
     }
 };
 
-// Funzione helper per aprire il modal (stesso di prima)
-window.openAddSectionModal = () => {
-    document.getElementById("newSectionName").value = "";
-    document.getElementById("newSectionCoverInput").value = "";
-    const m = new bootstrap.Modal(document.getElementById('addSectionModal'));
-    m.show();
-};
