@@ -338,4 +338,29 @@ body.user-admin .cat-actions { display: block; }
 .status-red { background-color: #e74c3c; box-shadow: 0 0 5px #e74c3c; }
 
 
+/* --- FIX CRITICI PER LEGGIBILITÀ --- */
 
+/* 1. Pulsanti Gialli/Bianchi: Forza testo NERO */
+.btn-warning, .btn-light, .btn-white {
+    color: #000 !important;
+    font-weight: bold;
+}
+/* Assicura che anche le icone dentro siano nere */
+.btn-warning i, .btn-light i, .btn-white i {
+    color: #000 !important;
+}
+
+/* 2. Anteprima Scalette: Sfondo bianco richiede testo NERO */
+#setlistSongsContainer .bg-white,
+#setlistSongsContainer .bg-white * {
+    color: #1a1a1a !important; /* Testo scuro su sfondo bianco */
+}
+
+/* 3. Riduce dimensioni voci Menu Laterale */
+.offcanvas-body .btn {
+    padding-top: 8px !important;    /* Era troppo alto */
+    padding-bottom: 8px !important;
+    font-size: 0.95rem !important;  /* Testo leggermente più piccolo */
+}
+.offcanvas-body .fs-4 { font-size: 1.2rem !important; } /* Icone più piccole */
+.offcanvas-body .fs-5 { font-size: 1rem !important; }   /* Testo pulsanti più piccolo */
