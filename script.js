@@ -534,19 +534,20 @@ window.saveSetlistSongTone = async (idx) => { const sl = allSetlists.find(s => s
 function generateSnippetHtml(lyrics, transposeVal) {
     if (!lyrics) return "...";
     
-    // Prendiamo le prime 4 righe
+    // Prende le prime 4 righe
     const lines = lyrics.split('\n').slice(0, 4);
     
     return lines.map(line => {
-        // Sostituisce [Accordo] con lo span speciale che lo mette sopra
+        // Logica per posizionare l'accordo
+        // Usiamo uno span vuoto prima dell'accordo per ancorarlo alla posizione giusta
         const formattedLine = line.replace(/\[(.*?)\]/g, (match, p1) => {
             const originalChord = normalizeChord(p1);
             const newChord = transposeChord(originalChord, transposeVal);
-            // Qui applichiamo la classe .snippet-chord definita nel CSS
+            // La classe .snippet-chord ora lo sposterà in alto col CSS
             return `<span class="snippet-chord">${newChord}</span>`;
         });
         
-        // Avvolgiamo la riga in un div con line-height alto
+        // Avvolgiamo la riga
         return `<div class="snippet-line">${formattedLine || '&nbsp;'}</div>`;
     }).join(''); 
 }
@@ -565,6 +566,7 @@ window.addSongFromSearch = (songId) => { const sl = allSetlists.find(s => s.id =
 window.insertFormatting = (tag) => { const textarea = document.getElementById("lyricsEditor"); const start = textarea.selectionStart; const end = textarea.selectionEnd; textarea.value = textarea.value.substring(0, start) + tag + textarea.value.substring(start, end) + tag + textarea.value.substring(end); textarea.selectionStart = start + tag.length; textarea.selectionEnd = end + tag.length; textarea.focus(); window.renderPreview(); };
 window.toggleAutoScroll = () => { /* Logica AutoScroll (omessa, usare vecchia) */ };
 window.handleSetlistBack = () => { const detail = document.getElementById('activeSetlistDetail'); if (detail.style.display === 'block') { detail.style.display = 'none'; currentSetlistId = null; window.renderSetlistsList(); } else { window.goHome(); } };
+
 
 
 
