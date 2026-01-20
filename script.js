@@ -604,55 +604,111 @@ window.generateFullLatex = () => { showToast("Export LaTeX completo in arrivo...
 window.exportSinglePDF = () => { showToast("PDF Canzone in arrivo...", "warning"); };
 window.exportSingleLatex = () => { showToast("LaTeX Canzone in arrivo...", "warning"); };
 
-// --- NUOVA GESTIONE SEZIONI ---
-window.openManageSectionsView = () => {
+/* ==========================================
+   NUOVA GESTIONE SEZIONI CON ORDINAMENTO
+   ========================================== */
+
+// Apre la vista e aggiorna i dati
+window.openManageSectionsView = async () => {
     switchView('view-manage-sections');
+    // Ricarichiamo per sicurezza per avere l'ordine aggiornato
+    await window.loadData(); 
     window.renderManageSections();
 };
 
+// Renderizza la lista con frecce SU/GIU
 window.renderManageSections = () => {
     const c = document.getElementById("manageSectionsContainer");
     c.innerHTML = "";
     
-    if (allSections.length === 0) {
-        c.innerHTML = `<div class="text-center text-muted">Nessuna sezione presente.</div>`;
+    // Ordina le sezioni in base al campo 'order' (se esiste) o al nome
+    const sortedSections = [...allSections].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    if (sortedSections.length === 0) {
+        c.innerHTML = `<div class="text-center text-muted py-5">Nessuna sezione presente.</div>`;
         return;
     }
 
-    allSections.forEach(sec => {
+    sortedSections.forEach((sec, index) => {
         const bg = sec.coverUrl ? `background-image:url('${sec.coverUrl}')` : "";
-        const count = allSongs.filter(s => s.category === sec.name).length;
+        const songCount = allSongs.filter(s => s.category === sec.name).length;
         
+        // Determina se mostrare le frecce (prima e ultima posizione)
+        const isFirst = index === 0;
+        const isLast = index === sortedSections.length - 1;
+
         c.innerHTML += `
-        <div class="col-md-6 col-lg-4">
-            <div class="card bg-dark text-white border-secondary shadow-sm">
-                <div class="d-flex">
-                    <div style="width: 100px; height: 100px; background-color: #333; background-size: cover; background-position: center; ${bg}" class="rounded-start d-flex align-items-center justify-content-center">
-                        ${sec.coverUrl ? '' : '<i class="bi bi-image text-muted fs-4"></i>'}
-                    </div>
-                    <div class="card-body py-2 d-flex flex-column justify-content-center">
-                        <h5 class="card-title fw-bold mb-1 text-truncate">${sec.name}</h5>
-                        <small class="text-muted mb-2">${count} canzoni</small>
-                        <div class="d-flex gap-2">
-                            <button class="btn btn-sm btn-outline-light" onclick="window.openSectionSettings('${sec.id}','${sec.name}','${sec.coverUrl||''}', event)">
-                                <i class="bi bi-pencil"></i> Modifica
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger" onclick="editingSectionId='${sec.id}'; currentCategory='${sec.name}'; window.triggerDeleteSection()">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
-                    </div>
+        <div class="card bg-dark text-white border-secondary shadow-sm p-2">
+            <div class="d-flex align-items-center gap-3">
+                
+                <div class="d-flex flex-column gap-1">
+                    <button class="btn btn-sm btn-outline-secondary ${isFirst ? 'disabled opacity-25' : ''}" 
+                        onclick="window.moveSection('${sec.id}', -1)" title="Sposta Su">
+                        <i class="bi bi-caret-up-fill"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary ${isLast ? 'disabled opacity-25' : ''}" 
+                        onclick="window.moveSection('${sec.id}', 1)" title="Sposta Giù">
+                        <i class="bi bi-caret-down-fill"></i>
+                    </button>
+                </div>
+
+                <div style="width: 60px; height: 60px; background-color: #333; background-size: cover; background-position: center; border-radius: 8px; ${bg}" 
+                     class="d-flex align-items-center justify-content-center flex-shrink-0">
+                    ${sec.coverUrl ? '' : '<i class="bi bi-image text-muted fs-5"></i>'}
+                </div>
+
+                <div class="flex-grow-1 overflow-hidden">
+                    <h5 class="fw-bold mb-0 text-truncate">${sec.name}</h5>
+                    <small class="text-white-50">${songCount} canzoni</small>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-light btn-sm" onclick="window.openSectionSettings('${sec.id}','${sec.name}','${sec.coverUrl||''}', event)">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="editingSectionId='${sec.id}'; currentCategory='${sec.name}'; window.triggerDeleteSection()">
+                        <i class="bi bi-trash"></i>
+                    </button>
                 </div>
             </div>
         </div>`;
     });
 };
 
-window.openAddSectionModal = () => {
-    document.getElementById("newSectionName").value = "";
-    document.getElementById("newSectionCoverInput").value = "";
-    const m = new bootstrap.Modal(document.getElementById('addSectionModal'));
-    m.show();
+// Funzione per spostare le sezioni
+window.moveSection = async (sectionId, direction) => {
+    // 1. Prepara l'array ordinato attuale
+    let sorted = [...allSections].sort((a, b) => (a.order || 0) - (b.order || 0));
+    
+    // 2. Trova l'indice
+    const idx = sorted.findIndex(s => s.id === sectionId);
+    if (idx === -1) return;
+
+    // 3. Calcola il nuovo indice
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= sorted.length) return;
+
+    // 4. Scambia nell'array locale
+    const temp = sorted[idx];
+    sorted[idx] = sorted[newIdx];
+    sorted[newIdx] = temp;
+
+    // 5. Aggiorna TUTTI gli ordini su Firebase (per sicurezza e consistenza)
+    const batch = writeBatch(db);
+    sorted.forEach((sec, i) => {
+        const ref = doc(db, "sections", sec.id);
+        batch.update(ref, { order: i });
+        // Aggiorniamo anche l'oggetto locale
+        sec.order = i;
+    });
+
+    await batch.commit();
+    
+    // 6. Ricarica la vista
+    window.renderManageSections();
+    // Aggiorna anche la dashboard principale in background
+    window.renderDashboard(); 
+    showToast("Ordine aggiornato", "success");
 };
 
 window.createNewSection = async () => {
@@ -660,6 +716,11 @@ window.createNewSection = async () => {
     const fileInput = document.getElementById("newSectionCoverInput");
     
     if (!n) return showToast("Inserisci un nome per la sezione", "warning");
+    
+    // Calcola il nuovo 'order' (mettilo in fondo)
+    const maxOrder = allSections.reduce((max, s) => Math.max(max, s.order || 0), 0);
+    const newOrder = maxOrder + 1;
+
     if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display = "flex";
     
     try {
@@ -672,7 +733,12 @@ window.createNewSection = async () => {
                 reader.onerror = error => reject(error);
             });
         }
-        await addDoc(collection(db, "sections"), { name: n, coverUrl: coverUrl });
+
+        await addDoc(collection(db, "sections"), { 
+            name: n, 
+            coverUrl: coverUrl,
+            order: newOrder 
+        });
         
         const modalEl = document.getElementById('addSectionModal');
         const modal = bootstrap.Modal.getInstance(modalEl);
@@ -680,7 +746,8 @@ window.createNewSection = async () => {
 
         showToast("Sezione creata!", "success");
         await loadData();
-        window.renderManageSections();
+        window.renderManageSections(); // Aggiorna la gestione
+        window.renderDashboard();      // Aggiorna la home
     } catch (e) {
         console.error(e);
         showToast("Errore: " + e.message, "danger");
@@ -689,6 +756,10 @@ window.createNewSection = async () => {
     }
 };
 
-
-
-
+// Funzione helper per aprire il modal (stesso di prima)
+window.openAddSectionModal = () => {
+    document.getElementById("newSectionName").value = "";
+    document.getElementById("newSectionCoverInput").value = "";
+    const m = new bootstrap.Modal(document.getElementById('addSectionModal'));
+    m.show();
+};
