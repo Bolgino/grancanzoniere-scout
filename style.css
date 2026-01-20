@@ -365,60 +365,64 @@ body.user-admin .cat-actions { display: block; }
 .offcanvas-body .fs-4 { font-size: 1.2rem !important; } /* Icone più piccole */
 .offcanvas-body .fs-5 { font-size: 1rem !important; }   /* Testo pulsanti più piccolo */
 
-/* --- FIX COLORI E ACCORDI (Incolla in fondo a style.css) --- */
+/* --- NUOVO STILE ACCORDI, TASTI E LATEX --- */
 
-/* 1. Box Tasti Formattazione (Grassetto/Corsivo/Font) */
-#view-editor .bg-light {
-    background-color: #333 !important; /* Sfondo scuro per il box */
-    border: 1px solid #555;
-}
-#view-editor .bg-light button {
-    color: #fff !important; /* Icone bianche */
-    border-color: #666 !important;
-}
-#view-editor .bg-light button:hover {
-    background-color: #555 !important;
-}
-#toneDisplay { color: #fff !important; }
-
-/* 2. Tasto "Aggiungi Canzone" (nella vista Scalette) -> NERO */
-#activeSetlistDetail .btn-outline-primary {
-    background-color: #000 !important;
-    color: #fff !important;
-    border-color: #000 !important;
-}
-#activeSetlistDetail .btn-outline-primary:hover {
-    background-color: #333 !important;
-}
-
-/* 3. Tasto LaTeX (nel menu Export) -> BIANCO */
-.dropdown-item[onclick*="Latex"] {
-    background-color: #fff !important;
-    color: #000 !important;
-    font-weight: bold;
-}
-.dropdown-item[onclick*="Latex"]:hover {
-    background-color: #e0e0e0 !important;
-}
-
-/* 4. ANTEPRIMA SCALETTE: Accordi Rossi e Sopra il testo */
+/* 1. ACCORDI: ROSSI E SOPRA IL TESTO */
 .snippet-line {
-    line-height: 2.8 !important; /* Spazio vitale per l'accordo sopra */
     position: relative;
+    line-height: 3.5 !important; /* Molto spazio tra le righe per farci stare l'accordo */
     display: block;
+    margin-bottom: 5px;
 }
 
 .snippet-chord {
-    color: #dc3545 !important; /* ROSSO */
+    color: #ff0000 !important; /* ROSSO ACCESO */
     font-weight: bold;
-    font-size: 0.85em;
+    font-size: 0.9rem;
     
-    /* Magia per metterlo SOPRA senza rompere la riga */
+    /* Magia per metterlo SOPRA */
+    position: absolute;
+    margin-top: -1.8em; /* Sposta l'accordo sopra la riga di testo */
+    
+    /* Evita che l'accordo sposti il testo a destra */
     display: inline-block;
     width: 0;
-    overflow: visible;
-    vertical-align: top;
-    position: relative;
-    top: -1.3em; /* Sposta in alto */
-    left: 0px;
+    white-space: nowrap;
+    overflow: visible; 
 }
+
+/* 2. TASTO "AGGIUNGI CANZONE" (Trasparente ed Elegante) */
+#activeSetlistDetail .btn-outline-primary {
+    background-color: transparent !important; /* Trasparente */
+    color: #fff !important; /* Scritta Bianca */
+    border: 1px solid rgba(255, 255, 255, 0.5) !important;
+    backdrop-filter: blur(5px);
+    transition: all 0.3s ease;
+    box-shadow: 0 0 10px rgba(13, 110, 253, 0.2);
+}
+
+#activeSetlistDetail .btn-outline-primary:hover {
+    background-color: rgba(13, 110, 253, 0.3) !important; /* Leggero blu al passaggio */
+    border-color: #0d6efd !important;
+    box-shadow: 0 0 20px rgba(13, 110, 253, 0.6); /* Effetto luce */
+    transform: scale(1.02);
+}
+
+/* 3. TASTO LATEX (Bianco Solido per massima leggibilità) */
+.dropdown-menu a[onclick*="Latex"] {
+    background-color: #ffffff !important; /* Sfondo BIANCO */
+    color: #000000 !important; /* Scritta NERA */
+    font-weight: 800 !important; /* Grassetto */
+    border-top: 1px solid #ccc;
+    margin-top: 5px;
+}
+.dropdown-menu a[onclick*="Latex"]:hover {
+    background-color: #f0f0f0 !important; /* Grigio chiaro al passaggio */
+}
+
+/* 4. Fix leggibilità box tastini formattazione */
+#view-editor .bg-light {
+    background-color: rgba(0,0,0,0.6) !important;
+    border: 1px solid #555;
+}
+#view-editor .bg-light button { color: white !important; }
