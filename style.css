@@ -365,3 +365,60 @@ body.user-admin .cat-actions { display: block; }
 .offcanvas-body .fs-4 { font-size: 1.2rem !important; } /* Icone più piccole */
 .offcanvas-body .fs-5 { font-size: 1rem !important; }   /* Testo pulsanti più piccolo */
 
+/* --- FIX COLORI E ACCORDI (Incolla in fondo a style.css) --- */
+
+/* 1. Box Tasti Formattazione (Grassetto/Corsivo/Font) */
+#view-editor .bg-light {
+    background-color: #333 !important; /* Sfondo scuro per il box */
+    border: 1px solid #555;
+}
+#view-editor .bg-light button {
+    color: #fff !important; /* Icone bianche */
+    border-color: #666 !important;
+}
+#view-editor .bg-light button:hover {
+    background-color: #555 !important;
+}
+#toneDisplay { color: #fff !important; }
+
+/* 2. Tasto "Aggiungi Canzone" (nella vista Scalette) -> NERO */
+#activeSetlistDetail .btn-outline-primary {
+    background-color: #000 !important;
+    color: #fff !important;
+    border-color: #000 !important;
+}
+#activeSetlistDetail .btn-outline-primary:hover {
+    background-color: #333 !important;
+}
+
+/* 3. Tasto LaTeX (nel menu Export) -> BIANCO */
+.dropdown-item[onclick*="Latex"] {
+    background-color: #fff !important;
+    color: #000 !important;
+    font-weight: bold;
+}
+.dropdown-item[onclick*="Latex"]:hover {
+    background-color: #e0e0e0 !important;
+}
+
+/* 4. ANTEPRIMA SCALETTE: Accordi Rossi e Sopra il testo */
+.snippet-line {
+    line-height: 2.8 !important; /* Spazio vitale per l'accordo sopra */
+    position: relative;
+    display: block;
+}
+
+.snippet-chord {
+    color: #dc3545 !important; /* ROSSO */
+    font-weight: bold;
+    font-size: 0.85em;
+    
+    /* Magia per metterlo SOPRA senza rompere la riga */
+    display: inline-block;
+    width: 0;
+    overflow: visible;
+    vertical-align: top;
+    position: relative;
+    top: -1.3em; /* Sposta in alto */
+    left: 0px;
+}
