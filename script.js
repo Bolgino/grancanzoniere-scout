@@ -531,7 +531,25 @@ window.renderActiveSetlistSongs = () => {
 };
 window.changeSetlistPreviewTone = (idx, songId, delta) => { const badge = document.getElementById(`badge-trans-${idx}`); const snippetDiv = document.getElementById(`snippet-content-${idx}`); let currentVal = parseInt(badge.getAttribute('data-val')); let newVal = currentVal + delta; badge.setAttribute('data-val', newVal); badge.innerText = `Tono: ${newVal > 0 ? '+' + newVal : newVal}`; badge.classList.remove('bg-light', 'text-dark'); badge.classList.add('bg-warning', 'text-dark'); const song = allSongs.find(s => s.id === songId); if (song) snippetDiv.innerHTML = generateSnippetHtml(song.lyrics, newVal); };
 window.saveSetlistSongTone = async (idx) => { const sl = allSetlists.find(s => s.id === currentSetlistId); if(!sl) return; const badge = document.getElementById(`badge-trans-${idx}`); const finalVal = parseInt(badge.getAttribute('data-val')); const newSongs = [...sl.songs]; let item = newSongs[idx]; if (typeof item === 'string') item = { id: item, trans: 0 }; else item = { ...item }; item.trans = finalVal; newSongs[idx] = item; await updateDoc(doc(db, "setlists", currentSetlistId), { songs: newSongs }); sl.songs = newSongs; badge.classList.remove('bg-warning'); badge.classList.add('bg-light'); showToast("Tonalità salvata!", "success"); };
-function generateSnippetHtml(lyrics, transposeVal) { if (!lyrics) return "..."; const lines = lyrics.split('\n').slice(0, 4); return lines.map(line => { return line.replace(/\[(.*?)\]/g, (match, p1) => { const originalChord = normalizeChord(p1); const newChord = transposeChord(originalChord, transposeVal); return `<span style="color:#d63384; font-weight:bold; font-size:0.9em;">${newChord}</span>`; }); }).join('<br>'); }
+function generateSnippetHtml(lyrics, transposeVal) {
+    if (!lyrics) return "...";
+    
+    // Prendiamo le prime 4 righe
+    const lines = lyrics.split('\n').slice(0, 4);
+    
+    return lines.map(line => {
+        // Sostituisce [Accordo] con lo span speciale che lo mette sopra
+        const formattedLine = line.replace(/\[(.*?)\]/g, (match, p1) => {
+            const originalChord = normalizeChord(p1);
+            const newChord = transposeChord(originalChord, transposeVal);
+            // Qui applichiamo la classe .snippet-chord definita nel CSS
+            return `<span class="snippet-chord">${newChord}</span>`;
+        });
+        
+        // Avvolgiamo la riga in un div con line-height alto
+        return `<div class="snippet-line">${formattedLine || '&nbsp;'}</div>`;
+    }).join(''); 
+}
 window.deleteActiveSetlist = () => window.confirmModal("Eliminare questa scaletta?", async () => { try { await deleteDoc(doc(db, "setlists", currentSetlistId)); await loadData(); window.openSetlistsView(); showToast("Scaletta eliminata"); } catch(e) { showToast("Errore eliminazione", "danger"); } });
 async function updateSetlistSongs(setlistId, newSongsArray) { try { const localSl = allSetlists.find(s => s.id === setlistId); if(localSl) localSl.songs = newSongsArray; if(currentSetlistId === setlistId) window.renderActiveSetlistSongs(); await updateDoc(doc(db, "setlists", setlistId), { songs: newSongsArray }); } catch(e) { showToast("Errore sync", "danger"); await loadData(); } }
 window.moveSetlistSong = (idx, dir) => { const sl = allSetlists.find(s => s.id === currentSetlistId); if (!sl) return; if (idx + dir < 0 || idx + dir >= sl.songs.length) return; const newSongs = [...sl.songs]; const temp = newSongs[idx]; newSongs[idx] = newSongs[idx + dir]; newSongs[idx + dir] = temp; updateSetlistSongs(currentSetlistId, newSongs); };
@@ -547,5 +565,6 @@ window.addSongFromSearch = (songId) => { const sl = allSetlists.find(s => s.id =
 window.insertFormatting = (tag) => { const textarea = document.getElementById("lyricsEditor"); const start = textarea.selectionStart; const end = textarea.selectionEnd; textarea.value = textarea.value.substring(0, start) + tag + textarea.value.substring(start, end) + tag + textarea.value.substring(end); textarea.selectionStart = start + tag.length; textarea.selectionEnd = end + tag.length; textarea.focus(); window.renderPreview(); };
 window.toggleAutoScroll = () => { /* Logica AutoScroll (omessa, usare vecchia) */ };
 window.handleSetlistBack = () => { const detail = document.getElementById('activeSetlistDetail'); if (detail.style.display === 'block') { detail.style.display = 'none'; currentSetlistId = null; window.renderSetlistsList(); } else { window.goHome(); } };
+
 
 
