@@ -379,140 +379,240 @@ window.openExportModal = () => {
 };
 
 /* ==========================================
-   FUNZIONE PDF CORRETTA E COMPLETA
+   FUNZIONE PDF CORRETTA (DAL VECCHIO SCRIPT)
    ========================================== */
 window.generateFullPDF = async () => {
-    window.showToast("Preparazione PDF in corso...", "info");
+    const showChords = document.getElementById("pdfShowChords").checked;
     
-    // 1. Inizializzazione
+    // Mostra loading
+    if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display="flex";
+    
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ format: 'a5', unit: 'mm' });
-    const showChords = document.getElementById("pdfShowChords") ? document.getElementById("pdfShowChords").checked : true;
-    const twoCols = document.getElementById("pdfTwoColumns") ? document.getElementById("pdfTwoColumns").checked : true;
-    
-    // 2. Variabili Fondamentali (Risolve ReferenceError)
+    const isTwoColumns = document.getElementById("pdfTwoColumns").checked;
+
+    const doc = new jsPDF({ format: 'a4', orientation: 'portrait', unit: 'mm' });
+    const PAGE_WIDTH = 210;
+    const PAGE_HEIGHT = 297;
+    const MARGIN_TOP = 20;
+    const MARGIN_BOTTOM = 280;
+    const SIDE_MARGIN = 15;
+    const GUTTER = 10;
+
+    // DEFINIZIONE VARIABILI MANCANTI (FIX "tocData is not defined")
     let tocData = []; 
     let pageNum = 1;
-    let isFirstPage = true;
 
-    // 3. Gestione Copertina (se c'è)
-    const coverInput = document.getElementById("globalCoverInput");
-    if (coverInput && coverInput.files.length > 0) {
+    // CALCOLO DINAMICO LARGHEZZA
+    const COL_WIDTH = isTwoColumns ? (PAGE_WIDTH - (SIDE_MARGIN * 2) - GUTTER) / 2 : (PAGE_WIDTH - (SIDE_MARGIN * 2));
+    const COL_1_X = SIDE_MARGIN;
+    const COL_2_X = isTwoColumns ? (SIDE_MARGIN + COL_WIDTH + GUTTER) : SIDE_MARGIN;
+
+    let currentX = COL_1_X;
+    let currentY = MARGIN_TOP;
+    let currentCol = 1;
+
+    const checkLimit = (heightNeeded) => {
+        if (currentY + heightNeeded > MARGIN_BOTTOM) {
+            if (isTwoColumns && currentCol === 1) {
+                currentCol = 2;
+                currentX = COL_2_X;
+                currentY = MARGIN_TOP;
+            } else {
+                doc.addPage();
+                pageNum++;
+                currentCol = 1;
+                currentX = COL_1_X;
+                currentY = MARGIN_TOP;
+                doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(150);
+                doc.text(String(pageNum), PAGE_WIDTH/2, 290, {align:'center'});
+            }
+            return true;
+        }
+        return false;
+    };
+
+    // --- 1. COPERTINA ---
+    const coverInput = document.getElementById("globalCoverInput").files[0];
+    if (coverInput) {
         try {
-            const coverData = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onload = (e) => resolve(e.target.result);
-                reader.readAsDataURL(coverInput.files[0]);
-            });
-            doc.addImage(coverData, "JPEG", 0, 0, 148, 210);
-            doc.addPage();
-            isFirstPage = false;
-        } catch (e) { console.error("Errore copertina", e); }
+            const coverBase64 = await fileToBase64(coverInput);
+            doc.addImage(coverBase64, 'JPEG', 0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+            doc.addPage(); pageNum++;
+        } catch(e) { console.error("Errore copertina", e); }
+    } else {
+        doc.setFillColor(0, 51, 102); 
+        doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold"); doc.setFontSize(40);
+        doc.text("CANZONIERE", PAGE_WIDTH/2, 120, {align: 'center'});
+        doc.setFontSize(20);
+        doc.text("SCOUT", PAGE_WIDTH/2, 135, {align: 'center'});
+        doc.addPage(); pageNum++;
     }
 
-    // 4. Ordinamento Sezioni
-    const sortedSections = [...allSections].sort((a, b) => (a.order || 999) - (b.order || 999));
+    // --- 2. LOOP SEZIONI ---
+    // Assicuriamoci che sectionOrder sia popolato
+    if(!sectionOrder || sectionOrder.length === 0) sectionOrder = allSections.map(s => s.name);
 
-    // 5. Ciclo Generazione
-    for (const sec of sortedSections) {
-        // Filtra canzoni della sezione
-        const songs = allSongs.filter(s => s.category === sec.name).sort((a,b) => a.title.localeCompare(b.title));
+    for (const secName of sectionOrder) {
+        const songs = allSongs.filter(s => s.category === secName).sort((a,b)=>a.title.localeCompare(b.title));
         if (songs.length === 0) continue;
 
-        // Pagina Titolo Sezione
-        if (!isFirstPage) doc.addPage();
-        doc.setFillColor(30, 30, 30); // Grigio scuro
-        doc.rect(0, 0, 148, 210, "F");
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(22);
-        doc.setFont("helvetica", "bold");
-        doc.text(sec.name.toUpperCase(), 74, 105, { align: "center" });
-        isFirstPage = false;
+        doc.addPage(); pageNum++;
+        
+        // Aggiungi alla TOC (Indice)
+        tocData.push({ type: 'section', text: secName.toUpperCase(), page: pageNum });
+        
+        currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
+        
+        doc.setTextColor(0, 51, 102); doc.setFont("helvetica", "bold"); doc.setFontSize(30);
+        doc.text(secName.toUpperCase(), PAGE_WIDTH/2, 100, {align: 'center'});
+        
+        doc.addPage(); pageNum++;
+        currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
+        doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(150);
+        doc.text(String(pageNum), PAGE_WIDTH/2, 290, {align:'center'});
 
-        // Canzoni
+        // --- 3. LOOP CANZONI ---
         for (const s of songs) {
-            doc.addPage();
-            doc.setTextColor(0, 0, 0); // Torna al nero
+            tocData.push({ type: 'song', text: s.title, subtext: s.author, page: pageNum });
+
+            checkLimit(25);
+
+            // -- TITOLO --
+            doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(0, 51, 102);
+            const titleLines = doc.splitTextToSize(s.title.toUpperCase(), COL_WIDTH);
+            doc.text(titleLines, currentX, currentY);
+            currentY += (titleLines.length * 5);
+
+            // -- AUTORE --
+            if(s.author) {
+                doc.setFont("helvetica", "italic"); doc.setFontSize(9); doc.setTextColor(100);
+                const authTxt = s.year ? `${s.author} (${s.year})` : s.author;
+                doc.text(authTxt, currentX + COL_WIDTH, currentY - 5, {align: 'right'}); 
+            }
+
+            // -- NOTE (Descrizione) --
+            if (s.description) {
+                doc.setFont("helvetica", "italic"); 
+                doc.setFontSize(8); 
+                doc.setTextColor(50);
+                
+                const noteWidth = COL_WIDTH - 4; 
+                const splitNotes = doc.splitTextToSize(s.description, noteWidth);
+                const blockHeight = (splitNotes.length * 3.5) + 4; 
+                
+                checkLimit(blockHeight);
+
+                doc.setFillColor(240, 240, 240);
+                doc.rect(currentX, currentY, COL_WIDTH, blockHeight, 'F');
+                doc.text(splitNotes, currentX + 2, currentY + 3.5);
+                
+                currentY += blockHeight + 2; 
+            } else {
+                currentY += 2; 
+            }
+
+            doc.setDrawColor(200); doc.setLineWidth(0.2);
+            doc.line(currentX, currentY - 2, currentX + COL_WIDTH, currentY - 2);
             
-            // Aggiungi a Indice (tocData)
-            tocData.push({ title: s.title, section: sec.name, page: doc.internal.getNumberOfPages() });
-
-            // Titolo e Autore
-            doc.setFontSize(14);
-            doc.setFont("helvetica", "bold");
-            doc.text(s.title.toUpperCase(), 10, 12);
+            // -- TESTO E ACCORDI --
+            doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(0);
             
-            doc.setFontSize(10);
-            doc.setFont("helvetica", "italic");
-            doc.text(s.author || "", 10, 17);
-            doc.line(10, 19, 138, 19);
-
-            // Testo
-            doc.setFontSize(9);
-            doc.setFont("courier", "normal");
+            const lines = (s.lyrics || "").split("\n");
             
-            let y = 25;
-            let x = 10;
-            const lines = s.lyrics.split('\n');
-            const colLimit = twoCols ? 35 : 1000; // Limite righe per colonna
+            for (let l of lines) {
+                l = l.replace(/\*\*|__/g, ''); 
+                
+                const parts = l.split(/(\[.*?\])/);
+                const hasChords = parts.some(p => p.startsWith("["));
+                const heightNeeded = hasChords ? 10 : 5;
+                
+                checkLimit(heightNeeded);
 
-            lines.forEach((line, idx) => {
-                // Cambio Colonna/Pagina
-                if (twoCols && idx === colLimit) {
-                    y = 25; 
-                    x = 78; // Sposta a destra
-                    doc.line(74, 25, 74, 190); // Linea divisoria
-                } else if (!twoCols && y > 195) {
-                    doc.addPage();
-                    y = 20;
-                }
+                let lineX = currentX;
+                
+                if (hasChords && showChords) { 
+                    let lastChordEnd = 0; 
+                    parts.forEach(p => {
+                        if (p.startsWith("[")) {
+                            let c = p.replace(/[\[\]]/g,'');
+                            c = transposeChord(normalizeChord(c), 0); 
+                            
+                            doc.setFont(undefined, 'bold'); doc.setTextColor(220, 53, 69);
+                            doc.text(c, lineX, currentY);
+                            
+                            const chordWidth = doc.getTextWidth(c);
+                            lastChordEnd = lineX + chordWidth + 1; 
 
-                // Pulizia Testo o Accordi
-                let textToPrint = line;
-                if (!showChords) {
-                    textToPrint = line.replace(/\[.*?\]/g, "");
+                        } else {
+                            doc.setFont(undefined, 'normal'); doc.setTextColor(0);
+                            doc.text(p, lineX, currentY + 4);
+                            
+                            const textWidth = doc.getTextWidth(p);
+                            lineX += textWidth;
+
+                            if (lineX < lastChordEnd) {
+                                lineX = lastChordEnd;
+                            }
+                        }
+                    });
+                    currentY += 9; 
                 } else {
-                    // Sostituisci parentesi quadre per estetica
-                    textToPrint = line.replace(/\[/g, " ").replace(/\]/g, " "); 
+                    const cleanLine = l.replace(/\[.*?\]/g, ''); 
+                    doc.setFont(undefined, 'normal'); doc.setTextColor(0);
+                    const splitText = doc.splitTextToSize(cleanLine, COL_WIDTH);
+                    doc.text(splitText, lineX, currentY);
+                    currentY += (splitText.length * 5);
                 }
-                
-                // Grassetto/Corsivo base
-                textToPrint = textToPrint.replace(/\*\*/g, "").replace(/__/g, "");
-                
-                doc.text(textToPrint, x, y);
-                y += 4.5;
-            });
-            
-            // Footer (Numero Pagina)
-            doc.setFontSize(8);
-            doc.setFont("helvetica", "normal");
-            doc.text(String(doc.internal.getNumberOfPages()), 74, 205, { align: "center" });
+            }
+            currentY += 8; 
         }
     }
 
-    // 6. Generazione Indice Finale
+    // --- 4. INDICE FINALE (Ora funziona perché tocData esiste) ---
     if (tocData.length > 0) {
         doc.addPage();
-        doc.setFontSize(16);
-        doc.setFont("helvetica", "bold");
-        doc.text("INDICE", 74, 15, { align: "center" });
+        doc.setTextColor(0, 51, 102); doc.setFont("helvetica", "bold"); doc.setFontSize(22);
+        doc.text("INDICE", PAGE_WIDTH/2, 20, {align: 'center'});
         
-        let y = 25;
-        doc.setFontSize(9);
-        doc.setFont("helvetica", "normal");
-
+        let tocY = 40;
+        let tocCol = 1; 
+        const TOC_COL_WIDTH = 80;
+        const TOC_COL_1_X = 20;
+        const TOC_COL_2_X = 115;
+        
         tocData.forEach(item => {
-            if (y > 200) { doc.addPage(); y = 20; }
-            doc.text(item.title, 10, y);
-            doc.text(String(item.page), 130, y, { align: "right" });
-            doc.setDrawColor(200, 200, 200);
-            doc.line(10, y+1, 138, y+1); // Righetta leggera
-            y += 6;
+            if(tocY > 270) {
+                 if(tocCol === 1) { tocCol = 2; tocY = 40; }
+                 else { doc.addPage(); tocCol = 1; tocY = 40; }
+            }
+            
+            let tx = tocCol === 1 ? TOC_COL_1_X : TOC_COL_2_X;
+
+            if (item.type === 'section') {
+                tocY += 5;
+                doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(0);
+                doc.text(item.text, tx, tocY);
+                tocY += 5;
+            } else {
+                doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(50);
+                let title = item.text;
+                if (title.length > 35) title = title.substring(0, 32) + "...";
+                
+                doc.text(title, tx, tocY);
+                doc.text(String(item.page), tx + TOC_COL_WIDTH, tocY, {align:'right'});
+                tocY += 5;
+            }
         });
     }
 
     doc.save("Canzoniere_Completo.pdf");
+    if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display="none"; 
     window.showToast("PDF Scaricato!", "success");
+    // Chiudi modale se aperto
+    const exportModal = bootstrap.Modal.getInstance(document.getElementById('exportOptionsModal'));
+    if(exportModal) exportModal.hide();
 };
 
 window.generateFullLatex=()=>{if(!isAdmin)return;let l=`\\documentclass{article}\n\\usepackage[utf8]{inputenc}\n\\usepackage[a5paper]{geometry}\n\\usepackage{songs}\n\\begin{document}\n\\title{Canzoniere}\\maketitle\\tableofcontents\\newpage\n`;sectionOrder.forEach(secName=>{l+=`\\section{${secName}}\n`;allSongs.filter(s=>s.category===secName).sort((a,b)=>a.title.localeCompare(b.title)).forEach(s=>{l+=`\\beginsong{${s.title}}[by={${s.author||''}}]\n\\beginverse\n`;(s.lyrics||"").split("\n").forEach(line=>{l+=line.replace(/\[(.*?)\]/g,(m,p1)=>`\\[${normalizeChord(p1)}]`)+"\n";});l+=`\\endverse\n\\endsong\n`;});});l+=`\\end{document}`;const b=new Blob([l],{type:'text/plain'});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="Canzoniere.tex";a.click();};
@@ -1172,6 +1272,7 @@ window.createNewSection = async () => {
         if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display = "none";
     }
 };
+
 
 
 
