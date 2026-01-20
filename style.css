@@ -391,23 +391,6 @@ body.user-admin .cat-actions { display: block; }
     overflow: visible; 
 }
 
-/* 2. TASTO "AGGIUNGI CANZONE" (Trasparente ed Elegante) */
-#activeSetlistDetail .btn-outline-primary {
-    background-color: transparent !important; /* Trasparente */
-    color: #fff !important; /* Scritta Bianca */
-    border: 1px solid rgba(255, 255, 255, 0.5) !important;
-    backdrop-filter: blur(5px);
-    transition: all 0.3s ease;
-    box-shadow: 0 0 10px rgba(13, 110, 253, 0.2);
-}
-
-#activeSetlistDetail .btn-outline-primary:hover {
-    background-color: rgba(13, 110, 253, 0.3) !important; /* Leggero blu al passaggio */
-    border-color: #0d6efd !important;
-    box-shadow: 0 0 20px rgba(13, 110, 253, 0.6); /* Effetto luce */
-    transform: scale(1.02);
-}
-
 /* 3. TASTO LATEX (Bianco Solido per massima leggibilità) */
 .dropdown-menu a[onclick*="Latex"] {
     background-color: #ffffff !important; /* Sfondo BIANCO */
@@ -426,3 +409,50 @@ body.user-admin .cat-actions { display: block; }
     border: 1px solid #555;
 }
 #view-editor .bg-light button { color: white !important; }
+/* --- FIX FINALI COLORI E VISIBILITÀ --- */
+
+/* 1. STILE TASTO EXPORT LATEX (Canzone Singola) */
+/* Lo rendiamo uguale agli altri dropdown item: sfondo bianco, testo nero */
+.dropdown-menu a[onclick*="Latex"] {
+    background-color: #fff !important;
+    color: #212529 !important;
+    font-weight: normal !important; /* Toglie il grassetto eccessivo */
+    border: none !important;
+}
+.dropdown-menu a[onclick*="Latex"]:hover {
+    background-color: #e9ecef !important; /* Grigio chiaro al passaggio */
+}
+
+/* 2. TASTO "AGGIUNGI CANZONE" (Nelle Scalette) */
+/* Lo rendiamo BIANCO SOLIDO con testo NERO per massima leggibilità */
+#activeSetlistDetail .btn-outline-primary.w-100 {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border: 2px solid #0d6efd !important; /* Bordino blu per stile */
+    font-weight: bold !important;
+    opacity: 1 !important;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+#activeSetlistDetail .btn-outline-primary.w-100:hover {
+    background-color: #e2e6ea !important;
+    transform: translateY(-1px);
+}
+
+/* 3. BOTTONI TRASPOSIZIONE (+ e -) SOLO NELLE ANTEPRIME */
+/* Il contenitore dell'anteprima è bianco, quindi i bottoni devono essere SCURI */
+#setlistSongsContainer .btn-outline-primary {
+    background-color: #333 !important; /* Sfondo Grigio Scuro */
+    color: #fff !important;            /* Testo Bianco */
+    border: 1px solid #000 !important;
+    font-weight: bold;
+}
+
+#setlistSongsContainer .btn-outline-primary:hover {
+    background-color: #000 !important; /* Nero assoluto al passaggio */
+}
+
+/* Assicura che la scritta "Cambia:" e i testi nell'anteprima siano leggibili (neri su sfondo bianco) */
+#setlistSongsContainer .bg-light, 
+#setlistSongsContainer .bg-light * {
+    color: #000 !important;
+}
