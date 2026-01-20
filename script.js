@@ -134,7 +134,7 @@ enableIndexedDbPersistence(db)
           loadData();
       });
   });
-
+window.loadData = loadData;
 async function loadData() {
     try {
         const secSnap = await getDocs(collection(db, "sections"));
@@ -756,4 +756,5 @@ window.createNewSection = async () => {
         if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display = "none";
     }
 };
+
 
