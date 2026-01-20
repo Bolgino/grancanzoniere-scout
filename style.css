@@ -309,64 +309,58 @@ body.user-admin .cat-actions { display: block; }
 .status-red { background-color: #dc3545; color: #dc3545; }     /* Rosso */
 
 
-/* --- FIX BARRA LATERALE (OFFCANVAS) --- */
-/* 1. Stile del contenitore principale */
+/* --- FIX BARRA LATERALE (Versione Definitiva) --- */
+
+/* 1. Il contenitore principale che esce da destra */
 .offcanvas {
-    z-index: 1055 !important; /* Sopra a tutto */
-    background-color: #1a1a1a !important; /* Sfondo scuro elegante */
-    color: white !important;
-    visibility: visible;
-    
-    /* FIX "SCHIACCIATA": Diamo una larghezza comoda */
-    width: 320px !important; 
+    z-index: 1060 !important;
+    background-color: #1a1a1a !important;
+    width: 300px !important; /* Larghezza fissa per non schiacciarsi */
     border-left: 1px solid #333;
 }
 
-/* 2. Fix per il contenuto interno */
+/* 2. Il corpo del menu */
 .offcanvas-body {
-    padding: 20px !important; /* Spazio dai bordi */
+    padding: 25px 20px !important; /* Spazio interno arioso */
+    overflow-y: auto; /* Permette di scorrere se lo schermo è basso */
 }
 
-.offcanvas-body .navbar-nav {
-    display: flex !important;
-    flex-direction: column !important; /* OBBLIGATORIO: Mette gli elementi in colonna */
-    width: 100% !important;
-    gap: 10px; /* Spazio tra un bottone e l'altro */
-}
-
-/* 3. Stile dei Link */
-.offcanvas-body .nav-item {
-    width: 100%; /* Occupa tutta la larghezza */
-}
-
-.offcanvas-body .nav-link {
-    display: block !important; /* Assicura che il link sia un blocco unico */
+/* 3. La nostra lista personalizzata */
+.custom-menu-list {
+    display: flex;
+    flex-direction: column; /* FORZA la colonna */
+    gap: 15px; /* Spazio tra ogni elemento della lista */
+    margin: 0;
+    padding: 0;
     width: 100%;
-    padding: 12px 15px !important; /* Pulsanti più grandi e cliccabili */
-    font-size: 1.1rem; /* Testo leggibile */
-    border-radius: 8px; /* Angoli arrotondati */
-    transition: all 0.2s ease-in-out;
 }
 
-/* Effetto al passaggio del mouse */
-.offcanvas-body .nav-link:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    transform: translateX(5px); /* Si sposta leggermente a destra */
-    color: #6ea8fe !important; /* Diventa azzurro */
+/* 4. I bottoni dentro la lista */
+.custom-menu-list button {
+    font-size: 1.1rem; /* Testo più grande */
+    display: flex;
+    align-items: center;
+    transition: transform 0.2s ease;
 }
 
-/* 4. Sfondo scuro dietro al menu */
+/* Effetto hover (passaggio mouse) */
+.custom-menu-list button:hover {
+    transform: translateX(8px); /* Scivola a destra */
+    background-color: rgba(255,255,255,0.05); /* Leggero sfondo */
+    border-radius: 8px;
+}
+
+/* Sfondo scuro dietro */
 .offcanvas-backdrop {
     z-index: 1050 !important;
-    background-color: rgba(0, 0, 0, 0.8) !important;
-    backdrop-filter: blur(3px); /* Effetto sfocato dietro */
+    background-color: rgba(0, 0, 0, 0.85) !important;
+    backdrop-filter: blur(4px);
 }
 
-/* Pulsante X per chiudere */
-.offcanvas-header .btn-close {
+/* X di chiusura */
+.btn-close-white {
     filter: invert(1) grayscale(100%) brightness(200%);
 }
-
 /* --- TITOLO STELLARE --- */
 @keyframes star-glow {
     0%, 100% { text-shadow: 0 0 5px rgba(255, 255, 255, 0.5); color: #fff; }
@@ -388,4 +382,5 @@ body.user-admin .cat-actions { display: block; }
 .status-green { background-color: #2ecc71; box-shadow: 0 0 5px #2ecc71; }
 .status-orange { background-color: #f39c12; box-shadow: 0 0 5px #f39c12; }
 .status-red { background-color: #e74c3c; box-shadow: 0 0 5px #e74c3c; }
+
 
