@@ -308,3 +308,48 @@ body.user-admin .cat-actions { display: block; }
 .status-orange { background-color: #fd7e14; color: #fd7e14; }  /* Arancio */
 .status-red { background-color: #dc3545; color: #dc3545; }     /* Rosso */
 
+
+/* --- FIX BARRA LATERALE (OFFCANVAS) --- */
+.offcanvas {
+    z-index: 1050 !important; /* Forza la barra SOPRA la navbar e lo sfondo */
+    background-color: #1a1a1a !important; /* Colore di sfondo scuro solido */
+    box-shadow: -5px 0 15px rgba(0,0,0,0.7); /* Ombra per staccarlo dallo sfondo */
+    visibility: visible;
+}
+
+.offcanvas-backdrop {
+    z-index: 1045 !important; /* L'ombra scura dietro al menu */
+    background-color: rgba(0, 0, 0, 0.7);
+}
+
+/* Stile per i link dentro il menu */
+.offcanvas-body .nav-link {
+    font-size: 1.1rem;
+    transition: transform 0.2s, color 0.2s;
+}
+.offcanvas-body .nav-link:hover {
+    transform: translateX(5px); /* Effetto scivolamento a destra */
+    color: var(--bs-primary) !important;
+}
+
+/* --- TITOLO STELLARE --- */
+@keyframes star-glow {
+    0%, 100% { text-shadow: 0 0 5px rgba(255, 255, 255, 0.5); color: #fff; }
+    50% { text-shadow: 0 0 20px rgba(255, 255, 255, 1), 0 0 10px #ffc107; color: #fffbe6; }
+}
+.star-title {
+    animation: star-glow 3s infinite ease-in-out;
+    font-weight: 800;
+}
+
+/* --- BOLLINI ADMIN --- */
+.status-dot {
+    height: 10px; width: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+.status-green { background-color: #2ecc71; box-shadow: 0 0 5px #2ecc71; }
+.status-orange { background-color: #f39c12; box-shadow: 0 0 5px #f39c12; }
+.status-red { background-color: #e74c3c; box-shadow: 0 0 5px #e74c3c; }
