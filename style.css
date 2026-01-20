@@ -222,3 +222,33 @@ body.user-admin .cat-actions { display: block; }
 .btn-close {
     filter: invert(1) grayscale(100%) brightness(200%);
 }
+/* --- STILE MENU MOBILE APP --- */
+
+/* Quando il menu si apre su mobile, dagli uno sfondo solido scuro */
+.navbar-collapse.show {
+    background-color: rgba(20, 20, 25, 0.95);
+    padding: 15px;
+    border-radius: 15px;
+    margin-top: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Stile hamburger icon (le tre linee) */
+.navbar-toggler {
+    border: none;
+    padding: 0;
+}
+.navbar-toggler:focus {
+    box-shadow: none; /* Rimuove quel bordo blu brutto al click */
+}
+
+/* Migliora l'aspetto dei link nel menu */
+.nav-link {
+    font-size: 1.1rem;
+    transition: color 0.2s;
+}
+.nav-link:active {
+    color: var(--bs-primary) !important;
+}
+
