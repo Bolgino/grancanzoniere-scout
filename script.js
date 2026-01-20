@@ -564,8 +564,130 @@ window.openSearchForSetlistModal = () => { document.getElementById("searchSetlis
 window.performSetlistSearch = () => { const q = document.getElementById("searchSetlistInput").value.toLowerCase(); const c = document.getElementById("searchSetlistResults"); c.innerHTML = ""; let res; if (q.trim() === "") res = allSongs.sort((a,b) => a.title.localeCompare(b.title)); else res = allSongs.filter(s => s.title.toLowerCase().includes(q) || (s.author && s.author.toLowerCase().includes(q))); if(res.length === 0) { c.innerHTML = "<div class='text-center text-muted p-2'>Nessun risultato</div>"; return; } const sl = allSetlists.find(x => x.id === currentSetlistId); res.forEach(s => { const isPresent = sl && sl.songs.some(item => (typeof item === 'string' ? item : item.id) === s.id); const btnClass = isPresent ? "btn-secondary disabled" : "btn-outline-primary"; const icon = isPresent ? '<i class="bi bi-check2"></i>' : '<i class="bi bi-plus-lg"></i>'; const action = isPresent ? "" : `onclick="window.addSongFromSearch('${s.id}')"`; c.innerHTML += `<div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"><div class="text-truncate" style="max-width: 80%;"><div class="fw-bold text-truncate">${s.title}</div><small class="text-muted text-truncate">${s.author || ''}</small></div><button class="btn btn-sm ${btnClass} rounded-circle" ${action} style="width: 32px; height: 32px; padding: 0;">${icon}</button></div>`; }); };
 window.addSongFromSearch = (songId) => { const sl = allSetlists.find(s => s.id === currentSetlistId); if(sl) { const isPresent = sl.songs.some(item => (typeof item === 'string' ? item : item.id) === songId); if(isPresent) return showToast("Già in scaletta", "info"); const newSongs = [...sl.songs, { id: songId, trans: 0 }]; updateSetlistSongs(currentSetlistId, newSongs); showToast("Aggiunta!", "success"); window.performSetlistSearch(); } };
 window.insertFormatting = (tag) => { const textarea = document.getElementById("lyricsEditor"); const start = textarea.selectionStart; const end = textarea.selectionEnd; textarea.value = textarea.value.substring(0, start) + tag + textarea.value.substring(start, end) + tag + textarea.value.substring(end); textarea.selectionStart = start + tag.length; textarea.selectionEnd = end + tag.length; textarea.focus(); window.renderPreview(); };
-window.toggleAutoScroll = () => { /* Logica AutoScroll (omessa, usare vecchia) */ };
+window.toggleAutoScroll = () => {
+    const btn = document.getElementById('btnAutoScroll');
+    if (window.autoScrollInterval) {
+        clearInterval(window.autoScrollInterval);
+        window.autoScrollInterval = null;
+        btn.classList.remove('btn-success');
+        btn.classList.add('btn-outline-success');
+        showToast("Autoscroll Pausa");
+    } else {
+        window.autoScrollInterval = setInterval(() => {
+            window.scrollBy(0, 1);
+            if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight) {
+                window.toggleAutoScroll();
+            }
+        }, 40);
+        btn.classList.remove('btn-outline-success');
+        btn.classList.add('btn-success');
+        showToast("Autoscroll Attivo");
+    }
+};
 window.handleSetlistBack = () => { const detail = document.getElementById('activeSetlistDetail'); if (detail.style.display === 'block') { detail.style.display = 'none'; currentSetlistId = null; window.renderSetlistsList(); } else { window.goHome(); } };
+// --- FIX EXPORT MANCANTI ---
+window.generateFullTxtList = () => {
+    let text = "LISTA CANZONI - GRAN CANZONIERE\n\n";
+    const sorted = [...allSongs].sort((a,b) => a.title.localeCompare(b.title));
+    sorted.forEach(s => {
+        text += `${s.title} (${s.author || 'Sconosciuto'}) - Cat: ${s.category}\n`;
+    });
+    const blob = new Blob([text], { type: "text/plain" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "Lista_Canzoni.txt";
+    a.click();
+};
+
+window.generateFullPDF = () => { showToast("Funzione PDF completo in arrivo...", "warning"); };
+window.generateFullLatex = () => { showToast("Export LaTeX completo in arrivo...", "warning"); };
+window.exportSinglePDF = () => { showToast("PDF Canzone in arrivo...", "warning"); };
+window.exportSingleLatex = () => { showToast("LaTeX Canzone in arrivo...", "warning"); };
+
+// --- NUOVA GESTIONE SEZIONI ---
+window.openManageSectionsView = () => {
+    switchView('view-manage-sections');
+    window.renderManageSections();
+};
+
+window.renderManageSections = () => {
+    const c = document.getElementById("manageSectionsContainer");
+    c.innerHTML = "";
+    
+    if (allSections.length === 0) {
+        c.innerHTML = `<div class="text-center text-muted">Nessuna sezione presente.</div>`;
+        return;
+    }
+
+    allSections.forEach(sec => {
+        const bg = sec.coverUrl ? `background-image:url('${sec.coverUrl}')` : "";
+        const count = allSongs.filter(s => s.category === sec.name).length;
+        
+        c.innerHTML += `
+        <div class="col-md-6 col-lg-4">
+            <div class="card bg-dark text-white border-secondary shadow-sm">
+                <div class="d-flex">
+                    <div style="width: 100px; height: 100px; background-color: #333; background-size: cover; background-position: center; ${bg}" class="rounded-start d-flex align-items-center justify-content-center">
+                        ${sec.coverUrl ? '' : '<i class="bi bi-image text-muted fs-4"></i>'}
+                    </div>
+                    <div class="card-body py-2 d-flex flex-column justify-content-center">
+                        <h5 class="card-title fw-bold mb-1 text-truncate">${sec.name}</h5>
+                        <small class="text-muted mb-2">${count} canzoni</small>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-light" onclick="window.openSectionSettings('${sec.id}','${sec.name}','${sec.coverUrl||''}', event)">
+                                <i class="bi bi-pencil"></i> Modifica
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="editingSectionId='${sec.id}'; currentCategory='${sec.name}'; window.triggerDeleteSection()">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    });
+};
+
+window.openAddSectionModal = () => {
+    document.getElementById("newSectionName").value = "";
+    document.getElementById("newSectionCoverInput").value = "";
+    const m = new bootstrap.Modal(document.getElementById('addSectionModal'));
+    m.show();
+};
+
+window.createNewSection = async () => {
+    const n = document.getElementById("newSectionName").value.trim();
+    const fileInput = document.getElementById("newSectionCoverInput");
+    
+    if (!n) return showToast("Inserisci un nome per la sezione", "warning");
+    if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display = "flex";
+    
+    try {
+        let coverUrl = "";
+        if (fileInput.files.length > 0) {
+            coverUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(fileInput.files[0]);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+        }
+        await addDoc(collection(db, "sections"), { name: n, coverUrl: coverUrl });
+        
+        const modalEl = document.getElementById('addSectionModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if(modal) modal.hide();
+
+        showToast("Sezione creata!", "success");
+        await loadData();
+        window.renderManageSections();
+    } catch (e) {
+        console.error(e);
+        showToast("Errore: " + e.message, "danger");
+    } finally {
+        if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display = "none";
+    }
+};
 
 
 
