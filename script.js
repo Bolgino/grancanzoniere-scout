@@ -58,7 +58,7 @@ const loaderPhrases = [
 let loaderInterval;
 
 // Modals
-let mLogin, mAddSong, mAddSection, mEditSection, mEditSongMeta, mConfirm, mExport, mSearchSetlist, mExportSetlist, mAddToSetlist;
+let mLogin, mAddSong, mAddSection, mEditSection, mEditSongMeta, mConfirm, mExport, mSearchSetlist, mExportSetlist, mAddToSetlist, mCreateSetlist;
 
 window.addEventListener('load', () => {
     startLoaderAnimation();
@@ -74,6 +74,7 @@ window.addEventListener('load', () => {
     mSearchSetlist = new bootstrap.Modal(document.getElementById('searchForSetlistModal'));
     mExportSetlist = new bootstrap.Modal(document.getElementById('exportSetlistModal'));
     mAddToSetlist = new bootstrap.Modal(document.getElementById('addToSetlistModal'));
+    mCreateSetlist = new bootstrap.Modal(document.getElementById('createSetlistModal'));
 });
 
 function startLoaderAnimation() {
@@ -1054,23 +1055,33 @@ window.renderSetlistsList = () => {
             </button>`;
     });
 };
-window.createNewSetlistPrompt = async () => {
-    const name = prompt("Nome della nuova scaletta pubblica (es. 'Fuoco 2025'):");
-    if (name) {
-        try {
-            document.getElementById("loadingOverlay").style.display = "flex";
-            await addDoc(collection(db, "setlists"), {
-                name: name,
-                songs: [], 
-                createdAt: Date.now()
-            });
-            await loadData(); 
-            showToast("Scaletta creata e condivisa!");
-        } catch(e) {
-            showToast("Errore creazione: " + e.message, 'danger');
-        } finally {
-            document.getElementById("loadingOverlay").style.display = "none";
-        }
+// 1. Apre il Modal invece del Prompt
+window.createNewSetlistPrompt = () => {
+    document.getElementById("newSetlistNameInput").value = ""; // Pulisce input
+    mCreateSetlist.show(); // Mostra il modal bello
+    setTimeout(() => document.getElementById("newSetlistNameInput").focus(), 500); // Focus automatico
+};
+
+// 2. Esegue la creazione vera e propria (chiamata dal tasto "Crea" del modal)
+window.confirmCreateSetlist = async () => {
+    const name = document.getElementById("newSetlistNameInput").value.trim();
+    if (!name) return showToast("Inserisci un nome valido", "warning");
+
+    mCreateSetlist.hide(); // Chiude il modal
+
+    try {
+        document.getElementById("loadingOverlay").style.display = "flex";
+        await addDoc(collection(db, "setlists"), {
+            name: name,
+            songs: [], 
+            createdAt: Date.now()
+        });
+        await loadData(); 
+        showToast("Scaletta creata!", "success");
+    } catch(e) {
+        showToast("Errore creazione: " + e.message, 'danger');
+    } finally {
+        document.getElementById("loadingOverlay").style.display = "none";
     }
 };
 window.openSetlistDetail = (id) => {
@@ -1662,3 +1673,4 @@ window.toggleAutoScroll = () => {
 function updateThemeIcon() {
     return;
 }
+
