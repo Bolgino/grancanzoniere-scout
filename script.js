@@ -265,17 +265,27 @@ window.renderList = (songs) => {
     songs.sort((a, b) => a.title.localeCompare(b.title));
     
     songs.forEach(s => {
-        let badgesHtml = "";
+        let badgeHtml = "";
         if (isAdmin) {
-            const hasLyrics = s.lyrics && s.lyrics.trim().length > 10;
+            // LOGICA BOLLINI:
+            const hasLyrics = s.lyrics && s.lyrics.trim().length > 5;
             const hasChords = s.lyrics && s.lyrics.includes("[");
-            if (hasChords) badgesHtml = `<span class="admin-badge badge-accordi" title="Testo e Accordi">A</span>`;
-            else if (hasLyrics) badgesHtml = `<span class="admin-badge badge-testo" title="Solo Testo">T</span>`;
+            
+            if (hasLyrics && hasChords) {
+                // VERDE
+                badgeHtml = `<span class="status-dot status-green" title="Completo"></span>`;
+            } else if (hasLyrics) {
+                // ARANCIO
+                badgeHtml = `<span class="status-dot status-orange" title="Solo Testo"></span>`;
+            } else {
+                // ROSSO
+                badgeHtml = `<span class="status-dot status-red" title="Vuoto"></span>`;
+            }
         }
         c.innerHTML += `
             <button class="list-group-item list-group-item-action p-3 border-0 mb-1 rounded shadow-sm" onclick="window.openEditor('${s.id}')">
                 <div class="d-flex w-100 justify-content-between align-items-center">
-                    <div><h6 class="mb-1 fw-bold">${s.title} ${badgesHtml}</h6></div>
+                    <div><h6 class="mb-1 fw-bold">${s.title} ${badgeHtml}</h6></div>
                     <small class="text-muted">${s.author || ''}</small>
                 </div>
             </button>`;
@@ -537,4 +547,5 @@ window.addSongFromSearch = (songId) => { const sl = allSetlists.find(s => s.id =
 window.insertFormatting = (tag) => { const textarea = document.getElementById("lyricsEditor"); const start = textarea.selectionStart; const end = textarea.selectionEnd; textarea.value = textarea.value.substring(0, start) + tag + textarea.value.substring(start, end) + tag + textarea.value.substring(end); textarea.selectionStart = start + tag.length; textarea.selectionEnd = end + tag.length; textarea.focus(); window.renderPreview(); };
 window.toggleAutoScroll = () => { /* Logica AutoScroll (omessa, usare vecchia) */ };
 window.handleSetlistBack = () => { const detail = document.getElementById('activeSetlistDetail'); if (detail.style.display === 'block') { detail.style.display = 'none'; currentSetlistId = null; window.renderSetlistsList(); } else { window.goHome(); } };
+
 
