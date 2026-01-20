@@ -185,8 +185,8 @@
                             <span class="badge rounded-pill bg-danger ms-auto" id="proposalsBadge" style="display:none">0</span>
                         </button>
 
-                        <button class="btn btn-link text-white text-decoration-none text-start p-2 d-flex align-items-center" onclick="window.showAddSectionModal(); document.querySelector('.btn-close').click()">
-                            <i class="bi bi-folder-plus me-3 fs-5"></i> Nuova Sezione
+                        <button class="btn btn-link text-white text-decoration-none text-start p-2 d-flex align-items-center" onclick="window.openManageSectionsView(); document.querySelector('.btn-close').click()">
+                            <i class="bi bi-gear-wide-connected me-3"></i> Gestione Sezioni
                         </button>
 
                         <button class="btn btn-link text-white text-decoration-none text-start p-2 d-flex align-items-center" onclick="window.openExportModal(); document.querySelector('.btn-close').click()">
@@ -355,6 +355,24 @@
             </div>
             <div id="proposalsContainer" class="list-group shadow-sm"></div>
         </div>
+        <div id="view-manage-sections" class="view-screen">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <button class="btn btn-outline-secondary btn-sm" onclick="window.goHome()">
+                    <i class="bi bi-arrow-left"></i> Home
+                </button>
+                <h3 class="fw-bold m-0 text-white">Gestione Sezioni</h3>
+                <button class="btn btn-primary shadow" onclick="window.openAddSectionModal()">
+                    <i class="bi bi-plus-lg"></i> Aggiungi Sezione
+                </button>
+            </div>
+
+            <div class="alert alert-dark border-secondary text-muted small">
+                <i class="bi bi-info-circle"></i> Qui puoi rinominare, cambiare copertina o eliminare le sezioni.
+            </div>
+
+            <div id="manageSectionsContainer" class="row g-3">
+                </div>
+        </div>
 
     </div>
 
@@ -470,7 +488,30 @@
             </div>
         </div>
     </div>
-    <div class="modal fade" id="addSectionModal"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Nuova Sezione</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="text" id="newSectionName" class="form-control" placeholder="Nome"></div><div class="modal-footer"><button type="button" class="btn btn-primary" onclick="window.createNewSection()">Crea</button></div></div></div></div>
+    <div class="modal fade" id="addSectionModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Nuova Sezione</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nome Sezione *</label>
+                        <input type="text" id="newSectionName" class="form-control" placeholder="Es. Fuoco di Bivacco">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Copertina (Opzionale)</label>
+                        <input class="form-control" type="file" id="newSectionCoverInput" accept="image/*">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                    <button type="button" class="btn btn-primary" onclick="window.createNewSection()">Crea Sezione</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="modal fade" id="editSectionModal"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Impostazioni Sezione</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="text" id="editSectionNameInput" class="form-control mb-3" placeholder="Nome"><label class="form-label">Copertina (File)</label><input class="form-control" type="file" id="coverFileInput" accept="image/*" onchange="window.previewCoverFile()"><div class="mt-2 text-center"><img id="coverPreviewImg" src="" style="max-height:100px;display:none;border-radius:8px"></div></div><div class="modal-footer justify-content-between"><button class="btn btn-danger" onclick="window.triggerDeleteSection()">Elimina</button><button class="btn btn-primary" onclick="window.saveSectionSettings()">Salva</button></div></div></div></div>
     <div class="modal fade" id="addToSetlistModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered modal-sm">
@@ -556,6 +597,7 @@
     </script>
 </body>
 </html>
+
 
 
 
