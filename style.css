@@ -11,7 +11,10 @@ body {
     background-color: var(--bg-color) !important;
     color: var(--text-color) !important;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    
+    /* MODIFICA QUESTA PARTE */
     padding-bottom: 80px;
+    padding-top: 90px; /* Spazio per evitare che la barra copra il testo */
     overflow-x: hidden;
 }
 
@@ -251,4 +254,5 @@ body.user-admin .cat-actions { display: block; }
 .nav-link:active {
     color: var(--bs-primary) !important;
 }
+
 
