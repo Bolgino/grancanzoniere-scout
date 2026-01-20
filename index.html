@@ -123,7 +123,7 @@
                             <i class="bi bi-search text-white"></i>
                         </span>
                         <input type="text" id="globalSearch" name="search_safe_scout" autocomplete="off" class="form-control border-0" placeholder="Cerca tra tutte le canzoni..." onkeyup="debouncedGlobalSearch()">
-                        <button class="btn btn-white border-0" onclick="window.renderDashboard()"><i class="bi bi-x-lg"></i></button>
+                        <button class="btn border-0" style="background-color: #2b2b2b; color: #888;" onclick="window.renderDashboard()"><i class="bi bi-x-lg"></i></button>
                     </div>
                 </div>
             </div>
@@ -203,10 +203,10 @@
                     
                     <div class="d-flex align-items-center gap-2" style="flex: 1; min-width: 200px;">
                         <button class="btn btn-outline-secondary btn-sm" onclick="window.goBackToList()"><i class="bi bi-arrow-left"></i></button>
-                        <div class="text-truncate">
-                            <h5 id="editorTitle" class="m-0 fw-bold">Titolo</h5>
-                            <small id="editorAuthor" class="text-muted">Autore</small>
-                            <div id="editorMeta" class="small text-secondary fst-italic"></div>
+                        <div> 
+                            <h5 id="editorTitle" class="m-0 fw-bold text-wrap">Titolo</h5>
+                            <small id="editorAuthor" class="text-muted text-wrap">Autore</small>
+                            <div id="editorMeta" class="small text-secondary fst-italic text-wrap"></div>
                         </div>
                         <button class="btn btn-link text-warning p-0 ms-2" onclick="window.toggleFavorite()" title="Aggiungi ai preferiti">
                             <i class="bi bi-star" id="favIcon"></i>
