@@ -114,46 +114,45 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
                 </div>
 
-                <div class="offcanvas-body">
-                    <ul class="navbar-nav justify-content-end flex-grow-1 pe-3">
+               <div class="offcanvas-body">
+                    <ul class="list-unstyled custom-menu-list">
                         
-                        <li class="nav-item mb-2">
-                            <button class="btn btn-link nav-link text-white text-decoration-none w-100 text-start fs-5" onclick="window.openSetlistsView(); document.querySelector('.btn-close').click()">
-                                <i class="bi bi-list-check text-info me-2"></i> Le mie Scalette
+                        <li>
+                            <button class="btn btn-link text-white text-decoration-none w-100 text-start fs-5 py-2" onclick="window.openSetlistsView(); document.querySelector('.btn-close').click()">
+                                <i class="bi bi-list-check text-info me-3"></i> Le mie Scalette
                             </button>
                         </li>
-
-                        <li class="nav-item mb-4">
-                            <button class="btn btn-primary btn-sm rounded-pill px-4 fw-bold w-100 py-2" onclick="window.showAddModal(); document.querySelector('.btn-close').click()">
-                                <i class="bi bi-plus-lg"></i> <span id="btnAddText">Proponi Canzone</span>
+    
+                        <li>
+                            <button class="btn btn-primary btn-lg rounded-pill w-100 fw-bold mt-2 mb-4" onclick="window.showAddModal(); document.querySelector('.btn-close').click()">
+                                <i class="bi bi-plus-lg me-2"></i> Proponi Canzone
                             </button>
                         </li>
-
-                        <li class="nav-item admin-only mt-2 pt-2 border-top border-secondary">
+    
+                        <li class="admin-only border-top border-secondary pt-3 mt-2">
                             <small class="text-muted text-uppercase fw-bold mb-3 d-block ps-2">Strumenti Capo</small>
                             
-                            <button class="btn btn-link nav-link text-warning text-decoration-none w-100 text-start py-2" onclick="window.openProposalsView(); document.querySelector('.btn-close').click()">
-                                <i class="bi bi-inbox-fill me-2"></i> Revisiona Proposte
+                            <button class="btn btn-link text-warning text-decoration-none w-100 text-start py-2" onclick="window.openProposalsView(); document.querySelector('.btn-close').click()">
+                                <i class="bi bi-inbox-fill me-3"></i> Revisiona Proposte
                                 <span class="badge rounded-pill bg-danger ms-2" id="proposalsBadge" style="display:none">0</span>
                             </button>
-
-                            <button class="btn btn-link nav-link text-white text-decoration-none w-100 text-start py-2" onclick="window.showAddSectionModal(); document.querySelector('.btn-close').click()">
-                                <i class="bi bi-folder-plus me-2"></i> Nuova Sezione
+    
+                            <button class="btn btn-link text-white text-decoration-none w-100 text-start py-2" onclick="window.showAddSectionModal(); document.querySelector('.btn-close').click()">
+                                <i class="bi bi-folder-plus me-3"></i> Nuova Sezione
                             </button>
-
-                            <button class="btn btn-link nav-link text-white text-decoration-none w-100 text-start py-2" onclick="window.openExportModal(); document.querySelector('.btn-close').click()">
-                                <i class="bi bi-file-earmark-arrow-down me-2"></i> Export / Stampa
+    
+                            <button class="btn btn-link text-white text-decoration-none w-100 text-start py-2" onclick="window.openExportModal(); document.querySelector('.btn-close').click()">
+                                <i class="bi bi-file-earmark-arrow-down me-3"></i> Export / Stampa
                             </button>
-
-                            <input type="file" id="txtImporter" style="display:none" accept=".txt" onchange="window.processTxtImport()">
-                            <button class="btn btn-link nav-link text-white text-decoration-none w-100 text-start py-2" onclick="document.getElementById('txtImporter').click(); document.querySelector('.btn-close').click()">
-                                <i class="bi bi-upload me-2"></i> Importa da TXT
+    
+                            <button class="btn btn-link text-white text-decoration-none w-100 text-start py-2" onclick="document.getElementById('txtImporter').click(); document.querySelector('.btn-close').click()">
+                                <i class="bi bi-upload me-3"></i> Importa da TXT
                             </button>
                         </li>
-
-                        <li class="nav-item mt-5 pt-3 border-top border-secondary">
-                            <button class="btn btn-outline-light btn-sm w-100 mb-3" id="btnLoginBtn" onclick="window.openLoginModal(); document.querySelector('.btn-close').click()">Accesso Capi</button>
-                            <button class="btn btn-outline-danger btn-sm w-100 admin-only" onclick="window.logout()">Esci</button>
+    
+                        <li class="mt-auto pt-4 border-top border-secondary">
+                            <button class="btn btn-outline-light w-100 mb-3" id="btnLoginBtn" onclick="window.openLoginModal(); document.querySelector('.btn-close').click()">Accesso Capi</button>
+                            <button class="btn btn-outline-danger w-100 admin-only" onclick="window.logout()">Esci</button>
                         </li>
                     </ul>
                 </div>
@@ -511,6 +510,7 @@
     </script>
 </body>
 </html>
+
 
 
 
