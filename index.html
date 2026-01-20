@@ -85,30 +85,50 @@
 
     <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer" style="z-index: 1100"></div>
 
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top shadow-sm">
+    <nav class="navbar navbar-expand-lg navbar-dark fixed-top shadow-sm" style="background: rgba(13, 110, 253, 0.15); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255,255,255,0.1);">
         <div class="container-fluid">
-            <span class="navbar-brand fw-bold" role="button" onclick="window.goHome()">
-                <i class="bi bi-fire"></i> GranCanzoniere
+            <span class="navbar-brand fw-bold d-flex align-items-center gap-2" role="button" onclick="window.goHome()">
+                <i class="bi bi-fire text-warning"></i> 
+                <span>GranCanzoniere</span>
             </span>
-            
-            <div class="d-flex gap-2 align-items-center">
-                <span class="text-white small me-2 d-none d-sm-inline-block opacity-75">
-                    <i class="bi bi-music-note-list"></i> 
-                    <span id="totalSongsCount" class="fw-bold">...</span>
-                </span>
-                <button class="btn btn-warning btn-sm fw-bold position-relative admin-only" onclick="window.openProposalsView()">
-                    <i class="bi bi-inbox-fill"></i> <span class="d-none d-md-inline">Proposte</span>
-                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="proposalsBadge" style="display:none">0</span>
-                </button>
-                <button class="btn btn-outline-light btn-sm ms-1" onclick="window.openSetlistsView()" title="Le mie Scalette">
-                    <i class="bi bi-list-check"></i> <span class="d-none d-md-inline">Scalette</span>
-                </button>
-                <button class="btn btn-light btn-sm fw-bold" onclick="window.showAddModal()">
-                    <i class="bi bi-plus-circle-fill text-primary"></i> <span id="btnAddText">Proponi</span>
-                </button>
 
-                <button class="btn btn-outline-light btn-sm" id="btnLoginBtn" onclick="window.openLoginModal()">Login</button>
-                <button class="btn btn-outline-light btn-sm admin-only" onclick="window.logout()">Esci</button>
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse justify-content-end mt-2 mt-lg-0" id="navbarNav">
+                <ul class="navbar-nav align-items-lg-center gap-2">
+                    
+                    <li class="nav-item">
+                        <span class="nav-link disabled text-white-50 small">
+                            <i class="bi bi-music-note-list"></i> <span id="totalSongsCount">...</span> canzoni
+                        </span>
+                    </li>
+
+                    <li class="nav-item">
+                        <button class="btn btn-link nav-link text-white text-decoration-none px-3" onclick="window.openSetlistsView(); document.querySelector('.navbar-toggler').click()">
+                            <i class="bi bi-list-check"></i> Le mie Scalette
+                        </button>
+                    </li>
+
+                    <li class="nav-item">
+                        <button class="btn btn-primary btn-sm rounded-pill px-4 fw-bold shadow-sm" onclick="window.showAddModal(); document.querySelector('.navbar-toggler').click()">
+                            <i class="bi bi-plus-lg"></i> <span id="btnAddText">Proponi</span>
+                        </button>
+                    </li>
+
+                    <li class="nav-item admin-only">
+                        <button class="btn btn-warning btn-sm rounded-pill px-3 fw-bold position-relative" onclick="window.openProposalsView(); document.querySelector('.navbar-toggler').click()">
+                            <i class="bi bi-inbox-fill"></i> <span class="d-lg-none">Proposte</span>
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="proposalsBadge" style="display:none">0</span>
+                        </button>
+                    </li>
+
+                    <li class="nav-item">
+                        <button class="btn btn-outline-light btn-sm rounded-pill px-3 ms-lg-2" id="btnLoginBtn" onclick="window.openLoginModal(); document.querySelector('.navbar-toggler').click()">Login</button>
+                        <button class="btn btn-outline-danger btn-sm rounded-pill px-3 ms-lg-2 admin-only" onclick="window.logout()">Esci</button>
+                    </li>
+                </ul>
             </div>
         </div>
     </nav>
@@ -447,6 +467,24 @@
             </div>
         </div>
     </div>
+    <div class="modal fade" id="createSetlistModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="background-color: #2b2b2b; color: white; border: 1px solid #444;">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title"><i class="bi bi-folder-plus text-primary"></i> Nuova Scaletta</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label text-muted small">Nome della scaletta (es. "Fuoco 2024")</label>
+                    <input type="text" id="newSetlistNameInput" class="form-control bg-dark text-white border-secondary" placeholder="Inserisci nome...">
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-link text-decoration-none text-muted" data-bs-dismiss="modal">Annulla</button>
+                    <button type="button" class="btn btn-primary px-4 rounded-pill" onclick="window.confirmCreateSetlist()">Crea Scaletta</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script type="module" src="script.js?v=2"></script>
     <script>
@@ -459,4 +497,5 @@
 </body>
 
 </html>
+
 
