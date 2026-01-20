@@ -180,19 +180,6 @@
                 <h4 class="mb-4 text-secondary border-bottom pb-2">Sezioni</h4>
                 <div id="categoriesContainer" class="row g-4"></div>
                 
-                <div class="text-center mt-5 admin-only w-100">
-                    <hr>
-                    <button class="btn btn-outline-primary" onclick="window.showAddSectionModal()">
-                        <i class="bi bi-folder-plus"></i> Nuova Sezione
-                    </button>
-                    <button class="btn btn-outline-dark ms-2" onclick="window.openExportModal()">
-                        <i class="bi bi-file-earmark-arrow-down"></i> Export Completo
-                    </button>
-                    <input type="file" id="txtImporter" style="display:none" accept=".txt" onchange="window.processTxtImport()">
-                    <button class="btn btn-outline-success ms-2" onclick="document.getElementById('txtImporter').click()">
-                        <i class="bi bi-upload"></i> Importa TXT
-                    </button>
-                </div>
             </div>
         </div>
         <div id="view-setlists" class="view-screen">
@@ -520,6 +507,7 @@
 </body>
 
 </html>
+
 
 
 
