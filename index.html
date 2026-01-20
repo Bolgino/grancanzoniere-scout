@@ -85,7 +85,7 @@
 
     <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer" style="z-index: 1100"></div>
 
-    <nav class="navbar navbar-expand-lg navbar-dark fixed-top shadow-sm" style="background: rgba(13, 110, 253, 0.15); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255,255,255,0.1);">
+    <nav class="navbar navbar-dark fixed-top shadow-sm" style="background: rgba(13, 110, 253, 0.15); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255,255,255,0.1);">
         <div class="container-fluid">
             <span class="navbar-brand fw-bold d-flex align-items-center gap-2" role="button" onclick="window.goHome()">
                 <i class="bi bi-fire text-warning"></i> 
@@ -96,37 +96,60 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
 
-            <div class="collapse navbar-collapse justify-content-end mt-2 mt-lg-0" id="navbarNav">
-                <ul class="navbar-nav align-items-lg-center gap-2">
+            <div class="collapse navbar-collapse justify-content-end mt-2" id="navbarNav">
+                <ul class="navbar-nav align-items-start gap-2 p-2">
                     
-                    <li class="nav-item">
+                    <li class="nav-item border-bottom border-secondary w-100 pb-2 mb-2">
                         <span class="nav-link disabled text-white-50 small">
-                            <i class="bi bi-music-note-list"></i> <span id="totalSongsCount">...</span> canzoni
+                            <i class="bi bi-music-note-list"></i> <span id="totalSongsCount">...</span> canzoni totali
                         </span>
                     </li>
 
-                    <li class="nav-item">
-                        <button class="btn btn-link nav-link text-white text-decoration-none px-3" onclick="window.openSetlistsView(); document.querySelector('.navbar-toggler').click()">
-                            <i class="bi bi-list-check"></i> Le mie Scalette
+                    <li class="nav-item w-100">
+                        <button class="btn btn-link nav-link text-white text-decoration-none" onclick="window.openSetlistsView(); document.querySelector('.navbar-toggler').click()">
+                            <i class="bi bi-list-check text-info"></i> Le mie Scalette
                         </button>
                     </li>
 
-                    <li class="nav-item">
-                        <button class="btn btn-primary btn-sm rounded-pill px-4 fw-bold shadow-sm" onclick="window.showAddModal(); document.querySelector('.navbar-toggler').click()">
-                            <i class="bi bi-plus-lg"></i> <span id="btnAddText">Proponi</span>
+                    <li class="nav-item w-100">
+                        <button class="btn btn-primary btn-sm rounded-pill px-4 fw-bold w-100 text-start" onclick="window.showAddModal(); document.querySelector('.navbar-toggler').click()">
+                            <i class="bi bi-plus-lg"></i> <span id="btnAddText">Proponi Canzone</span>
                         </button>
                     </li>
 
-                    <li class="nav-item admin-only">
-                        <button class="btn btn-warning btn-sm rounded-pill px-3 fw-bold position-relative" onclick="window.openProposalsView(); document.querySelector('.navbar-toggler').click()">
-                            <i class="bi bi-inbox-fill"></i> <span class="d-lg-none">Proposte</span>
-                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="proposalsBadge" style="display:none">0</span>
+                    <li class="nav-item admin-only w-100 mt-3 pt-3 border-top border-secondary">
+                        <small class="text-muted text-uppercase fw-bold ms-2">Strumenti Capo</small>
+                    </li>
+
+                    <li class="nav-item admin-only w-100">
+                        <button class="btn btn-link nav-link text-warning text-decoration-none position-relative" onclick="window.openProposalsView(); document.querySelector('.navbar-toggler').click()">
+                            <i class="bi bi-inbox-fill"></i> Revisiona Proposte
+                            <span class="badge rounded-pill bg-danger ms-2" id="proposalsBadge" style="display:none">0</span>
                         </button>
                     </li>
 
-                    <li class="nav-item">
-                        <button class="btn btn-outline-light btn-sm rounded-pill px-3 ms-lg-2" id="btnLoginBtn" onclick="window.openLoginModal(); document.querySelector('.navbar-toggler').click()">Login</button>
-                        <button class="btn btn-outline-danger btn-sm rounded-pill px-3 ms-lg-2 admin-only" onclick="window.logout()">Esci</button>
+                    <li class="nav-item admin-only w-100">
+                        <button class="btn btn-link nav-link text-white text-decoration-none" onclick="window.showAddSectionModal(); document.querySelector('.navbar-toggler').click()">
+                            <i class="bi bi-folder-plus"></i> Nuova Sezione
+                        </button>
+                    </li>
+
+                    <li class="nav-item admin-only w-100">
+                        <button class="btn btn-link nav-link text-white text-decoration-none" onclick="window.openExportModal(); document.querySelector('.navbar-toggler').click()">
+                            <i class="bi bi-file-earmark-arrow-down"></i> Export / Stampa Completa
+                        </button>
+                    </li>
+
+                    <li class="nav-item admin-only w-100">
+                        <input type="file" id="txtImporter" style="display:none" accept=".txt" onchange="window.processTxtImport()">
+                        <button class="btn btn-link nav-link text-white text-decoration-none" onclick="document.getElementById('txtImporter').click(); document.querySelector('.navbar-toggler').click()">
+                            <i class="bi bi-upload"></i> Importa da TXT
+                        </button>
+                    </li>
+
+                    <li class="nav-item w-100 mt-3 border-top border-secondary pt-3">
+                        <button class="btn btn-outline-light btn-sm w-100" id="btnLoginBtn" onclick="window.openLoginModal(); document.querySelector('.navbar-toggler').click()">Accesso Capi</button>
+                        <button class="btn btn-outline-danger btn-sm w-100 admin-only" onclick="window.logout()">Esci</button>
                     </li>
                 </ul>
             </div>
@@ -497,5 +520,6 @@
 </body>
 
 </html>
+
 
 
