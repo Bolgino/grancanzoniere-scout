@@ -273,28 +273,6 @@ body.user-admin .cat-actions { display: block; }
     letter-spacing: 1px;
 }
 
-/* --- MENU LATERALE (OFFCANVAS) --- */
-.offcanvas {
-    background-color: rgba(20, 20, 25, 0.98) !important; /* Quasi nero opaco */
-    border-left: 1px solid #444;
-    color: white;
-}
-
-.offcanvas-header {
-    border-bottom: 1px solid #333;
-}
-
-.offcanvas-body .nav-link {
-    font-size: 1.1rem;
-    padding: 12px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-}
-
-.offcanvas-body .nav-link:hover {
-    padding-left: 10px; /* Effetto scivolamento */
-    color: var(--bs-primary) !important;
-}
-
 /* Badge Admin (Pallini colorati) */
 .status-dot {
     height: 10px;
@@ -308,56 +286,32 @@ body.user-admin .cat-actions { display: block; }
 .status-orange { background-color: #fd7e14; color: #fd7e14; }  /* Arancio */
 .status-red { background-color: #dc3545; color: #dc3545; }     /* Rosso */
 
+/* --- MENU LATERALE DEFINITIVO (PULITO) --- */
 
-/* --- FIX BARRA LATERALE (Versione Definitiva) --- */
-
-/* 1. Il contenitore principale che esce da destra */
 .offcanvas {
-    z-index: 1060 !important;
-    background-color: #1a1a1a !important;
-    width: 300px !important; /* Larghezza fissa per non schiacciarsi */
+    z-index: 1060 !important; /* Sopra a tutto */
+    background-color: #121212 !important; /* Sfondo molto scuro */
+    width: 320px !important; /* LARGHEZZA FISSA: Impedisce che si schiacci */
     border-left: 1px solid #333;
+    color: white;
 }
 
-/* 2. Il corpo del menu */
-.offcanvas-body {
-    padding: 25px 20px !important; /* Spazio interno arioso */
-    overflow-y: auto; /* Permette di scorrere se lo schermo è basso */
-}
-
-/* 3. La nostra lista personalizzata */
-.custom-menu-list {
-    display: flex;
-    flex-direction: column; /* FORZA la colonna */
-    gap: 15px; /* Spazio tra ogni elemento della lista */
-    margin: 0;
-    padding: 0;
-    width: 100%;
-}
-
-/* 4. I bottoni dentro la lista */
-.custom-menu-list button {
-    font-size: 1.1rem; /* Testo più grande */
-    display: flex;
-    align-items: center;
-    transition: transform 0.2s ease;
-}
-
-/* Effetto hover (passaggio mouse) */
-.custom-menu-list button:hover {
-    transform: translateX(8px); /* Scivola a destra */
-    background-color: rgba(255,255,255,0.05); /* Leggero sfondo */
+/* Stile per i link semplici */
+.offcanvas button.btn-link:hover {
+    background-color: rgba(255, 255, 255, 0.05);
     border-radius: 8px;
+    transform: translateX(5px);
+    transition: transform 0.2s;
 }
 
-/* Sfondo scuro dietro */
+/* Oscuramento sfondo */
 .offcanvas-backdrop {
     z-index: 1050 !important;
     background-color: rgba(0, 0, 0, 0.85) !important;
     backdrop-filter: blur(4px);
 }
 
-/* X di chiusura */
+/* Fix pulsante chiusura */
 .btn-close-white {
     filter: invert(1) grayscale(100%) brightness(200%);
 }
@@ -382,5 +336,6 @@ body.user-admin .cat-actions { display: block; }
 .status-green { background-color: #2ecc71; box-shadow: 0 0 5px #2ecc71; }
 .status-orange { background-color: #f39c12; box-shadow: 0 0 5px #f39c12; }
 .status-red { background-color: #e74c3c; box-shadow: 0 0 5px #e74c3c; }
+
 
 
