@@ -104,26 +104,26 @@ input::placeholder, textarea::placeholder { color: #888 !important; }
     color: #000 !important;
 }
 /* --- AREA TESTO E ACCORDI (FIX AUTOSCROLL) --- */
+/* --- AREA TESTO E ACCORDI (FIX FULLSCREEN) --- */
 .preview-area {
     background: #121212 !important; 
     color: #e0e0e0 !important;
     padding: 20px; 
     border-radius: 8px; 
     
-    /* ALTEZZA FISSA: Importante per l'autoscroll */
-    height: 60vh !important;      /* Occupa il 60% dell'altezza schermo */
-    max-height: 60vh !important;  /* Impedisce di allargarsi oltre */
-    min-height: 0 !important;     /* Rimuove limiti minimi vecchi */
-    overflow-y: auto !important;  /* Barra di scorrimento sempre attiva se serve */
+    /* MODIFICA: Rimuoviamo i limiti di altezza per usare tutto lo schermo */
+    height: auto !important;      
+    max-height: none !important;  
+    min-height: 500px !important; /* Un'altezza minima per estetica */
+    overflow-y: visible !important; /* Niente scrollbar interna */
     
     border: 1px solid #333;
     font-size: 16px; 
     
-    /* PARAMETRI CRITICI PER ALLINEAMENTO */
     line-height: 2.8 !important; 
     white-space: pre-wrap !important; 
     font-family: monospace !important; 
-    overflow-x: auto;
+    overflow-x: auto; /* Mantiene lo scroll orizzontale se le righe sono lunghissime */
 }
 
 /* Stile Accordi */
@@ -537,5 +537,6 @@ body.user-admin .setlist-item-controls {
     border: 2px solid #ffc107 !important; /* Bordo giallo esterno */
     box-shadow: 0 0 20px rgba(255, 193, 7, 0.2); /* Alone giallo */
 }
+
 
 
