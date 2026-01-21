@@ -115,42 +115,64 @@
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
         </div>
 
-       <div class="offcanvas-body d-flex flex-column p-3"> <div class="d-flex flex-column gap-2"> <button class="btn btn-dark text-start py-2 px-3 w-100 d-flex align-items-center rounded-3 border-0 shadow-sm" style="background-color: rgba(255,255,255,0.05);" onclick="window.openSetlistsView(); document.querySelector('.btn-close').click()">
-                    <i class="bi bi-list-check text-info fs-5 me-3"></i> 
-                    <span>Le mie Scalette</span>
-                </button>
-
-                <button class="btn btn-primary text-start py-2 px-3 w-100 d-flex align-items-center rounded-3 shadow fw-bold" onclick="window.showAddModal(); document.querySelector('.btn-close').click()">
-                    <i class="bi bi-plus-lg fs-5 me-3"></i> 
-                    <span>Proponi Canzone</span>
-                </button>
-            </div>
-
-            <div class="admin-only mt-4">
-                <h6 class="text-muted text-uppercase fw-bold mb-2 ps-1" style="letter-spacing: 1px; font-size: 0.75rem;">Strumenti Capo</h6>
+      <div class="offcanvas-body d-flex flex-column p-4">
+            
+            <div class="d-flex flex-column gap-2">
                 
-                <div class="d-flex flex-column gap-1">
-                    <button class="btn btn-link text-warning text-decoration-none text-start p-2 d-flex align-items-center" onclick="window.openProposalsView(); document.querySelector('.btn-close').click()">
-                        <i class="bi bi-inbox-fill me-3"></i> Revisiona Proposte
+                <button class="btn btn-dark text-start py-3 px-3 w-100 d-flex align-items-center rounded-3 border-0 shadow-sm" 
+                        style="background-color: rgba(255,255,255,0.05);" 
+                        onclick="window.goHome(); document.querySelector('.btn-close').click()">
+                    <i class="bi bi-music-note-list text-primary fs-4 me-3"></i> 
+                    <span class="fs-5">Canzoniere</span>
+                </button>
+        
+                <button class="btn btn-outline-light text-start py-3 px-3 w-100 d-flex align-items-center rounded-3 border-secondary guest-only" 
+                        onclick="window.showAddModal(); document.querySelector('.btn-close').click()">
+                    <i class="bi bi-plus-lg fs-4 me-3"></i> 
+                    <span class="fs-5">Proponi Canzone</span>
+                </button>
+        
+                <button class="btn btn-outline-light text-start py-3 px-3 w-100 d-flex align-items-center rounded-3 border-secondary" 
+                        onclick="window.openSetlistsView(); document.querySelector('.btn-close').click()">
+                    <i class="bi bi-list-check text-info fs-4 me-3"></i> 
+                    <span class="fs-5">Scalette</span>
+                </button>
+        
+            </div>
+        
+            <div class="admin-only mt-4 pt-3 border-top border-secondary">
+                <h6 class="text-muted text-uppercase fw-bold mb-3 ps-1" style="letter-spacing: 1px; font-size: 0.8rem;">Area Capi</h6>
+                
+                <div class="d-flex flex-column gap-2">
+                    <button class="btn btn-link text-warning text-decoration-none text-start p-2 d-flex align-items-center" 
+                            onclick="window.openProposalsView(); document.querySelector('.btn-close').click()">
+                        <i class="bi bi-inbox-fill me-3 fs-5"></i> Revisiona Proposte
                         <span class="badge rounded-pill bg-danger ms-auto" id="proposalsBadge" style="display:none">0</span>
                     </button>
-
-                    <button class="btn btn-link text-white text-decoration-none text-start p-2 d-flex align-items-center" onclick="window.openManageSectionsView(); document.querySelector('.btn-close').click()">
-                        <i class="bi bi-gear-wide-connected me-3"></i> Gestione Sezioni
+        
+                    <button class="btn btn-link text-white text-decoration-none text-start p-2 d-flex align-items-center" 
+                            onclick="window.openManageSectionsView(); document.querySelector('.btn-close').click()">
+                        <i class="bi bi-gear-wide-connected me-3 fs-5"></i> Gestione Sezioni
                     </button>
-
-                    <button class="btn btn-link text-white text-decoration-none text-start p-2 d-flex align-items-center" onclick="window.openExportModal(); document.querySelector('.btn-close').click()">
-                        <i class="bi bi-file-earmark-arrow-down me-3"></i> Export / Stampa
+        
+                    <button class="btn btn-link text-white text-decoration-none text-start p-2 d-flex align-items-center" 
+                            onclick="window.openExportView(); document.querySelector('.btn-close').click()">
+                        <i class="bi bi-printer-fill me-3 fs-5"></i> Export Canzoniere
+                    </button>
+        
+                    <button class="btn btn-link text-white-50 text-decoration-none text-start p-2 d-flex align-items-center" 
+                            onclick="document.getElementById('txtImporter').click(); document.querySelector('.btn-close').click()">
+                        <i class="bi bi-upload me-3 fs-5"></i> Importa TXT
                     </button>
                 </div>
             </div>
-
-            <div class="mt-auto pt-4">
-                <button class="btn btn-outline-light w-100 mb-2 py-2 btn-sm" id="btnLoginBtn" onclick="window.openLoginModal(); document.querySelector('.btn-close').click()">Accesso Capi</button>
-                <button class="btn btn-outline-danger w-100 py-2 admin-only btn-sm" onclick="window.logout()">Esci</button>
+        
+            <div class="mt-auto pt-5">
+                <button class="btn btn-outline-light w-100 mb-2 py-2 guest-only" id="btnLoginBtn" onclick="window.openLoginModal(); document.querySelector('.btn-close').click()">Accesso Capi</button>
+                <button class="btn btn-outline-danger w-100 py-2 admin-only" onclick="window.logout()">Esci</button>
             </div>
-
-       </div>
+        
+        </div>
     </div>
             <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasNavbar" aria-labelledby="offcanvasNavbarLabel" style="background-color: #1a1a1a; color: white;">
                 
@@ -237,74 +259,80 @@
                 <div id="categoriesContainer" class="row g-4"></div>
                 
             </div>
-            <div id="view-export" class="view-screen">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <button class="btn btn-outline-secondary btn-sm" onclick="window.goHome()">
-                        <i class="bi bi-arrow-left"></i> Home
-                    </button>
-                    <h3 class="fw-bold m-0 text-white"><i class="bi bi-printer"></i> Centro Stampe</h3>
-                    <div style="width: 80px;"></div>
-                </div>
-            
-                <div class="row g-4">
-                    <div class="col-md-6">
-                        <div class="card bg-dark border-secondary shadow h-100">
-                            <div class="card-body">
-                                <h5 class="card-title text-primary fw-bold mb-3">Canzoniere Completo</h5>
-                                <p class="text-muted small">Genera il PDF di tutte le canzoni divise per sezione.</p>
-                                
-                                <div class="form-check mb-2">
-                                    <input class="form-check-input" type="checkbox" id="pdfTwoColumns" checked>
-                                    <label class="form-check-label text-white" for="pdfTwoColumns">Due colonne</label>
-                                </div>
-                                <div class="form-check mb-3">
-                                    <input class="form-check-input" type="checkbox" id="pdfShowChords" checked>
-                                    <label class="form-check-label text-white" for="pdfShowChords">Includi Accordi</label>
-                                </div>
-                                
-                                <div class="mb-3">
-                                    <label class="form-label text-white-50 small">Copertina (Opzionale)</label>
-                                    <input class="form-control bg-secondary text-white border-0" type="file" id="globalCoverInput" accept="image/*">
-                                </div>
-            
-                                <div class="mb-3">
-                                    <label class="form-label text-white-50 small">Ordine Sezioni:</label>
-                                    <div id="sectionOrderList" class="list-group" style="max-height: 150px; overflow-y:auto;"></div>
-                                </div>
-            
-                                <button class="btn btn-primary w-100 fw-bold" onclick="window.generateFullPDF()">
-                                    <i class="bi bi-file-earmark-pdf-fill"></i> Scarica PDF (A5)
-                                </button>
-                            </div>
-                        </div>
+                <div id="view-export" class="view-screen">
+                    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-secondary pb-3">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="window.goHome()">
+                            <i class="bi bi-arrow-left"></i> Home
+                        </button>
+                        <h3 class="fw-bold m-0 text-white"><i class="bi bi-printer"></i> Centro Stampe</h3>
+                        <div style="width: 80px;"></div>
                     </div>
-            
-                    <div class="col-md-6">
-                        <div class="card bg-dark border-secondary shadow h-100">
-                            <div class="card-body">
-                                <h5 class="card-title text-warning fw-bold mb-3">Altri Formati</h5>
-                                <p class="text-muted small">Esportazioni rapide per backup o altri usi.</p>
-                                
-                                <div class="d-grid gap-3">
-                                    <button class="btn btn-outline-light text-start" onclick="window.generateFullTxtList()">
-                                        <i class="bi bi-file-text me-2"></i> Lista TXT (Solo Titoli)
+                
+                    <div class="row g-4">
+                        <div class="col-md-7">
+                            <div class="card bg-dark border-secondary shadow h-100">
+                                <div class="card-body">
+                                    <h5 class="card-title text-primary fw-bold mb-3">Crea Canzoniere PDF</h5>
+                                    <p class="text-muted small mb-4">Seleziona l'ordine delle sezioni. Le sezioni non desiderate verranno incluse in fondo se non filtrate (feature futura).</p>
+                                    
+                                    <div class="row mb-3">
+                                        <div class="col-6">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="pdfTwoColumns" checked>
+                                                <label class="form-check-label text-white" for="pdfTwoColumns">Due colonne</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="pdfShowChords" checked>
+                                                <label class="form-check-label text-white" for="pdfShowChords">Includi Accordi</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label text-white-50 small">Copertina Personalizzata (Opzionale)</label>
+                                        <input class="form-control bg-secondary text-white border-0" type="file" id="globalCoverInput" accept="image/*">
+                                    </div>
+                
+                                    <div class="mb-3">
+                                        <label class="form-label text-white-50 small">Ordine Sezioni:</label>
+                                        <div id="sectionOrderListExport" class="list-group" style="max-height: 250px; overflow-y:auto;"></div>
+                                    </div>
+                
+                                    <button class="btn btn-primary w-100 fw-bold py-2" onclick="window.generateFullPDF()">
+                                        <i class="bi bi-file-earmark-pdf-fill"></i> Scarica Canzoniere (A5)
                                     </button>
-                                    <button class="btn btn-outline-light text-start" onclick="window.generateFullLatex()">
-                                        <i class="bi bi-code-slash me-2"></i> Sorgente LaTeX (.tex)
-                                    </button>
-                                </div>
-                                
-                                <hr class="border-secondary my-4">
-                                
-                                <div class="alert alert-info bg-opacity-10 border-info text-info small">
-                                    <i class="bi bi-info-circle"></i> Le scalette singole si stampano direttamente dalla tab "Scalette".
                                 </div>
                             </div>
                         </div>
+                
+                        <div class="col-md-5">
+                            <div class="card bg-dark border-secondary shadow h-100">
+                                <div class="card-body">
+                                    <h5 class="card-title text-warning fw-bold mb-3">Backup & Dati</h5>
+                                    
+                                    <div class="d-grid gap-3">
+                                        <button class="btn btn-outline-light text-start py-3" onclick="window.generateFullTxtList()">
+                                            <i class="bi bi-file-text me-2 fs-4"></i> 
+                                            <div>
+                                                <strong>Lista TXT</strong><br>
+                                                <small class="text-muted">Elenco semplice titoli</small>
+                                            </div>
+                                        </button>
+                                        <button class="btn btn-outline-light text-start py-3" onclick="window.generateFullLatex()">
+                                            <i class="bi bi-code-slash me-2 fs-4"></i> 
+                                            <div>
+                                                <strong>Sorgente LaTeX</strong><br>
+                                                <small class="text-muted">Per impaginazione pro</small>
+                                            </div>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </div>
         <div id="view-setlists" class="view-screen">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <button class="btn btn-outline-secondary btn-sm" onclick="window.handleSetlistBack()">
@@ -658,6 +686,7 @@
     </script>
 </body>
 </html>
+
 
 
 
