@@ -46,6 +46,7 @@ let favorites = JSON.parse(localStorage.getItem('scoutFavorites')) || [];
 let currentSetlistId = null;
 let autoScrollInterval = null;
 let exportSectionOrder = [];
+let isUserInteracting = false;
 let exportSectionCovers = {};
 let targetMergeSongId = null;
 let mDuplicateWarning; // Variabile per il modale
@@ -1469,13 +1470,13 @@ window.openSearchForSetlistModal = () => { document.getElementById("searchSetlis
 window.performSetlistSearch = () => { const q = document.getElementById("searchSetlistInput").value.toLowerCase(); const c = document.getElementById("searchSetlistResults"); c.innerHTML = ""; let res; if (q.trim() === "") res = allSongs.sort((a,b) => a.title.localeCompare(b.title)); else res = allSongs.filter(s => s.title.toLowerCase().includes(q) || (s.author && s.author.toLowerCase().includes(q))); if(res.length === 0) { c.innerHTML = "<div class='text-center text-muted p-2'>Nessun risultato</div>"; return; } const sl = allSetlists.find(x => x.id === currentSetlistId); res.forEach(s => { const isPresent = sl && sl.songs.some(item => (typeof item === 'string' ? item : item.id) === s.id); const btnClass = isPresent ? "btn-secondary disabled" : "btn-outline-primary"; const icon = isPresent ? '<i class="bi bi-check2"></i>' : '<i class="bi bi-plus-lg"></i>'; const action = isPresent ? "" : `onclick="window.addSongFromSearch('${s.id}')"`; c.innerHTML += `<div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"><div class="text-truncate" style="max-width: 80%;"><div class="fw-bold text-truncate">${s.title}</div><small class="text-muted text-truncate">${s.author || ''}</small></div><button class="btn btn-sm ${btnClass} rounded-circle" ${action} style="width: 32px; height: 32px; padding: 0;">${icon}</button></div>`; }); };
 window.addSongFromSearch = (songId) => { const sl = allSetlists.find(s => s.id === currentSetlistId); if(sl) { const isPresent = sl.songs.some(item => (typeof item === 'string' ? item : item.id) === songId); if(isPresent) return showToast("Già in scaletta", "info"); const newSongs = [...sl.songs, { id: songId, trans: 0 }]; updateSetlistSongs(currentSetlistId, newSongs); showToast("Aggiunta!", "success"); window.performSetlistSearch(); } };
 window.insertFormatting = (tag) => { const textarea = document.getElementById("lyricsEditor"); const start = textarea.selectionStart; const end = textarea.selectionEnd; textarea.value = textarea.value.substring(0, start) + tag + textarea.value.substring(start, end) + tag + textarea.value.substring(end); textarea.selectionStart = start + tag.length; textarea.selectionEnd = end + tag.length; textarea.focus(); window.renderPreview(); };
+const setInteractingTrue = () => { isUserInteracting = true; };
+const setInteractingFalse = () => { isUserInteracting = false; };
+
 window.toggleAutoScroll = () => {
     const area = document.getElementById('previewArea');
     const btn = document.getElementById('btnAutoScroll');
     
-    const setInteractingTrue = () => { isUserInteracting = true; };
-    const setInteractingFalse = () => { isUserInteracting = false; };
-
     if (autoScrollInterval) { 
         // --- STOP SCROLL ---
         clearInterval(autoScrollInterval);
@@ -1487,21 +1488,19 @@ window.toggleAutoScroll = () => {
             btn.innerHTML = '<i class="bi bi-mouse3"></i>';
         }
 
-        // Rimuovi listener per pulizia
+        // Rimuovi i listener usando le STESSE funzioni definite fuori
         area.removeEventListener('mousedown', setInteractingTrue);
         area.removeEventListener('mouseup', setInteractingFalse);
         area.removeEventListener('touchstart', setInteractingTrue);
         area.removeEventListener('touchend', setInteractingFalse);
     } else {
         // --- START SCROLL ---
-        // Abbiamo RIMOSSO il controllo sulla lunghezza. Parte sempre.
-        
         if(btn) {
             btn.classList.replace('btn-outline-success', 'btn-success');
             btn.innerHTML = '<i class="bi bi-pause-fill"></i>';
         }
 
-        // Listener per fermare lo scroll se l'utente tocca lo schermo
+        // Aggiungi i listener
         area.addEventListener('mousedown', setInteractingTrue);
         area.addEventListener('mouseup', setInteractingFalse);
         area.addEventListener('touchstart', setInteractingTrue, {passive: true});
@@ -1510,8 +1509,7 @@ window.toggleAutoScroll = () => {
         autoScrollInterval = setInterval(() => {
             if (isUserInteracting) return; // Pausa se l'utente tocca
             
-            // Logica fine pagina: controlla se siamo arrivati in fondo
-            // Usiamo una tolleranza di 2px per sicurezza
+            // Logica fine pagina
             if (Math.ceil(area.scrollTop + area.clientHeight) >= area.scrollHeight - 2) {
                 window.toggleAutoScroll(); // Ferma tutto quando arriva in fondo
                 return;
@@ -2489,6 +2487,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
