@@ -125,11 +125,17 @@
                     <span class="fs-5">Canzoniere</span>
                 </button>
         
-                <button class="btn btn-outline-light text-start py-3 px-3 w-100 d-flex align-items-center rounded-3 border-secondary guest-only" 
-                        onclick="window.openProposeView(); document.querySelector('.btn-close').click()">
-                    <i class="bi bi-plus-lg fs-4 me-3"></i> 
-                    <span class="fs-5">Proponi Canzone</span>
-                </button>
+        <button class="btn btn-outline-light text-start py-3 px-3 w-100 d-flex align-items-center rounded-3 border-secondary guest-only" 
+                onclick="window.openProposeView(); document.querySelector('.btn-close').click()">
+            <i class="bi bi-plus-lg fs-4 me-3"></i> 
+            <span class="fs-5">Proponi Canzone</span>
+        </button>
+
+        <button class="btn btn-outline-warning text-start py-3 px-3 w-100 d-flex align-items-center rounded-3 border-secondary admin-only" 
+                onclick="window.openProposeView(); document.querySelector('.btn-close').click()">
+            <i class="bi bi-plus-circle-fill text-warning fs-4 me-3"></i> 
+            <span class="fs-5 fw-bold text-warning">Aggiungi Canzone</span>
+        </button>
         
                 <button class="btn btn-outline-light text-start py-3 px-3 w-100 d-flex align-items-center rounded-3 border-secondary" 
                         onclick="window.openSetlistsView(); document.querySelector('.btn-close').click()">
@@ -909,6 +915,7 @@
     </script>
 </body>
 </html>
+
 
 
 
