@@ -47,6 +47,8 @@ let currentSetlistId = null;
 let autoScrollInterval = null;
 let exportSectionOrder = [];
 let exportSectionCovers = {};
+let targetMergeSongId = null;
+
 // Loader phrases
 const loaderPhrases = [
     "Allineo gli astri...", "Accordo la chitarra...", "Scaldo le corde vocali...",
@@ -1904,10 +1906,12 @@ let currentReviewId = null;
 // 1. APRE L'EDITOR DI REVISIONE
 window.openProposalEditor = (id) => {
     currentReviewId = id;
+    targetMergeSongId = null; // Reset
+
     const p = allProposals.find(x => x.id === id);
     if (!p) return;
 
-    // Popola i campi input
+    // Popola i campi
     document.getElementById("reviewTitle").value = p.title || "";
     document.getElementById("reviewAuthor").value = p.author || "";
     document.getElementById("reviewYear").value = p.year || "";
@@ -1915,21 +1919,50 @@ window.openProposalEditor = (id) => {
     document.getElementById("reviewProposer").value = p.proposer || "";
     document.getElementById("reviewLyrics").value = p.lyrics || "";
 
-    // Popola la select delle categorie (Sezioni)
+    // Popola select categorie
     const sel = document.getElementById("reviewCategory");
     sel.innerHTML = "";
     allSections.forEach(sec => {
         const opt = document.createElement("option");
-        opt.value = sec.name;
-        opt.innerText = sec.name;
+        opt.value = sec.name; opt.innerText = sec.name;
         if (sec.name === p.category) opt.selected = true;
         sel.appendChild(opt);
     });
 
-    // Renderizza l'anteprima iniziale
-    window.renderReviewPreview();
+    // --- CONTROLLO DUPLICATO PER ADMIN ---
+    const cleanTitle = p.title.trim().toLowerCase();
+    // Cerca canzone esistente con stesso titolo
+    const duplicate = allSongs.find(s => s.title.trim().toLowerCase() === cleanTitle);
     
-    // Mostra il modale
+    // Gestione visuale dell'avviso (Creiamo/Aggiorniamo un div di alert nel modale)
+    let alertBox = document.getElementById("proposalMergeAlert");
+    if (!alertBox) {
+        // Se non esiste nel HTML, crealo al volo sopra i campi
+        alertBox = document.createElement("div");
+        alertBox.id = "proposalMergeAlert";
+        alertBox.className = "alert alert-warning mb-3 small shadow-sm border-warning";
+        alertBox.style.display = "none";
+        // Lo inseriamo all'inizio della colonna di sinistra del modale
+        const modalBodyLeft = document.querySelector("#reviewProposalModal .col-lg-6");
+        if(modalBodyLeft) modalBodyLeft.prepend(alertBox);
+    }
+
+    if (duplicate) {
+        targetMergeSongId = duplicate.id; // Salviamo l'ID da sovrascrivere
+        alertBox.innerHTML = `
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>ATTENZIONE:</strong> Esiste già una canzone chiamata <u>${duplicate.title}</u> nella sezione <b>${duplicate.category}</b>.<br>
+            Se clicchi "Salva e Approva", il testo di questa proposta <strong>SOVRASCRIVERÀ</strong> quello della canzone esistente.
+        `;
+        alertBox.style.display = "block";
+        alertBox.classList.remove('alert-success');
+        alertBox.classList.add('alert-warning');
+    } else {
+        alertBox.style.display = "none";
+    }
+    // -------------------------------------
+
+    window.renderReviewPreview();
     mReviewProposal.show();
 };
 
@@ -1957,9 +1990,8 @@ window.saveAndApproveProposal = async () => {
     if (!currentReviewId) return;
 
     const t = document.getElementById("reviewTitle").value.trim();
-    if (!t) return showToast("Il titolo è obbligatorio", "warning");
+    if (!t) return showToast("Titolo obbligatorio", "warning");
 
-    // Dati presi dall'editor (potenzialmente modificati dall'admin)
     const finalData = {
         title: t,
         author: document.getElementById("reviewAuthor").value.trim(),
@@ -1967,7 +1999,6 @@ window.saveAndApproveProposal = async () => {
         year: document.getElementById("reviewYear").value,
         description: document.getElementById("reviewDesc").value.trim(),
         lyrics: document.getElementById("reviewLyrics").value,
-        // Rigenera l'array degli accordi basandosi sul testo MODIFICATO
         chords: window.extractChords(document.getElementById("reviewLyrics").value),
         added: true,
         createdAt: Date.now()
@@ -1977,26 +2008,32 @@ window.saveAndApproveProposal = async () => {
     mReviewProposal.hide();
 
     try {
-        // Aggiungi alla raccolta "songs"
-        const r = await addDoc(collection(db, "songs"), finalData);
-        allSongs.push({ id: r.id, ...finalData });
+        // --- LOGICA DI MERGE ---
+        if (targetMergeSongId) {
+            // SE C'ERA UN DUPLICATO RILEVATO: AGGIORNA QUELLO ESISTENTE
+            await updateDoc(doc(db, "songs", targetMergeSongId), finalData);
+            
+            // Aggiorna array locale
+            const localS = allSongs.find(x => x.id === targetMergeSongId);
+            if(localS) Object.assign(localS, finalData); // Aggiorna l'oggetto in memoria
+            
+            showToast("Proposta unita alla canzone esistente!", "success");
+        } else {
+            // SE NON C'ERA DUPLICATO: CREA NUOVA
+            const r = await addDoc(collection(db, "songs"), finalData);
+            allSongs.push({ id: r.id, ...finalData });
+            showToast("Nuova canzone creata!", "success");
+        }
 
-        // Cancella dalla raccolta "proposals"
+        // In entrambi i casi, cancella la proposta perché è stata processata
         await deleteDoc(doc(db, "proposals", currentReviewId));
-        
-        // Aggiorna lista locale
         allProposals = allProposals.filter(p => p.id !== currentReviewId);
         
-        showToast("Proposta approvata e pubblicata!", "success");
-        
-        // Ricarica la vista proposte
         window.openProposalsView();
-        window.loadData(); // Ricarica tutto per sicurezza
         
     } catch (e) {
         console.error(e);
-        showToast("Errore durante l'approvazione: " + e.message, "danger");
-        // Se fallisce, riapri il modale per non perdere le modifiche
+        showToast("Errore approvazione: " + e.message, "danger");
         mReviewProposal.show();
     } finally {
         document.getElementById("loadingOverlay").style.display = "none";
@@ -2397,6 +2434,7 @@ window.updateExportPreview = async (type, inputOrUrl, labelText) => {
         }
     }
 };
+
 
 
 
