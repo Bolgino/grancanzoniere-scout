@@ -349,6 +349,59 @@
                 </div>
             </div>
         </div>
+
+        <div id="view-propose" class="view-screen">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <button class="btn btn-outline-secondary btn-sm" onclick="window.goHome()">
+                    <i class="bi bi-arrow-left"></i> Annulla
+                </button>
+                <h4 class="fw-bold m-0 text-white">Nuova Proposta</h4>
+                <button class="btn btn-primary btn-sm fw-bold" onclick="window.handleSongSubmission()">
+                    Invia <i class="bi bi-send-fill ms-1"></i>
+                </button>
+            </div>
+
+            <div class="row g-3 h-100">
+                <div class="col-lg-5 col-md-6 d-flex flex-column gap-2" style="max-height: 80vh; overflow-y: auto;">
+                    <div class="card bg-dark border-secondary p-3">
+                        <h6 class="text-muted mb-3">Dati Canzone</h6>
+                        <input type="text" id="propTitle" class="form-control mb-2" placeholder="Titolo (Obbligatorio)">
+                        <input type="text" id="propAuthor" class="form-control mb-2" placeholder="Autore">
+                        <select id="propCategory" class="form-select mb-2"></select>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <input type="number" id="propYear" class="form-control" placeholder="Anno">
+                            </div>
+                            <div class="col-6">
+                                <input type="text" id="propUser" class="form-control" placeholder="Il tuo nome *">
+                            </div>
+                        </div>
+                        <input type="text" id="propDesc" class="form-control mt-2" placeholder="Nota (es. Lento)">
+                    </div>
+
+                    <div class="card bg-dark border-secondary p-3 flex-grow-1">
+                        <h6 class="text-muted mb-2">Testo e Accordi</h6>
+                        <small class="text-muted d-block mb-2" style="font-size: 0.8rem;">Usa il formato [Do] per gli accordi.</small>
+                        <textarea id="propLyrics" class="form-control font-monospace border-0" 
+                                  style="flex-grow: 1; min-height: 300px; resize: none; background: #222; color: #fff;" 
+                                  placeholder="[Do] Scrivi qui il testo..." 
+                                  oninput="window.renderProposePreview()"></textarea>
+                    </div>
+                </div>
+
+                <div class="col-lg-7 col-md-6">
+                    <div class="card bg-dark border-secondary h-100">
+                        <div class="card-header border-bottom border-secondary d-flex justify-content-between">
+                            <span class="text-white">Anteprima</span>
+                            <span class="badge bg-secondary">Come apparirà</span>
+                        </div>
+                        <div class="card-body p-0" style="background: #121212; overflow: hidden;">
+                            <div id="propPreviewArea" class="preview-area h-100 overflow-auto p-3" style="font-size: 16px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div id="view-list" class="view-screen">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <button class="btn btn-outline-secondary btn-sm" onclick="window.goHome()"><i class="bi bi-arrow-left"></i> Sezioni</button>
@@ -680,4 +733,5 @@
     </script>
 </body>
 </html>
+
 
