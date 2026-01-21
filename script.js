@@ -1439,7 +1439,6 @@ window.openExportView = () => {
         });
     }
 };
-
 window.createNewSetlistPrompt = () => {
     // Pulisce l'input
     const inp = document.getElementById("newSetlistNameInput");
@@ -1459,3 +1458,4 @@ window.createNewSetlistPrompt = () => {
         }
     }
 };
+
