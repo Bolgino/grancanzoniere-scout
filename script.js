@@ -54,7 +54,7 @@ const loaderPhrases = [
 let loaderInterval;
 
 // Modals
-let mLogin, mAddSong, mAddSection, mEditSection, mEditSongMeta, mConfirm, mExport, mSearchSetlist, mExportSetlist, mAddToSetlist, mCreateSetlist;
+let mLogin, mAddSong, mAddSection, mEditSection, mEditSongMeta, mConfirm, mExport, mSearchSetlist, mExportSetlist, mAddToSetlist, mCreateSetlist, mReviewProposal;
 
 window.addEventListener('load', () => {
     startLoaderAnimation();
@@ -71,6 +71,7 @@ window.addEventListener('load', () => {
     mSearchSetlist = new bootstrap.Modal(document.getElementById('searchForSetlistModal'));
     mExportSetlist = new bootstrap.Modal(document.getElementById('exportSetlistModal'));
     mAddToSetlist = new bootstrap.Modal(document.getElementById('addToSetlistModal'));
+    mReviewProposal = new bootstrap.Modal(document.getElementById('reviewProposalModal'));
     
     // NUOVO MODAL
     const createSetlistEl = document.getElementById('createSetlistModal');
@@ -767,7 +768,36 @@ window.saveSongMetadata = async () => {
         showToast("Dati aggiornati", "success");
     } catch (e) { showToast("Errore salvataggio: " + e.message, "danger"); } finally { document.getElementById("loadingOverlay").style.display = "none"; }
 };
-window.openProposalsView=()=>{window.switchView('view-proposals');const c=document.getElementById("proposalsContainer");c.innerHTML="";if(allProposals.length===0)c.innerHTML="<div class='text-center mt-5 text-muted'>Nessuna proposta.</div>";allProposals.forEach(p=>{c.innerHTML+=`<div class="card mb-3 shadow-sm"><div class="card-body d-flex justify-content-between"><div><h5 class="fw-bold mb-1">${p.title}</h5><small class="text-muted">${p.author} &bull; ${p.category} (da: ${p.proposer||'Anon'})</small></div><div class="d-flex gap-2"><button class="btn btn-success btn-sm" onclick="window.acceptProposal('${p.id}')"><i class="bi bi-check-lg"></i></button><button class="btn btn-danger btn-sm" onclick="window.rejectProposal('${p.id}')"><i class="bi bi-x-lg"></i></button></div></div></div>`});};
+window.openProposalsView = () => {
+    window.switchView('view-proposals');
+    const c = document.getElementById("proposalsContainer");
+    c.innerHTML = "";
+    if (allProposals.length === 0) c.innerHTML = "<div class='text-center mt-5 text-muted'>Nessuna proposta in attesa.</div>";
+    
+    allProposals.forEach(p => {
+        // NOTA: Ho cambiato l'onclick del tasto verde da window.acceptProposal a window.openProposalEditor
+        c.innerHTML += `
+        <div class="card mb-3 shadow-sm border-secondary" style="background: #222;">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div class="overflow-hidden">
+                    <h5 class="fw-bold mb-1 text-white">${p.title}</h5>
+                    <small class="text-muted d-block text-truncate">
+                        ${p.author || 'Sconosciuto'} &bull; ${p.category}
+                    </small>
+                    <small class="text-secondary fst-italic">Proposto da: ${p.proposer || 'Anonimo'}</small>
+                </div>
+                <div class="d-flex gap-2 flex-shrink-0">
+                    <button class="btn btn-warning btn-sm fw-bold" onclick="window.openProposalEditor('${p.id}')" title="Revisiona">
+                        <i class="bi bi-pencil-square"></i> Revisiona
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="window.rejectProposal('${p.id}')" title="Rifiuta">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </div>
+        </div>`;
+    });
+};
 window.acceptProposal=(id)=>window.confirmModal("Approvare?",async()=>{const p=allProposals.find(x=>x.id===id);await addDoc(collection(db,"songs"),{title:p.title,author:p.author,category:p.category,lyrics:p.lyrics,chords:window.extractChords(p.lyrics)});await deleteDoc(doc(db,"proposals",id));showToast("Approvata!",'success');await loadProposals();loadData();window.openProposalsView();});
 window.rejectProposal=(id)=>window.confirmModal("Rifiutare?",async()=>{await deleteDoc(doc(db,"proposals",id));await loadProposals();window.openProposalsView();});
 window.showToast=(m,t='info')=>{const el=document.createElement('div');el.className=`toast align-items-center text-white bg-${t} border-0`;el.innerHTML=`<div class="d-flex"><div class="toast-body">${m}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;document.getElementById('toastContainer').appendChild(el);new bootstrap.Toast(el).show();};
@@ -1515,5 +1545,109 @@ window.renderProposePreview = () => {
         );
         div.innerHTML += `<div>${pl || '&nbsp;'}</div>`;
     });
+};
+// Variabile temporanea per sapere quale ID stiamo modificando
+let currentReviewId = null;
+
+// 1. APRE L'EDITOR DI REVISIONE
+window.openProposalEditor = (id) => {
+    currentReviewId = id;
+    const p = allProposals.find(x => x.id === id);
+    if (!p) return;
+
+    // Popola i campi input
+    document.getElementById("reviewTitle").value = p.title || "";
+    document.getElementById("reviewAuthor").value = p.author || "";
+    document.getElementById("reviewYear").value = p.year || "";
+    document.getElementById("reviewDesc").value = p.description || "";
+    document.getElementById("reviewProposer").value = p.proposer || "";
+    document.getElementById("reviewLyrics").value = p.lyrics || "";
+
+    // Popola la select delle categorie (Sezioni)
+    const sel = document.getElementById("reviewCategory");
+    sel.innerHTML = "";
+    allSections.forEach(sec => {
+        const opt = document.createElement("option");
+        opt.value = sec.name;
+        opt.innerText = sec.name;
+        if (sec.name === p.category) opt.selected = true;
+        sel.appendChild(opt);
+    });
+
+    // Renderizza l'anteprima iniziale
+    window.renderReviewPreview();
+    
+    // Mostra il modale
+    mReviewProposal.show();
+};
+
+// 2. RENDERIZZA L'ANTEPRIMA NEL MODALE (Simile all'editor principale)
+window.renderReviewPreview = () => {
+    const txt = document.getElementById("reviewLyrics").value;
+    const div = document.getElementById("reviewPreviewArea");
+    div.innerHTML = "";
+    
+    // Logica di formattazione (Grassetto, Corsivo, Accordi)
+    txt.split("\n").forEach(l => {
+        let formattedLine = l.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+                             .replace(/__(.*?)__/g, '<i>$1</i>');
+        
+        // Evidenzia accordi
+        let pl = formattedLine.replace(/\[(.*?)\]/g, (m, p1) => 
+            `<span class="chord-span" style="color: #ff85c0; font-weight:bold;">${normalizeChord(p1)}</span>`
+        );
+        div.innerHTML += `<div>${pl || '&nbsp;'}</div>`;
+    });
+};
+
+// 3. SALVA E APPROVA (Crea canzone e cancella proposta)
+window.saveAndApproveProposal = async () => {
+    if (!currentReviewId) return;
+
+    const t = document.getElementById("reviewTitle").value.trim();
+    if (!t) return showToast("Il titolo è obbligatorio", "warning");
+
+    // Dati presi dall'editor (potenzialmente modificati dall'admin)
+    const finalData = {
+        title: t,
+        author: document.getElementById("reviewAuthor").value.trim(),
+        category: document.getElementById("reviewCategory").value,
+        year: document.getElementById("reviewYear").value,
+        description: document.getElementById("reviewDesc").value.trim(),
+        lyrics: document.getElementById("reviewLyrics").value,
+        // Rigenera l'array degli accordi basandosi sul testo MODIFICATO
+        chords: window.extractChords(document.getElementById("reviewLyrics").value),
+        added: true,
+        createdAt: Date.now()
+    };
+
+    document.getElementById("loadingOverlay").style.display = "flex";
+    mReviewProposal.hide();
+
+    try {
+        // Aggiungi alla raccolta "songs"
+        const r = await addDoc(collection(db, "songs"), finalData);
+        allSongs.push({ id: r.id, ...finalData });
+
+        // Cancella dalla raccolta "proposals"
+        await deleteDoc(doc(db, "proposals", currentReviewId));
+        
+        // Aggiorna lista locale
+        allProposals = allProposals.filter(p => p.id !== currentReviewId);
+        
+        showToast("Proposta approvata e pubblicata!", "success");
+        
+        // Ricarica la vista proposte
+        window.openProposalsView();
+        window.loadData(); // Ricarica tutto per sicurezza
+        
+    } catch (e) {
+        console.error(e);
+        showToast("Errore durante l'approvazione: " + e.message, "danger");
+        // Se fallisce, riapri il modale per non perdere le modifiche
+        mReviewProposal.show();
+    } finally {
+        document.getElementById("loadingOverlay").style.display = "none";
+    }
 };
 
