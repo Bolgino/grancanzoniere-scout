@@ -107,7 +107,7 @@
                 </button>
         
                 <button class="btn btn-outline-light text-start py-3 px-3 w-100 d-flex align-items-center rounded-3 border-secondary guest-only" 
-                        onclick="window.showAddModal(); document.querySelector('.btn-close').click()">
+                        onclick="window.openProposeView(); document.querySelector('.btn-close').click()">
                     <i class="bi bi-plus-lg fs-4 me-3"></i> 
                     <span class="fs-5">Proponi Canzone</span>
                 </button>
@@ -269,17 +269,22 @@
             <div id="setlistsContainer" class="list-group shadow-sm mb-4"></div>
 
             <div id="activeSetlistDetail" style="display:none;" class="card shadow-sm border-0">
-                <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h5 class="m-0 fw-bold text-primary" id="activeSetlistTitle">Titolo Scaletta</h5>
-                        <div>
-                            <button class="btn btn-outline-danger btn-sm setlist-controls" onclick="window.deleteActiveSetlist()"><i class="bi bi-trash"></i></button>
-                            <button class="btn btn-success btn-sm ms-1" onclick="window.openSetlistExportModal()"><i class="bi bi-file-pdf"></i> Stampa A5</button>
+                <div class="card-header bg-dark border-bottom border-secondary">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="m-0 fw-bold text-primary text-truncate" id="activeSetlistTitle" style="max-width: 60%;">Titolo Scaletta</h5>
+                        
+                        <div class="d-flex gap-2 setlist-controls">
+                            <button class="btn btn-outline-danger btn-sm d-flex align-items-center" onclick="window.deleteActiveSetlist()">
+                                <i class="bi bi-trash me-1"></i> Elimina
+                            </button>
+                            <button class="btn btn-success btn-sm d-flex align-items-center" onclick="window.openSetlistExportModal()">
+                                <i class="bi bi-printer me-1"></i> PDF
+                            </button>
                         </div>
                     </div>
                     
-                    <div class="bg-light p-2 rounded mb-2 setlist-controls">
-                        <button class="btn btn-outline-primary btn-sm w-100" onclick="window.openSearchForSetlistModal()">
+                    <div class="bg-secondary bg-opacity-25 p-2 rounded mb-0 setlist-controls">
+                        <button class="btn btn-light w-100 fw-bold text-dark" onclick="window.openSearchForSetlistModal()">
                             <i class="bi bi-search"></i> Aggiungi Canzone
                         </button>
                     </div>
@@ -292,6 +297,58 @@
             </div>
         </div>
 
+        <div id="view-propose" class="view-screen">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <button class="btn btn-outline-secondary btn-sm" onclick="window.goHome()">
+                    <i class="bi bi-arrow-left"></i> Annulla
+                </button>
+                <h4 class="fw-bold m-0 text-white">Nuova Proposta</h4>
+                <button class="btn btn-primary btn-sm fw-bold" onclick="window.handleSongSubmission()">
+                    Invia <i class="bi bi-send-fill ms-1"></i>
+                </button>
+            </div>
+
+            <div class="row g-3 h-100">
+                <div class="col-lg-5 col-md-6 d-flex flex-column gap-2" style="max-height: 80vh; overflow-y: auto;">
+                    <div class="card bg-dark border-secondary p-3">
+                        <h6 class="text-muted mb-3">Dati Canzone</h6>
+                        <input type="text" id="propTitle" class="form-control mb-2" placeholder="Titolo (Obbligatorio)">
+                        <input type="text" id="propAuthor" class="form-control mb-2" placeholder="Autore">
+                        <select id="propCategory" class="form-select mb-2"></select>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <input type="number" id="propYear" class="form-control" placeholder="Anno">
+                            </div>
+                            <div class="col-6">
+                                <input type="text" id="propUser" class="form-control" placeholder="Il tuo nome *">
+                            </div>
+                        </div>
+                        <input type="text" id="propDesc" class="form-control mt-2" placeholder="Nota (es. Lento)">
+                    </div>
+
+                    <div class="card bg-dark border-secondary p-3 flex-grow-1">
+                        <h6 class="text-muted mb-2">Testo e Accordi</h6>
+                        <small class="text-muted d-block mb-2" style="font-size: 0.8rem;">Usa il formato [Do] per gli accordi.</small>
+                        <textarea id="propLyrics" class="form-control font-monospace border-0" 
+                                  style="flex-grow: 1; min-height: 300px; resize: none; background: #222; color: #fff;" 
+                                  placeholder="[Do] Scrivi qui il testo..." 
+                                  oninput="window.renderProposePreview()"></textarea>
+                    </div>
+                </div>
+
+                <div class="col-lg-7 col-md-6">
+                    <div class="card bg-dark border-secondary h-100">
+                        <div class="card-header border-bottom border-secondary d-flex justify-content-between">
+                            <span class="text-white">Anteprima</span>
+                            <span class="badge bg-secondary">Come apparirà</span>
+                        </div>
+                        <div class="card-body p-0" style="background: #121212; overflow: hidden;">
+                            <div id="propPreviewArea" class="preview-area h-100 overflow-auto p-3" style="font-size: 16px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div id="view-list" class="view-screen">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <button class="btn btn-outline-secondary btn-sm" onclick="window.goHome()"><i class="bi bi-arrow-left"></i> Sezioni</button>
@@ -623,3 +680,4 @@
     </script>
 </body>
 </html>
+
