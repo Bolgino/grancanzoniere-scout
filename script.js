@@ -2025,72 +2025,138 @@ window.toggleExportSection = (index) => {
 // script.js - Aggiungi in fondo
 
 window.showFormatPreview = (type) => {
-    const c = document.getElementById("formatPreviewContainer");
-    if(!c) return;
+    const container = document.getElementById("formatPreviewContainer");
+    const img = document.getElementById("exportPreviewImg");
+    const ph = document.getElementById("exportPreviewPlaceholder");
+    const headerTitle = document.getElementById("previewHeaderTitle");
+    
+    // 1. Nascondi le copertine attuali
+    if (img) img.style.display = "none";
+    if (ph) ph.style.display = "none";
+    
+    // 2. Mostra il contenitore anteprima formati
+    if (container) {
+        container.classList.remove("d-none");
+        container.classList.add("d-flex");
+    }
+
+    // 3. Aggiorna il titolo del pannello
+    if (headerTitle) headerTitle.innerText = "Anteprima " + type.toUpperCase();
 
     let html = "";
 
+    // --- ANTEPRIMA PDF (Reattiva alle impostazioni) ---
     if (type === 'pdf') {
-        // Simula una pagina A5 con testo e accordi
+        const isTwoCols = document.getElementById("pdfTwoColumns").checked;
+        const showChords = document.getElementById("pdfShowChords").checked;
+
+        // Simulazione stili
+        const chordStyle = showChords ? 'color:#dc3545; font-weight:bold;' : 'display:none;';
+        const colClass = isTwoCols ? 'col-6 border-end' : 'col-12';
+        
+        // Contenuto finto di una canzone
+        const songContent = `
+            <div class="mb-1 fw-bold text-primary" style="font-size:7px;">ALBACHIARA</div>
+            <div class="mb-2 fst-italic text-muted" style="font-size:5px;">Vasco (1979)</div>
+            <div style="font-size:5px; line-height:1.4;">
+                <div><span style="${chordStyle}">[Do]</span> Respiri piano per non far rumore</div>
+                <div><span style="${chordStyle}">[Sol]</span> Ti addormenti di sera</div>
+                <div><span style="${chordStyle}">[Lam]</span> Ti risvegli col sole</div>
+                <div class="mt-1"><span style="${chordStyle}">[Fa]</span> Sei chiara come un'alba</div>
+                <div><span style="${chordStyle}">[Do]</span> Sei fresca come l'aria</div>
+            </div>
+        `;
+
         html = `
-        <div class="bg-white text-dark p-2 shadow-sm" style="width: 100px; height: 140px; font-size: 4px; overflow:hidden; border-radius: 2px;">
-            <div class="fw-bold text-center mb-1" style="color:#003366; font-size:6px;">TITOLO CANZONE</div>
-            <div class="text-end fst-italic mb-1" style="color:#666;">Autore (2023)</div>
-            <hr class="m-0 mb-1">
-            <div class="mb-1"><span class="text-danger fw-bold">[Do]</span> La la la la</div>
-            <div class="mb-1"><span class="text-danger fw-bold">[Sol]</span> Cantiamo insieme</div>
-            <div class="mb-1">Senza accordi qui</div>
-            <div class="mb-1"><span class="text-danger fw-bold">[Lam]</span> Ancora testo...</div>
-            <div style="margin-top:20px; font-size: 8px; text-align:center; color: #ddd;">A5</div>
+        <div class="bg-white text-dark shadow-sm position-relative overflow-hidden" style="width: 200px; height: 280px; font-size: 5px; border-radius: 2px;">
+            <div class="position-absolute top-0 start-0 w-100 border-bottom d-flex justify-content-between px-2 py-1 bg-light" style="font-size:4px;">
+                <span>Canzoniere Scout</span>
+                <span>Pag. 12</span>
+            </div>
+            
+            <div class="row g-0 p-3 mt-2 h-100">
+                <div class="${colClass} p-1">
+                    ${songContent}
+                    <div class="mt-3">
+                        <div class="mb-1 fw-bold text-primary" style="font-size:7px;">AZZURRO</div>
+                        <div class="mb-1 fst-italic text-muted" style="font-size:5px;">Celentano</div>
+                        <div style="font-size:5px;">Cerco l'estate tutto l'anno...</div>
+                    </div>
+                </div>
+                ${isTwoCols ? `
+                <div class="col-6 p-1 ps-2">
+                    <div class="mb-1 fw-bold text-primary" style="font-size:7px;">CERTE NOTTI</div>
+                    <div style="font-size:5px;">
+                        <div><span style="${chordStyle}">[Mi]</span> Certe notti la macchina...</div>
+                        <div><span style="${chordStyle}">[La]</span> è calda...</div>
+                    </div>
+                </div>` : ''}
+            </div>
+            
+            <div class="position-absolute bottom-0 end-0 bg-danger text-white px-2 py-1 fw-bold" style="font-size:8px; border-top-left-radius:4px;">
+                PDF ${isTwoCols ? '2 Col' : '1 Col'}
+            </div>
         </div>`;
     } 
+    
+    // --- ANTEPRIMA EXCEL ---
     else if (type === 'excel') {
-        // Simula una griglia Excel
         html = `
-        <div class="bg-white text-dark shadow-sm" style="width: 120px; height: 100px; font-size: 5px; overflow:hidden; border-radius: 2px; border:1px solid #ccc;">
-            <div class="d-flex bg-success text-white fw-bold border-bottom border-secondary">
-                <div class="border-end border-light px-1 w-25">Titolo</div>
-                <div class="border-end border-light px-1 w-25">Autore</div>
-                <div class="px-1 w-25">Anno</div>
+        <div class="bg-white text-dark shadow-sm overflow-hidden border" style="width: 220px; height: 150px; font-size: 6px; border-radius: 4px;">
+            <div class="bg-success text-white p-1 fw-bold d-flex align-items-center"><i class="bi bi-file-spreadsheet me-1"></i> Excel Export</div>
+            <div class="d-flex bg-light border-bottom fw-bold" style="color:#000;">
+                <div class="border-end px-1 w-25">A</div>
+                <div class="border-end px-1 w-25">B</div>
+                <div class="border-end px-1 w-25">C</div>
+                <div class="px-1 w-25">D</div>
             </div>
-            <div class="d-flex border-bottom border-light">
+            <div class="d-flex border-bottom" style="background:#e8f5e9;">
+                <div class="border-end px-1 w-25 fw-bold">Titolo</div>
+                <div class="border-end px-1 w-25 fw-bold">Autore</div>
+                <div class="border-end px-1 w-25 fw-bold">Anno</div>
+                <div class="px-1 w-25 fw-bold">Sezione</div>
+            </div>
+            <div class="d-flex border-bottom">
                 <div class="border-end px-1 w-25">Albachiara</div>
                 <div class="border-end px-1 w-25">Vasco</div>
-                <div class="px-1 w-25">1979</div>
+                <div class="border-end px-1 w-25">1979</div>
+                <div class="px-1 w-25">Fuoco</div>
             </div>
-            <div class="d-flex border-bottom border-light bg-light">
-                <div class="border-end px-1 w-25">Certe Notti</div>
-                <div class="border-end px-1 w-25">Ligabue</div>
-                <div class="px-1 w-25">1995</div>
-            </div>
-             <div class="d-flex border-bottom border-light">
+            <div class="d-flex border-bottom">
                 <div class="border-end px-1 w-25">Azzurro</div>
                 <div class="border-end px-1 w-25">Celentano</div>
-                <div class="px-1 w-25">1968</div>
+                <div class="border-end px-1 w-25">1968</div>
+                <div class="px-1 w-25">Vari</div>
             </div>
         </div>`;
     }
+    
+    // --- ANTEPRIMA TXT ---
     else if (type === 'txt') {
-        // Simula un blocco note semplice
         html = `
-        <div class="bg-white text-dark p-2 shadow-sm border" style="width: 110px; height: 120px; font-size: 5px; font-family: monospace; overflow:hidden;">
-            LISTA CANZONI<br><br>
+        <div class="bg-dark text-white shadow-sm p-2 border border-secondary font-monospace" style="width: 200px; height: 160px; font-size: 6px; border-radius: 4px;">
+            <div class="border-bottom border-secondary pb-1 mb-1 text-muted">Lista_Canzoni.txt</div>
+            LISTA CANZONI - GRAN CANZONIERE<br><br>
             1. Albachiara (Vasco)<br>
-            - Cat: Fuoco<br><br>
+            &nbsp;&nbsp;&nbsp;- Cat: Fuoco<br><br>
             2. Azzurro (Celentano)<br>
-            - Cat: Vari<br><br>
-            3. Certe Notti (Liga)<br>
-            - Cat: Fuoco
+            &nbsp;&nbsp;&nbsp;- Cat: Vari<br><br>
+            3. Certe Notti (Ligabue)<br>
+            &nbsp;&nbsp;&nbsp;- Cat: Strada
         </div>`;
     }
+    
+    // --- ANTEPRIMA LATEX ---
     else if (type === 'latex') {
-        // Simula codice scuro
         html = `
-        <div class="bg-dark text-warning p-2 shadow-sm border border-secondary" style="width: 110px; height: 120px; font-size: 4px; font-family: monospace; overflow:hidden;">
+        <div class="bg-dark text-warning p-2 shadow-sm border border-secondary font-monospace" style="width: 200px; height: 160px; font-size: 5px; border-radius: 4px; overflow:hidden;">
+            <div class="text-white-50 border-bottom border-secondary pb-1 mb-1">Source Code (.tex)</div>
             <span class="text-info">\\documentclass</span>{article}<br>
             <span class="text-info">\\usepackage</span>{songs}<br>
             <span class="text-info">\\begin</span>{document}<br><br>
-            <span class="text-info">\\beginsong</span>{Albachiara}<br>
+            <span class="text-secondary">% Inizio Canzoniere</span><br>
+            <span class="text-info">\\section</span>{Fuoco di Bivacco}<br><br>
+            <span class="text-info">\\beginsong</span>{Albachiara}[by={Vasco}]<br>
             <span class="text-info">\\beginverse</span><br>
             \\[C] Respire piano...<br>
             <span class="text-info">\\endverse</span><br>
@@ -2098,33 +2164,36 @@ window.showFormatPreview = (type) => {
         </div>`;
     }
 
-    c.innerHTML = html;
+    container.innerHTML = html;
 };
-
 window.resetFormatPreview = () => {
+    const container = document.getElementById("formatPreviewContainer");
     const img = document.getElementById("exportPreviewImg");
     const ph = document.getElementById("exportPreviewPlaceholder");
-    const container = document.getElementById("formatPreviewContainer");
+    const headerTitle = document.getElementById("previewHeaderTitle");
     const label = document.getElementById("exportPreviewLabel");
-    
-    // Nascondi il container dei formati (testo/excel/pdf)
+
+    // 1. Nascondi il contenitore dei formati
     if(container) {
         container.classList.add("d-none");
         container.classList.remove("d-flex");
         container.innerHTML = "";
     }
 
-    // Se c'era un'immagine caricata precedentemente (es. copertina generale), mostrala
-    if (img && img.src && img.src !== window.location.href && img.src !== "") {
+    // 2. Ripristina il titolo
+    if(headerTitle) headerTitle.innerText = "Anteprima Copertina";
+
+    // 3. Logica intelligente per ripristinare l'immagine giusta
+    // Se c'è un'immagine caricata nel tag img (che non sia vuota o l'url della pagina), mostrala
+    if (img && img.src && img.src !== window.location.href && img.style.backgroundImage !== 'none' && img.getAttribute('src') !== "") {
         img.style.display = "block";
-        if(label) label.innerText = "Copertina Selezionata";
+        if(ph) ph.style.display = "none";
     } else {
         // Altrimenti mostra il placeholder generico
+        if(img) img.style.display = "none";
         if(ph) ph.style.display = "block";
-        if(label) label.innerText = "Anteprima Copertina";
     }
 };
-
 
 // --- PATCH GESTIONE ANTEPRIMA ---
 // Sovrascriviamo updateExportPreview per gestire la visibilità del nuovo contenitore formati
@@ -2145,5 +2214,6 @@ window.updateExportPreview = async (type, inputOrUrl, labelText) => {
     
     if(title) title.innerText = "Anteprima Copertina";
 };
+
 
 
