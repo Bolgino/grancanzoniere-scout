@@ -481,3 +481,20 @@ body.is-owner .setlist-item-controls,
 body.user-admin .setlist-item-controls { 
     display: inline-flex !important; 
 }
+/* style.css */
+
+/* Effetto hover sui pulsanti di export */
+.export-btn:hover {
+    transform: translateX(5px);
+    transition: transform 0.2s ease;
+}
+
+/* Transizione fluida per l'anteprima */
+#formatPreviewContainer > div {
+    animation: fadeInPreview 0.3s ease-out;
+}
+
+@keyframes fadeInPreview {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+}
