@@ -53,8 +53,8 @@ let mDuplicateWarning; // Variabile per il modale
 let pendingMergeData = null; // Dove salviamo i dati in attesa di conferma
 // Loader phrases
 const loaderPhrases = [
-    "Allineo gli astri...", "Accordo la chitarra...", "Scaldo le corde vocali...",
-    "Cerco il Nord...", "Preparo il fuoco...", "Consulto la mappa..."
+    "Osservo gli astri...", "Accordo la chitarra...", "Scaldo le corde vocali...",
+    "Cerco il Nord...", "Preparo il fuoco...", "Consulto la mappa..." , "Raccolgo la legna...", "Cerco il capotasto..."
 ];
 let loaderInterval;
 
@@ -87,17 +87,31 @@ window.addEventListener('load', () => {
 function startLoaderAnimation() {
     const textEl = document.getElementById('loaderText');
     if(!textEl) return;
-    let i = 0;
+    
+    // Funzione helper per ottenere un indice casuale
+    const getRandomIndex = () => Math.floor(Math.random() * loaderPhrases.length);
+    
+    // Inizializza con un indice casuale
+    let currentIndex = getRandomIndex();
+
     const changeText = () => {
         textEl.style.opacity = 0; 
         setTimeout(() => {
-            textEl.innerText = loaderPhrases[i];
+            // Sceglie un nuovo indice casuale diverso dal precedente
+            let nextIndex;
+            do {
+                nextIndex = getRandomIndex();
+            } while (nextIndex === currentIndex && loaderPhrases.length > 1);
+            
+            currentIndex = nextIndex;
+            textEl.innerText = loaderPhrases[currentIndex];
             textEl.style.opacity = 1; 
-            i = (i + 1) % loaderPhrases.length;
         }, 200); 
     };
-    textEl.innerText = loaderPhrases[0];
-    i = 1;
+
+    // Imposta subito la prima frase casuale (dopo "Inizializzazione...")
+    textEl.innerText = loaderPhrases[currentIndex];
+    
     loaderInterval = setInterval(changeText, 1500);
 }
 
@@ -2524,6 +2538,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
