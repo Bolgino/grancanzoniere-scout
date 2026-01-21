@@ -182,7 +182,7 @@
             </div>
         </div>
 
-        <div id="view-export" class="view-screen">
+       <div id="view-export" class="view-screen">
             <div class="d-flex justify-content-between align-items-center mb-3 border-bottom border-secondary pb-3">
                 <button class="btn btn-outline-secondary btn-sm" onclick="window.goHome()">
                     <i class="bi bi-arrow-left"></i> Home
@@ -216,7 +216,7 @@
                         <div class="accordion-item bg-dark border-secondary">
                             <h2 class="accordion-header">
                                 <button class="accordion-button bg-dark text-white shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne">
-                                    <i class="bi bi-sliders me-2 text-warning"></i> Configurazione Generale
+                                    <i class="bi bi-sliders me-2 text-warning"></i> Configurazione Layout
                                 </button>
                             </h2>
                             <div id="collapseOne" class="accordion-collapse collapse show" data-bs-parent="#exportAccordion">
@@ -238,11 +238,6 @@
                                             <label class="form-label text-white-50 small">Copertina Generale del Canzoniere</label>
                                             <input class="form-control bg-secondary text-white border-0 form-control-sm" type="file" id="globalCoverInput" accept="image/*" onchange="window.updateExportPreview('global', this)">
                                         </div>
-                                        <div class="col-12 pt-2">
-                                            <button class="btn btn-success w-100 fw-bold py-2" onclick="window.generateFullPDF()">
-                                                <i class="bi bi-file-earmark-pdf-fill"></i> GENERATE PDF COMPLETO
-                                            </button>
-                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -257,7 +252,7 @@
                             <div id="collapseTwo" class="accordion-collapse collapse" data-bs-parent="#exportAccordion">
                                 <div class="accordion-body border-top border-secondary p-2">
                                     <p class="small text-muted mb-2 px-1">
-                                        Trascina o usa le frecce per ordinare. Carica una copertina personalizzata per la stampa (altrimenti userà quella dell'app).
+                                        Trascina o usa le frecce per ordinare. Carica una copertina personalizzata per la stampa.
                                     </p>
                                     <div id="sectionOrderListExport" class="list-group list-group-flush"></div>
                                 </div>
@@ -267,18 +262,31 @@
                         <div class="accordion-item bg-dark border-secondary">
                             <h2 class="accordion-header">
                                 <button class="accordion-button collapsed bg-dark text-white shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree">
-                                    <i class="bi bi-code-square me-2 text-secondary"></i> Altri Formati
+                                    <i class="bi bi-printer-fill me-2 text-success"></i> Esportazione e Stampa
                                 </button>
                             </h2>
                             <div id="collapseThree" class="accordion-collapse collapse" data-bs-parent="#exportAccordion">
                                 <div class="accordion-body border-top border-secondary">
-                                    <div class="d-grid gap-2">
-                                        <button class="btn btn-outline-light text-start" onclick="window.generateFullTxtList()">
-                                            <i class="bi bi-file-text me-2"></i> Scarica Lista TXT
+                                    <div class="d-grid gap-3">
+                                        
+                                        <button class="btn btn-success fw-bold py-2 text-start" onclick="window.generateFullPDF()">
+                                            <i class="bi bi-file-earmark-pdf-fill me-2"></i> Stampa Canzoniere (PDF A5)
+                                            <div class="small fw-normal opacity-75 ms-4">Genera il file completo pronto per la stampa libretto.</div>
                                         </button>
-                                        <button class="btn btn-outline-light text-start" onclick="window.generateFullLatex()">
-                                            <i class="bi bi-file-code me-2"></i> Scarica Sorgente LaTeX
-                                        </button>
+        
+                                        <div class="row g-2">
+                                            <div class="col-6">
+                                                <button class="btn btn-outline-light w-100 text-start" onclick="window.generateFullTxtList()">
+                                                    <i class="bi bi-file-text me-2"></i> Lista TXT
+                                                </button>
+                                            </div>
+                                            <div class="col-6">
+                                                <button class="btn btn-outline-light w-100 text-start" onclick="window.generateFullLatex()">
+                                                    <i class="bi bi-file-code me-2"></i> Sorgente LaTeX
+                                                </button>
+                                            </div>
+                                        </div>
+        
                                     </div>
                                 </div>
                             </div>
@@ -825,6 +833,7 @@
     </script>
 </body>
 </html>
+
 
 
 
