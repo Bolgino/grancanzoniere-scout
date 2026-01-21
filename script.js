@@ -2125,17 +2125,16 @@ window.resetFormatPreview = () => {
     }
 };
 
-// --- PATCH FINALE PER GESTIONE ANTEPRIMA (Incolla alla fine di script.js) ---
 
-// Salviamo la funzione originale che hai già definito sopra
-const originalUpdateExportPreview = window.updateExportPreview;
+// --- PATCH GESTIONE ANTEPRIMA ---
+// Sovrascriviamo updateExportPreview per gestire la visibilità del nuovo contenitore formati
+const _originalUpdateExportPreview = window.updateExportPreview;
 
-// La ridefiniamo per aggiungere la logica di nascondere i formati testuali
 window.updateExportPreview = async (type, inputOrUrl, labelText) => {
-    // 1. Esegui la logica originale (carica immagine, aggiorna variabili)
-    await originalUpdateExportPreview(type, inputOrUrl, labelText);
+    // Chiama la logica originale per caricare l'immagine
+    await _originalUpdateExportPreview(type, inputOrUrl, labelText);
     
-    // 2. Assicura che il contenitore dei formati (PDF/Excel) sia nascosto e mostri l'immagine
+    // Assicura che il contenitore dei formati (PDF/Excel) sia nascosto
     const container = document.getElementById("formatPreviewContainer");
     const title = document.getElementById("previewHeaderTitle");
     
