@@ -90,53 +90,37 @@ function startLoaderAnimation() {
     const textEl = document.getElementById('loaderText');
     if(!textEl) return;
     
+    // Assicura che il cursore lampeggiante ci sia sempre
     textEl.classList.add('typing-cursor');
 
-    // Inizia sempre con "Inizializzazione..." al primo avvio per coerenza
-    let phraseIndex = isFirstLoad ? -1 : Math.floor(Math.random() * loaderPhrases.length);
-    let currentPhrase = phraseIndex === -1 ? "Inizializzazione..." : loaderPhrases[phraseIndex];
-    
-    let charIndex = 0;
-    let isDeleting = false;
+    // Pulisce eventuali animazioni precedenti
+    if(loaderInterval) clearTimeout(loaderInterval);
 
-    const typeEffect = () => {
-        // Aggiorna il testo
-        if (isDeleting) {
-            textEl.innerText = currentPhrase.substring(0, charIndex - 1);
-            charIndex--;
-        } else {
+    if (isFirstLoad) {
+        // --- PRIMO AVVIO: ANIMAZIONE SCRITTURA ---
+        const currentPhrase = "Inizializzazione...";
+        let charIndex = 0;
+        
+        const typeEffect = () => {
             textEl.innerText = currentPhrase.substring(0, charIndex + 1);
             charIndex++;
-        }
 
-        // --- CONFIGURAZIONE VELOCITÀ (MODIFICATA) ---
-        let typeSpeed = 10; // BASE: Scrittura ISTANTANEA (era 20)
+            if (charIndex <= currentPhrase.length) {
+                // Scrive veloce (30ms)
+                loaderInterval = setTimeout(typeEffect, 30);
+            }
+            // Quando finisce si ferma e basta, aspetta loadData
+        };
+        typeEffect();
 
-        if (isDeleting) {
-            typeSpeed = 5; // Cancellazione fulminea
-        }
-
-        // Logica di pausa e cambio frase
-        if (!isDeleting && charIndex === currentPhrase.length) {
-            // FRASE COMPLETATA
-            typeSpeed = 2000; 
-            isDeleting = true; 
-        } else if (isDeleting && charIndex === 0) {
-            isDeleting = false;
-            phraseIndex = Math.floor(Math.random() * loaderPhrases.length);
-            currentPhrase = loaderPhrases[phraseIndex];
-            typeSpeed = 300; 
-        }
-
-        // Variazione casuale ridotta
-        if (!isDeleting && charIndex !== currentPhrase.length) {
-            typeSpeed += Math.random() * 10; 
-        }
-
-        loaderInterval = setTimeout(typeEffect, typeSpeed);
-    };
-
-    typeEffect();
+    } else {
+        // --- CARICAMENTI SUCCESSIVI: TESTO FISSO IMMEDIATO ---
+        // Prende una frase a caso
+        const r = Math.floor(Math.random() * loaderPhrases.length);
+        // La mostra subito tutta intera
+        textEl.innerText = loaderPhrases[r];
+        // Nessun intervallo, il testo è già lì pronto da leggere
+    }
 }
 // AVVIO PERSISTENZA E DATI
 enableIndexedDbPersistence(db)
@@ -228,26 +212,24 @@ async function loadData() {
         console.error("Errore caricamento:", e);
         window.showToast("Errore caricamento: " + e.message, 'danger');
     } finally {
-        // --- MODIFICA QUI PER IL TEMPO DI LETTURA ---
+        // --- GESTIONE CHIUSURA LOADER ---
         const loader = document.getElementById("loadingOverlay");
         
         if (loader) {
             if (isFirstLoad) {
-                // PRIMO AVVIO: 2.5 secondi
+                // PRIMO AVVIO: Aspetta 2 secondi per far vedere "Inizializzazione..."
                 setTimeout(() => {
                     loader.style.display = "none";
                     if(loaderInterval) clearTimeout(loaderInterval);
-                    isFirstLoad = false; 
-                }, 2500); 
+                    isFirstLoad = false; // Le prossime volte sarà istantaneo
+                }, 2000); 
             } else {
                 // CARICAMENTI SUCCESSIVI:
-                // Aumentato a 1.5 secondi (1500ms).
-                // È il tempo minimo necessario per vedere l'animazione completa
-                // prima che la schermata sparisca.
+                // Velocissimo (300ms), giusto per fluidità
                 setTimeout(() => {
                     loader.style.display = "none";
                     if(loaderInterval) clearTimeout(loaderInterval);
-                }, 1500); 
+                }, 300); 
             }
         }
     }
@@ -2579,6 +2561,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
