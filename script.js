@@ -155,7 +155,18 @@ async function loadData() {
         const countEl = document.getElementById("totalSongsCount");
         if(countEl) countEl.innerText = allSongs.length;
 
-        allSections.sort((a,b) => a.name.localeCompare(b.name));
+        allSections.sort((a, b) => {
+            // Se order non esiste, mettilo in fondo (9999)
+            const orderA = (a.order !== undefined && a.order !== null) ? a.order : 9999;
+            const orderB = (b.order !== undefined && b.order !== null) ? b.order : 9999;
+        
+            // Se l'ordine è diverso, usa quello
+            if (orderA !== orderB) {
+                return orderA - orderB;
+            }
+            // Altrimenti (se hanno lo stesso ordine o nessuno dei due lo ha), usa l'alfabetico
+            return a.name.localeCompare(b.name);
+        });
         sectionOrder = allSections.map(s => s.name); 
 
         // --- INIZIO MODIFICA: BLOCCO IF AGGIORNATO ---
@@ -641,7 +652,7 @@ window.performLogin = async () => {
 };
 
 window.logout=async()=>{await signOut(auth);window.location.reload();};
-window.showAddSectionModal=()=>{document.getElementById("newSectionName").value="";mAddSection.show();};
+window.openAddSectionModal=()=>{document.getElementById("newSectionName").value="";mAddSection.show();};
 window.createNewSection = async () => {
     const n = document.getElementById("newSectionName").value.trim();
     if (!n) return;
