@@ -799,14 +799,67 @@ window.renderSetlistsList = () => {
     allSetlists.forEach(sl => { c.innerHTML += `<button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onclick="window.openSetlistDetail('${sl.id}')"><div class="fw-bold"><i class="bi bi-folder2-open me-2 text-warning"></i>${sl.name}</div><span class="badge bg-secondary rounded-pill">${sl.songs.length}</span></button>`; });
 };
 // NUOVA FUNZIONE CREAZIONE SCALETTA (POPUP)
-window.createNewSetlistPrompt = () => { document.getElementById("newSetlistNameInput").value = ""; mCreateSetlist.show(); setTimeout(()=>document.getElementById("newSetlistNameInput").focus(),500); };
+window.confirmCreateSetlist = async () => {
+    const name = document.getElementById("newSetlistNameInput").value.trim();
+    if (!name) return showToast("Inserisci un nome", "warning");
+    
+    mCreateSetlist.hide(); 
+    document.getElementById("loadingOverlay").style.display = "flex";
+    
+    try { 
+        const docRef = await addDoc(collection(db, "setlists"), { 
+            name: name, 
+            songs: [], 
+            createdAt: Date.now() 
+        });
+        
+        // --- LOGICA PROPRIETARIO ---
+        // Salviamo l'ID della scaletta nel LocalStorage dell'utente
+        let mySetlists = JSON.parse(localStorage.getItem('mySetlists')) || [];
+        mySetlists.push(docRef.id);
+        localStorage.setItem('mySetlists', JSON.stringify(mySetlists));
+        // ---------------------------
+
+        await loadData(); 
+        showToast("Scaletta creata!", "success"); 
+    } catch(e) { 
+        showToast("Errore: " + e.message, 'danger'); 
+    } finally { 
+        document.getElementById("loadingOverlay").style.display = "none"; 
+    }
+};
 window.confirmCreateSetlist = async () => {
     const name = document.getElementById("newSetlistNameInput").value.trim();
     if (!name) return showToast("Inserisci un nome", "warning");
     mCreateSetlist.hide(); document.getElementById("loadingOverlay").style.display = "flex";
     try { await addDoc(collection(db, "setlists"), { name: name, songs: [], createdAt: Date.now() }); await loadData(); showToast("Scaletta creata!", "success"); } catch(e) { showToast("Errore: " + e.message, 'danger'); } finally { document.getElementById("loadingOverlay").style.display = "none"; }
 };
-window.openSetlistDetail = (id) => { currentSetlistId = id; const sl = allSetlists.find(s => s.id === id); if (!sl) return; document.getElementById('setlistsContainer').innerHTML = ""; document.getElementById('activeSetlistDetail').style.display = 'block'; document.getElementById('activeSetlistTitle').innerText = sl.name; window.renderActiveSetlistSongs(); };
+window.openSetlistDetail = (id) => {
+    currentSetlistId = id;
+    const sl = allSetlists.find(s => s.id === id);
+    if (!sl) return;
+
+    // --- CONTROLLO PERMESSI ---
+    const mySetlists = JSON.parse(localStorage.getItem('mySetlists')) || [];
+    const isOwner = mySetlists.includes(id);
+    
+    // Aggiungiamo una classe al body se l'utente è proprietario
+    if (isOwner) {
+        document.body.classList.add('is-owner');
+    } else {
+        document.body.classList.remove('is-owner');
+    }
+    
+    // Se NON è admin E NON è owner, nascondiamo i bottoni di modifica
+    // (Questo è gestito dal CSS che ti ho dato al punto 1)
+    
+    switchView('view-setlists'); // Assicuriamoci di essere nella vista giusta
+    document.getElementById('setlistsContainer').innerHTML = "";
+    document.getElementById('activeSetlistDetail').style.display = 'block';
+    document.getElementById('activeSetlistTitle').innerText = sl.name;
+    
+    window.renderActiveSetlistSongs();
+};
 window.renderActiveSetlistSongs = () => {
     const sl = allSetlists.find(s => s.id === currentSetlistId); if(!sl) return; const c = document.getElementById("setlistSongsContainer"); c.innerHTML = "";
     if(sl.songs.length === 0) { document.getElementById('emptySetlistMsg').style.display = 'block'; return; }
@@ -1316,6 +1369,26 @@ window.createNewSection = async () => {
         showToast("Errore: " + e.message, "danger");
     } finally {
         if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display = "none";
+    }
+};
+window.openExportView = () => {
+    switchView('view-export');
+    
+    // Popola la lista per l'ordinamento sezioni (preso dal vecchio modal)
+    const list = document.getElementById("sectionOrderList"); 
+    if(list) {
+        list.innerHTML = "";
+        sectionOrder = allSections.map(s => s.name);
+        sectionOrder.forEach((name, idx) => {
+            list.innerHTML += `
+            <div class="d-flex justify-content-between align-items-center bg-secondary bg-opacity-25 p-2 mb-1 rounded">
+                <span class="text-white small">${name}</span>
+                <div>
+                    <button class="btn btn-sm btn-link text-white py-0" onclick="window.moveSection(${idx},-1)">⬆</button>
+                    <button class="btn btn-sm btn-link text-white py-0" onclick="window.moveSection(${idx},1)">⬇</button>
+                </div>
+            </div>`;
+        });
     }
 };
 
