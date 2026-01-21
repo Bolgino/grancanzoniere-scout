@@ -1536,36 +1536,41 @@ window.toggleAutoScroll = () => {
             btn.innerHTML = '<i class="bi bi-mouse3"></i>';
         }
 
-        // Rimuovi listener dalla finestra (non solo dall'area)
+        // Rimuovi listener
         window.removeEventListener('mousedown', setInteractingTrue);
         window.removeEventListener('mouseup', setInteractingFalse);
         window.removeEventListener('touchstart', setInteractingTrue);
         window.removeEventListener('touchend', setInteractingFalse);
     } else {
         // --- START SCROLL ---
+        
+        // 1. Reset importante: assicuriamoci che non pensi che stiamo già toccando lo schermo
+        isUserInteracting = false;
+
         if(btn) {
             btn.classList.replace('btn-outline-success', 'btn-success');
             btn.innerHTML = '<i class="bi bi-pause-fill"></i>';
         }
 
-        // Aggiungi listener alla finestra intera
+        // Aggiungi listener
         window.addEventListener('mousedown', setInteractingTrue);
         window.addEventListener('mouseup', setInteractingFalse);
         window.addEventListener('touchstart', setInteractingTrue, {passive: true});
         window.addEventListener('touchend', setInteractingFalse);
 
         autoScrollInterval = setInterval(() => {
-            if (isUserInteracting) return; // Pausa se l'utente tocca lo schermo
+            if (isUserInteracting) return; // Pausa momentanea se l'utente tocca
             
-            // Logica fine pagina (riferita alla finestra intera)
-            if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 5) {
-                window.toggleAutoScroll(); // Ferma tutto quando arriva in fondo
+            // 2. Calcolo corretto della fine pagina usando scrollHeight
+            // Se la posizione attuale + altezza finestra >= altezza totale documento
+            if ((window.innerHeight + window.scrollY) >= document.body.scrollHeight - 2) {
+                window.toggleAutoScroll(); // Stop quando arriva in fondo
                 return;
             }
             
-            // Scorri la finestra di 1 pixel
+            // Scorri di 1 pixel
             window.scrollBy(0, 1); 
-        }, 40); // Velocità (puoi abbassare a 30 per più veloce o alzare a 60 per più lento)
+        }, 40); // Velocità dello scroll (più alto = più lento)
     }
 };
 window.handleSetlistBack = () => { const detail = document.getElementById('activeSetlistDetail'); if (detail.style.display === 'block') { detail.style.display = 'none'; currentSetlistId = null; window.renderSetlistsList(); } else { window.goHome(); } };
@@ -2540,6 +2545,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
