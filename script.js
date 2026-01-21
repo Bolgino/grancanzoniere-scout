@@ -1440,8 +1440,22 @@ window.openExportView = () => {
     }
 };
 
-
-
-
-
-
+window.createNewSetlistPrompt = () => {
+    // Pulisce l'input
+    const inp = document.getElementById("newSetlistNameInput");
+    if(inp) inp.value = "";
+    
+    // Apre il modale (se inizializzato correttamente)
+    if (mCreateSetlist) {
+        mCreateSetlist.show();
+    } else {
+        // Fallback di sicurezza se il modale non è stato caricato per errori precedenti
+        const el = document.getElementById('createSetlistModal');
+        if(el) {
+            mCreateSetlist = new bootstrap.Modal(el);
+            mCreateSetlist.show();
+        } else {
+            console.error("Modale createSetlistModal non trovato nell'HTML");
+        }
+    }
+};
