@@ -90,36 +90,63 @@ function startLoaderAnimation() {
     const textEl = document.getElementById('loaderText');
     if(!textEl) return;
     
-    // Assicura che il cursore lampeggiante ci sia sempre
+    // Il cursore | lampeggiante c'è sempre (tramite CSS)
     textEl.classList.add('typing-cursor');
 
-    // Pulisce eventuali animazioni precedenti
+    // Ferma eventuali animazioni vecchie
     if(loaderInterval) clearTimeout(loaderInterval);
 
     if (isFirstLoad) {
-        // --- PRIMO AVVIO: ANIMAZIONE SCRITTURA ---
-        const currentPhrase = "Inizializzazione...";
+        // --- PRIMO AVVIO: SEQUENZA COMPLETA (Scrive -> Cancella -> Scrive) ---
+        
+        const phrase1 = "Inizializzazione...";
+        const phrase2 = loaderPhrases[Math.floor(Math.random() * loaderPhrases.length)];
+        
+        let step = 1; // 1: scrive Init, 2: cancella, 3: scrive Frase
         let charIndex = 0;
         
         const typeEffect = () => {
-            textEl.innerText = currentPhrase.substring(0, charIndex + 1);
-            charIndex++;
+            let speed = 30; // Velocità scrittura base
 
-            if (charIndex <= currentPhrase.length) {
-                // Scrive veloce (30ms)
-                loaderInterval = setTimeout(typeEffect, 30);
+            if (step === 1) {
+                // Scrive "Inizializzazione..."
+                textEl.innerText = phrase1.substring(0, charIndex + 1);
+                charIndex++;
+                if (charIndex === phrase1.length) {
+                    step = 2; 
+                    speed = 1000; // Pausa lunga dopo aver scritto Inizializzazione
+                }
+            } 
+            else if (step === 2) {
+                // Cancella "Inizializzazione..."
+                textEl.innerText = phrase1.substring(0, charIndex - 1);
+                charIndex--;
+                speed = 15; // Cancella veloce
+                if (charIndex === 0) {
+                    step = 3;
+                    speed = 300; // Pausa prima della nuova frase
+                }
+            } 
+            else if (step === 3) {
+                // Scrive la frase casuale
+                textEl.innerText = phrase2.substring(0, charIndex + 1);
+                charIndex++;
+                if (charIndex === phrase2.length) {
+                    return; // FINE: Resta scritta fissa col cursore
+                }
             }
-            // Quando finisce si ferma e basta, aspetta loadData
+
+            loaderInterval = setTimeout(typeEffect, speed);
         };
+
         typeEffect();
 
     } else {
         // --- CARICAMENTI SUCCESSIVI: TESTO FISSO IMMEDIATO ---
-        // Prende una frase a caso
+        // Prende una frase a caso e la stampa subito. Nessuna animazione di scrittura.
+        // Il cursore | lampeggia comunque grazie al CSS, ma il testo è subito leggibile.
         const r = Math.floor(Math.random() * loaderPhrases.length);
-        // La mostra subito tutta intera
         textEl.innerText = loaderPhrases[r];
-        // Nessun intervallo, il testo è già lì pronto da leggere
     }
 }
 // AVVIO PERSISTENZA E DATI
@@ -212,24 +239,25 @@ async function loadData() {
         console.error("Errore caricamento:", e);
         window.showToast("Errore caricamento: " + e.message, 'danger');
     } finally {
-        // --- GESTIONE CHIUSURA LOADER ---
+        
         const loader = document.getElementById("loadingOverlay");
         
         if (loader) {
             if (isFirstLoad) {
-                // PRIMO AVVIO: Aspetta 2 secondi per far vedere "Inizializzazione..."
+                // PRIMO AVVIO: 3 secondi
+                // Serve tempo per vedere: "Inizializzazione..." -> cancella -> "Frase finale"
                 setTimeout(() => {
                     loader.style.display = "none";
                     if(loaderInterval) clearTimeout(loaderInterval);
-                    isFirstLoad = false; // Le prossime volte sarà istantaneo
-                }, 2000); 
+                    isFirstLoad = false; // Dalla prossima volta sarà veloce
+                }, 3000); 
             } else {
-                // CARICAMENTI SUCCESSIVI:
-                // Velocissimo (300ms), giusto per fluidità
+                // CARICAMENTI SUCCESSIVI: 0.5 secondi
+                // La frase è già fissa e leggibile. Basta un attimo di attesa.
                 setTimeout(() => {
                     loader.style.display = "none";
                     if(loaderInterval) clearTimeout(loaderInterval);
-                }, 300); 
+                }, 500); 
             }
         }
     }
@@ -2561,6 +2589,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
