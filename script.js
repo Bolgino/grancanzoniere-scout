@@ -367,6 +367,7 @@ window.openEditor = (id) => {
         currentSongId=id; 
         const s=allSongs.find(x=>x.id===id);
         switchView('view-editor');
+        window.scrollTo(0, 0);
         document.getElementById("editorTitle").innerText=s.title;
         document.getElementById("editorAuthor").innerText=s.author;
         
@@ -1522,7 +1523,6 @@ const setInteractingTrue = () => { isUserInteracting = true; };
 const setInteractingFalse = () => { isUserInteracting = false; };
 
 window.toggleAutoScroll = () => {
-    const area = document.getElementById('previewArea');
     const btn = document.getElementById('btnAutoScroll');
     
     if (autoScrollInterval) { 
@@ -1536,11 +1536,11 @@ window.toggleAutoScroll = () => {
             btn.innerHTML = '<i class="bi bi-mouse3"></i>';
         }
 
-        // Rimuovi i listener usando le STESSE funzioni definite fuori
-        area.removeEventListener('mousedown', setInteractingTrue);
-        area.removeEventListener('mouseup', setInteractingFalse);
-        area.removeEventListener('touchstart', setInteractingTrue);
-        area.removeEventListener('touchend', setInteractingFalse);
+        // Rimuovi listener dalla finestra (non solo dall'area)
+        window.removeEventListener('mousedown', setInteractingTrue);
+        window.removeEventListener('mouseup', setInteractingFalse);
+        window.removeEventListener('touchstart', setInteractingTrue);
+        window.removeEventListener('touchend', setInteractingFalse);
     } else {
         // --- START SCROLL ---
         if(btn) {
@@ -1548,22 +1548,24 @@ window.toggleAutoScroll = () => {
             btn.innerHTML = '<i class="bi bi-pause-fill"></i>';
         }
 
-        // Aggiungi i listener
-        area.addEventListener('mousedown', setInteractingTrue);
-        area.addEventListener('mouseup', setInteractingFalse);
-        area.addEventListener('touchstart', setInteractingTrue, {passive: true});
-        area.addEventListener('touchend', setInteractingFalse);
+        // Aggiungi listener alla finestra intera
+        window.addEventListener('mousedown', setInteractingTrue);
+        window.addEventListener('mouseup', setInteractingFalse);
+        window.addEventListener('touchstart', setInteractingTrue, {passive: true});
+        window.addEventListener('touchend', setInteractingFalse);
 
         autoScrollInterval = setInterval(() => {
-            if (isUserInteracting) return; // Pausa se l'utente tocca
+            if (isUserInteracting) return; // Pausa se l'utente tocca lo schermo
             
-            // Logica fine pagina
-            if (Math.ceil(area.scrollTop + area.clientHeight) >= area.scrollHeight - 2) {
+            // Logica fine pagina (riferita alla finestra intera)
+            if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 5) {
                 window.toggleAutoScroll(); // Ferma tutto quando arriva in fondo
                 return;
             }
-            area.scrollTop += 1; 
-        }, 50); // Velocità
+            
+            // Scorri la finestra di 1 pixel
+            window.scrollBy(0, 1); 
+        }, 40); // Velocità (puoi abbassare a 30 per più veloce o alzare a 60 per più lento)
     }
 };
 window.handleSetlistBack = () => { const detail = document.getElementById('activeSetlistDetail'); if (detail.style.display === 'block') { detail.style.display = 'none'; currentSetlistId = null; window.renderSetlistsList(); } else { window.goHome(); } };
@@ -2538,6 +2540,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
