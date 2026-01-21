@@ -235,25 +235,25 @@ async function loadData() {
             window.openList(currentCategory); 
         }
 
-    } catch(e) { 
-        console.error("Errore caricamento:", e);
-        window.showToast("Errore caricamento: " + e.message, 'danger');
     } finally {
-        
         const loader = document.getElementById("loadingOverlay");
         
         if (loader) {
             if (isFirstLoad) {
-                // PRIMO AVVIO: 3 secondi
-                // Serve tempo per vedere: "Inizializzazione..." -> cancella -> "Frase finale"
+                // PRIMO AVVIO: Aumentato a 4200ms (4.2 secondi)
+                // Questo tempo permette di:
+                // 1. Scrivere "Inizializzazione..."
+                // 2. Cancellarlo
+                // 3. Scrivere la nuova frase
+                // 4. Leggerla con calma
                 setTimeout(() => {
                     loader.style.display = "none";
                     if(loaderInterval) clearTimeout(loaderInterval);
-                    isFirstLoad = false; // Dalla prossima volta sarà veloce
-                }, 3000); 
+                    isFirstLoad = false; 
+                }, 4200); // <--- MODIFICA QUESTO NUMERO
             } else {
                 // CARICAMENTI SUCCESSIVI: 0.5 secondi
-                // La frase è già fissa e leggibile. Basta un attimo di attesa.
+                // Rapido, frase già fissa
                 setTimeout(() => {
                     loader.style.display = "none";
                     if(loaderInterval) clearTimeout(loaderInterval);
@@ -2589,6 +2589,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
