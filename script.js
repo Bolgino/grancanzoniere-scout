@@ -467,10 +467,12 @@ window.generateFullPDF = async () => {
     }
 
     // --- 2. PREPARAZIONE DATI INDICE ---
-    const sourceList = (typeof exportSectionOrder !== 'undefined' && exportSectionOrder.length > 0) 
+    const rawList = (typeof exportSectionOrder !== 'undefined' && exportSectionOrder.length > 0) 
                         ? exportSectionOrder 
                         : allSections;
-    const finalSections = sourceList; 
+    
+    // Mantieni solo quelle incluse (se la proprietà non esiste, assumi true)
+    const finalSections = rawList.filter(s => s.included !== false);
     
     // Calcoliamo le pagine necessarie per l'indice solo se richiesto
     let tocData = []; 
@@ -1077,8 +1079,22 @@ window.confirmSetlistPDF = async () => {
     const sl = allSetlists.find(s => s.id === currentSetlistId);
     if(!sl || sl.songs.length === 0) return showToast("Scaletta vuota", "warning");
 
-    // Lettura corretta dell'ID sistemato nell'HTML
+    // --- LETTURA OPZIONI ---
     const isTwoColumns = document.getElementById("setlistTwoColumns").checked;
+    const showChords = document.getElementById("setlistShowChords").checked;
+    const includeToc = document.getElementById("setlistShowToc").checked;
+    const includePageNumbers = document.getElementById("setlistShowPageNumbers").checked;
+    const fontSizeMode = document.getElementById("setlistFontSize").value;
+
+    // Configurazione Font (Identica al PDF completo)
+    let titleSize = 12, metaSize = 9, lyricSize = 9, chordSize = 9, lineHeight = 5;
+    if (fontSizeMode === 'small') {
+        titleSize = 11; lyricSize = 8; chordSize = 8; lineHeight = 4;
+    } else if (fontSizeMode === 'large') {
+        titleSize = 14; lyricSize = 11; chordSize = 11; lineHeight = 6;
+    } else {
+        titleSize = 12; lyricSize = 10; chordSize = 10; lineHeight = 5;
+    }
 
     mExportSetlist.hide();
     document.getElementById("loadingOverlay").style.display = "flex";
@@ -1088,31 +1104,70 @@ window.confirmSetlistPDF = async () => {
         const doc = new jsPDF({ format: 'a4', orientation: 'portrait', unit: 'mm' });
 
         const PAGE_WIDTH = 210;
+        const PAGE_HEIGHT = 297;
         const MARGIN_TOP = 15;
         const MARGIN_BOTTOM = 280;
         const SIDE_MARGIN = 15;
         const GUTTER = 10;
         
-        // Calcolo larghezza: se isTwoColumns è false, usa tutta la pagina
+        // Copertina
+        const coverInput = document.getElementById('setlistCoverInputModal');
+        let hasCover = false;
+        if (coverInput && coverInput.files && coverInput.files[0]) {
+            const coverBase64 = await fileToBase64(coverInput.files[0]);
+            doc.addImage(coverBase64, 'JPEG', 0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+            doc.setFillColor(255, 255, 255); doc.rect(0, 100, PAGE_WIDTH, 25, 'F');
+            doc.setFont("helvetica", "bold"); doc.setFontSize(26); doc.setTextColor(0, 51, 102);
+            doc.text(sl.name.toUpperCase(), PAGE_WIDTH/2, 117, {align: 'center'});
+            hasCover = true;
+        }
+
+        // Indice (Opzionale)
+        let tocData = [];
+        if (includeToc) {
+            if(hasCover) doc.addPage();
+            else if(!hasCover) { /* Se non c'è copertina, l'indice è la pag 1, o si aggiunge dopo */ }
+            
+            // Se c'è copertina siamo a pag 2. Se no, siamo a pag 1.
+            // Riserviamo una pagina per l'indice
+            if(!hasCover) {
+                // Se non c'è copertina, creiamo una pagina di titolo + indice
+                doc.setFont("helvetica", "bold"); doc.setFontSize(22); doc.setTextColor(0, 51, 102);
+                doc.text(sl.name.toUpperCase(), PAGE_WIDTH/2, 20, {align: 'center'});
+                // Spazio per indice
+            } else {
+                 doc.addPage(); // Pagina dedicata indice
+            }
+        } else {
+             // NO INDICE
+             if(hasCover) doc.addPage();
+             else {
+                // Pagina 1: Titolo in alto
+                doc.setFont("helvetica", "bold"); doc.setFontSize(22); doc.setTextColor(0, 51, 102);
+                doc.text(sl.name.toUpperCase(), PAGE_WIDTH/2, 20, {align: 'center'});
+             }
+        }
+
+        // Setup Colonne
         const COL_WIDTH = isTwoColumns ? (PAGE_WIDTH - (SIDE_MARGIN * 2) - GUTTER) / 2 : (PAGE_WIDTH - (SIDE_MARGIN * 2));
         const COL_1_X = SIDE_MARGIN;
         const COL_2_X = isTwoColumns ? (SIDE_MARGIN + COL_WIDTH + GUTTER) : SIDE_MARGIN;
 
         let currentX = COL_1_X;
         let currentY = MARGIN_TOP;
+        // Se siamo a pagina 1 e non c'è copertina e non c'è indice, dobbiamo scendere sotto il titolo
+        if (!hasCover && !includeToc && doc.internal.getNumberOfPages() === 1) currentY = 35;
+        
         let currentCol = 1;
         
         const checkLimit = (heightNeeded) => {
             if (currentY + heightNeeded > MARGIN_BOTTOM) {
-                // Se abilitate 2 colonne e sono nella prima, passa alla seconda
                 if (isTwoColumns && currentCol === 1) {
                     currentCol = 2;
                     currentX = COL_2_X;
-                    const isFirstPageWithoutCover = doc.internal.getNumberOfPages() === 1 && !document.getElementById('setlistCoverInputModal').files[0];
-                    // FIX SOVRAPPOSIZIONE: Se prima pagina senza copertina, scendi sotto il titolo (Y=40)
-                    currentY = isFirstPageWithoutCover ? 40 : MARGIN_TOP; 
+                    currentY = MARGIN_TOP;
+                    // Fix: se siamo a pag 1 e c'è titolo, la colonna 2 deve partire dall'alto (MARGIN_TOP), non sotto il titolo
                 } else {
-                    // Altrimenti aggiungi nuova pagina
                     doc.addPage();
                     currentCol = 1;
                     currentX = COL_1_X;
@@ -1123,113 +1178,135 @@ window.confirmSetlistPDF = async () => {
             return false;
         };
 
-
-        const coverInput = document.getElementById('setlistCoverInputModal');
-        if (coverInput && coverInput.files && coverInput.files[0]) {
-            const coverBase64 = await fileToBase64(coverInput.files[0]);
-            doc.addImage(coverBase64, 'JPEG', 0, 0, PAGE_WIDTH, PAGE_HEIGHT);
-            doc.setFillColor(255, 255, 255); doc.rect(0, 100, PAGE_WIDTH, 25, 'F');
-            doc.setFont("helvetica", "bold"); doc.setFontSize(26); doc.setTextColor(0, 51, 102);
-            doc.text(sl.name.toUpperCase(), PAGE_WIDTH/2, 117, {align: 'center'});
-            doc.addPage();
-        } else {
-            doc.setFont("helvetica", "bold"); doc.setFontSize(22); doc.setTextColor(0, 51, 102);
-            doc.text(sl.name.toUpperCase(), PAGE_WIDTH/2, 20, {align: 'center'});
-            currentY = 35;
-        }
-        const showChords = document.getElementById("setlistShowChords").checked;
-
+        // --- LOOP CANZONI ---
         for (const item of sl.songs) {
             const sId = typeof item === 'string' ? item : item.id;
             const sTrans = typeof item === 'object' ? (item.trans || 0) : 0;
             const s = allSongs.find(x => x.id === sId);
             if(!s) continue;
             
+            if(includeToc) {
+                tocData.push({ title: s.title, page: doc.internal.getCurrentPageInfo().pageNumber });
+            }
+            
             checkLimit(30);
 
-            doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(0, 51, 102);
+            // Titolo
+            doc.setFont("helvetica", "bold"); doc.setFontSize(titleSize); doc.setTextColor(0, 51, 102);
             const titleLines = doc.splitTextToSize((s.title || "").toUpperCase(), COL_WIDTH);
             doc.text(titleLines, currentX, currentY);
-            currentY += (titleLines.length * 5);
+            currentY += (titleLines.length * (lineHeight));
             
+            // Autore
             if(s.author) {
-                doc.setFont("helvetica", "italic"); doc.setFontSize(9); doc.setTextColor(100);
+                doc.setFont("helvetica", "italic"); doc.setFontSize(metaSize); doc.setTextColor(100);
                 const authTxt = s.year ? `${s.author} (${s.year})` : s.author;
                 doc.text(authTxt, currentX + COL_WIDTH, currentY, {align: 'right'});
             }
             currentY += 2;
 
+            // Descrizione
             if (s.description) {
-                doc.setFont("helvetica", "italic"); 
-                doc.setFontSize(8); 
-                doc.setTextColor(50);
-                
+                doc.setFont("helvetica", "italic"); doc.setFontSize(metaSize - 1); doc.setTextColor(50);
                 const noteWidth = COL_WIDTH - 4; 
                 const splitNotes = doc.splitTextToSize(s.description, noteWidth);
                 const blockHeight = (splitNotes.length * 3.5) + 4;
-
-                checkLimit(blockHeight); 
-                
-                doc.setFillColor(245, 245, 245); 
+                checkLimit(blockHeight);
+                doc.setFillColor(245, 245, 245);
                 doc.rect(currentX, currentY, COL_WIDTH, blockHeight, 'F');
                 doc.text(splitNotes, currentX + 2, currentY + 3.5);
-                
                 currentY += blockHeight + 2;
             } else {
                 currentY += 2; 
             }
             
+            // Linea
             doc.setDrawColor(200); doc.setLineWidth(0.2);
             doc.line(currentX, currentY, currentX + COL_WIDTH, currentY);
             currentY += 4;
 
-            doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(0);
+            // Testo
+            doc.setFont("helvetica", "normal"); doc.setFontSize(lyricSize); doc.setTextColor(0);
             const lines = (s.lyrics || "").split("\n");
             
             for (let l of lines) {
                 l = l.replace(/\*\*|__/g, '');
-                
                 const parts = l.split(/(\[.*?\])/);
                 const hasChords = parts.some(p => p.startsWith("["));
-                const heightNeeded = hasChords ? 10 : 5;
+                const heightNeeded = (hasChords && showChords) ? (lineHeight * 2) : lineHeight;
                 
                 checkLimit(heightNeeded);
                 
                 let lineX = currentX;
 
-                // Sostituisci il blocco degli accordi dentro il ciclo for (let l of lines)
                 if (hasChords && showChords) { 
                     let lastChordEnd = 0; 
                     parts.forEach(p => {
                         if (p.startsWith("[")) {
                             let c = p.replace(/[\[\]]/g,'');
-                            // USA sTrans che abbiamo calcolato sopra!
                             c = transposeChord(normalizeChord(c), sTrans); 
-                            doc.setFont(undefined, 'bold'); doc.setTextColor(220, 53, 69);
+                            doc.setFont(undefined, 'bold'); doc.setFontSize(chordSize); doc.setTextColor(220, 53, 69);
                             doc.text(c, lineX, currentY);
                             const chordWidth = doc.getTextWidth(c);
                             lastChordEnd = lineX + chordWidth + 1;
                         } else {
-                            doc.setFont(undefined, 'normal'); doc.setTextColor(0);
+                            doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
                             doc.text(p, lineX, currentY + 4);
                             const textWidth = doc.getTextWidth(p);
                             lineX += textWidth;
-                            if (lineX < lastChordEnd) {
-                                lineX = lastChordEnd;
-                            }
+                            if (lineX < lastChordEnd) lineX = lastChordEnd;
                         }
                     });
-                    currentY += 9;
+                    currentY += (lineHeight + 4); 
                 } else {
-                    // Se showChords è false o non ci sono accordi, pulisci la riga
                     const cleanLine = l.replace(/\[.*?\]/g, ''); 
-                    doc.setFont(undefined, 'normal'); doc.setTextColor(0);
+                    doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
                     const splitText = doc.splitTextToSize(cleanLine, COL_WIDTH);
                     doc.text(splitText, lineX, currentY);
-                    currentY += (splitText.length * 5);
+                    currentY += (splitText.length * lineHeight);
                 }
             }
             currentY += 8; 
+        }
+
+        // --- STAMPA INDICE SCALETTA (Se richiesto) ---
+        if (includeToc && tocData.length > 0) {
+            // Torna indietro alla pagina dell'indice (Pagina 2 se c'è cover, Pagina 1 se no ma abbiamo fatto spazio?)
+            // Per semplicità, in setlist, l'indice lo mettiamo alla fine o in una pagina nuova se richiesto specificamente,
+            // Ma per farlo bene, usiamo insertPage(1) o (2).
+            
+            const indexPageNum = hasCover ? 2 : 1;
+            doc.insertPage(indexPageNum);
+            doc.setPage(indexPageNum);
+
+            doc.setTextColor(0, 51, 102); doc.setFont("helvetica", "bold"); doc.setFontSize(22);
+            doc.text("INDICE SCALETTA", PAGE_WIDTH/2, 20, {align: 'center'});
+            
+            let tocY = 40;
+            doc.setFontSize(11);
+            
+            tocData.forEach(t => {
+                if(tocY > 270) { doc.addPage(); tocY=20; }
+                doc.setTextColor(0); doc.setFont("helvetica", "bold");
+                doc.text(t.title, 20, tocY);
+                // I numeri di pagina sono shiftati di +1 perché abbiamo inserito la pagina indice
+                doc.setTextColor(100); doc.setFont("helvetica", "normal");
+                // Attenzione: i numeri pagina salvati nel loop erano Pre-Insert. Quindi +1.
+                doc.text(String(t.page + 1), 190, tocY, {align: 'right'});
+                doc.setDrawColor(230); doc.line(20, tocY+2, 190, tocY+2);
+                tocY += 8;
+            });
+        }
+
+        // --- NUMERI PAGINA ---
+        if (includePageNumbers) {
+            const totalPages = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 && hasCover) continue;
+                doc.setPage(i);
+                doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(150);
+                doc.text(String(i), PAGE_WIDTH/2, 290, {align:'center'});
+            }
         }
         
         doc.save(`Scaletta_${sl.name.replace(/\s+/g, '_')}.pdf`);
@@ -1632,8 +1709,8 @@ window.openExportView = () => {
     document.getElementById("exportPreviewImg").style.display = "none";
     document.getElementById("exportPreviewPlaceholder").style.display = "block";
 
-    // Copia locale ordine sezioni
-    exportSectionOrder = [...allSections].sort((a, b) => {
+    // Copia locale ordine sezioni + AGGIUNTA PROPRIETÀ included
+    exportSectionOrder = [...allSections].map(s => ({...s, included: true})).sort((a, b) => {
         const orderA = (a.order !== undefined && a.order !== null) ? a.order : 9999;
         const orderB = (b.order !== undefined && b.order !== null) ? b.order : 9999;
         if (orderA !== orderB) return orderA - orderB;
@@ -1815,12 +1892,20 @@ window.renderExportList = () => {
     
     exportSectionOrder.forEach((sec, idx) => {
         const hasDbCover = sec.coverUrl ? '<i class="bi bi-image text-success" title="Presente nel DB"></i>' : '<i class="bi bi-image text-muted" title="Nessuna"></i>';
+        // Gestione stato incluso/escluso
+        const isIncluded = sec.included !== false; // Default true
+        const opacityClass = isIncluded ? "" : "opacity-50";
+        const checkedAttr = isIncluded ? "checked" : "";
         
         list.innerHTML += `
-        <div class="list-group-item bg-dark border-secondary text-white d-flex align-items-center justify-content-between p-2 mb-1 rounded" 
+        <div class="list-group-item bg-dark border-secondary text-white d-flex align-items-center justify-content-between p-2 mb-1 rounded ${opacityClass}" 
              onmouseenter="window.hoverSectionPreview('${sec.id}', '${sec.name.replace(/'/g, "\\'")}')">
             
             <div class="d-flex align-items-center gap-2 flex-grow-1" style="min-width:0;">
+                <div class="form-check form-switch me-1">
+                    <input class="form-check-input" type="checkbox" ${checkedAttr} onchange="window.toggleExportSection(${idx})">
+                </div>
+
                 <div class="d-flex flex-column">
                     <button class="btn btn-sm btn-link text-white py-0" onclick="window.moveExportSection(${idx}, -1)"><i class="bi bi-caret-up-fill"></i></button>
                     <button class="btn btn-sm btn-link text-white py-0" onclick="window.moveExportSection(${idx}, 1)"><i class="bi bi-caret-down-fill"></i></button>
@@ -1954,6 +2039,14 @@ window.generateExcelList = () => {
     window.showToast("File Excel scaricato!", "success");
 };
 
+// AGGIUNGI QUESTA NUOVA FUNZIONE HELPER
+window.toggleExportSection = (index) => {
+    if (exportSectionOrder[index]) {
+        exportSectionOrder[index].included = !exportSectionOrder[index].included;
+        // Non serve riordinare, solo aggiornare la vista per lo stato checkbox/opacity
+        window.renderExportList(); 
+    }
+};
 
 
 
