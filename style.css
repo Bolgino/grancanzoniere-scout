@@ -500,28 +500,34 @@ body.user-admin .setlist-item-controls {
 }
 /* --- FIX LEGGIBILITÀ POPUP DUPLICATI --- */
 
-/* 1. Rende il box "Esiste già..." scuro ma ben contrastato */
+/* 1. Rende il box "Esiste già..." grigio scuro solido con testo bianco */
 #duplicateWarningModal .alert-secondary {
-    background-color: #2c3035 !important; /* Grigio scuro solido */
+    background-color: #2c3035 !important; /* Grigio scuro opaco, non trasparente */
     color: #ffffff !important;             /* Testo bianco puro */
-    border: 1px solid #adb5bd !important;  /* Bordo grigio chiaro per stacco */
+    border: 1px solid #6c757d !important;  /* Bordo più visibile */
 }
 
-/* 2. Rende il testo "piccolo" (autore) molto più leggibile */
-#duplicateWarningModal .text-muted {
-    color: #d0d0d0 !important; /* Grigio quasi bianco invece che scuro */
+/* 2. Corregge l'autore (che era illeggibile perché troppo scuro) */
+#duplicateWarningModal .alert-secondary .text-muted {
+    color: #e0e0e0 !important; /* Grigio chiarissimo, quasi bianco */
 }
 
-/* 3. Evidenzia il titolo della canzone esistente */
+/* 3. Evidenzia il titolo della canzone esistente (Giallo e Luminoso) */
 #duplicateWarningModal .text-warning {
     color: #ffc107 !important; /* Giallo acceso */
-    text-shadow: 0 0 5px rgba(0,0,0,0.5); /* Ombra per staccarlo dallo sfondo */
-    font-size: 1.1em;
+    text-shadow: 0 0 10px rgba(0,0,0,0.8); /* Ombra nera dietro per staccarlo dallo sfondo */
+    font-size: 1.15em; /* Leggermente più grande */
+    letter-spacing: 0.5px;
 }
 
-/* 4. Migliora il corpo del modale */
+/* 4. Assicura che lo sfondo generale del popup sia nero profondo */
 #duplicateWarningModal .modal-body {
-    background-color: #121212 !important; /* Nero profondo */
-    color: #fff !important;
-    font-size: 1.05rem; /* Testo leggermente più grande */
+    background-color: #121212 !important; 
+    color: #f8f9fa !important;
+}
+
+/* 5. Migliora il bordo del popup per farlo risaltare */
+#duplicateWarningModal .modal-content {
+    border: 2px solid #ffc107 !important; /* Bordo giallo esterno */
+    box-shadow: 0 0 20px rgba(255, 193, 7, 0.2); /* Alone giallo */
 }
