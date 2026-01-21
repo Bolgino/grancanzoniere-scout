@@ -466,12 +466,13 @@ window.generateFullPDF = async () => {
         doc.text("SCOUT", PAGE_WIDTH/2, 135, {align: 'center'});
     }
 
-    // --- 2. PREPARAZIONE DATI INDICE ---
+    // --- 2. PREPARAZIONE DATI INDICE E FILTRO SEZIONI ---
+    // Filtra solo le sezioni che hanno included == true (o undefined)
     const rawList = (typeof exportSectionOrder !== 'undefined' && exportSectionOrder.length > 0) 
                         ? exportSectionOrder 
                         : allSections;
     
-    // Mantieni solo quelle incluse (se la proprietà non esiste, assumi true)
+    // Mantieni solo quelle incluse
     const finalSections = rawList.filter(s => s.included !== false);
     
     // Calcoliamo le pagine necessarie per l'indice solo se richiesto
@@ -487,7 +488,7 @@ window.generateFullPDF = async () => {
                 totalTocItems += songs.length; // Canzoni
             }
         }
-        tocPagesNeeded = Math.ceil(totalTocItems / 90); // Stima 90 righe per pagina (doppia colonna indice)
+        tocPagesNeeded = Math.ceil(totalTocItems / 90); // Stima 90 righe per pagina
         for(let i=0; i < tocPagesNeeded; i++) doc.addPage(); 
     }
 
@@ -536,57 +537,37 @@ window.generateFullPDF = async () => {
 
         // LOGICA INTESTAZIONE SEZIONE
         if (sectionCoverImg) {
-            // CASO A: Immagine presente (Custom o Default)
+            // CASO A: Immagine presente
             if (doc.internal.getCurrentPageInfo().pageNumber > 1) {
                 doc.addPage(); 
             }
             try {
-                // Stampa l'immagine a tutta pagina
                 doc.addImage(sectionCoverImg, 'JPEG', 0, 0, PAGE_WIDTH, PAGE_HEIGHT);
-                
-                // Pagina nuova pulita per le canzoni
                 doc.addPage();
                 currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
             } catch(e) { console.error("Errore img sezione", e); }
         } else {
             // CASO B: Nessuna immagine -> Genera Copertina Placeholder
-            // (Richiesta utente: "copertina con il nome in sostituzione")
-
-            // 1. Forza sempre una nuova pagina per la copertina
             if (doc.internal.getCurrentPageInfo().pageNumber > 1) {
                 doc.addPage();
             }
-
-            // 2. Crea uno sfondo colorato (es. Blu Scuro istituzionale) per simulare la copertina
             doc.setFillColor(0, 51, 102); 
-            doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, 'F'); // Rettangolo pieno a tutta pagina
-
-            // 3. Scrive il nome della sezione al centro in BIANCO
+            doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, 'F'); 
             doc.setTextColor(255, 255, 255); 
             doc.setFont("helvetica", "bold"); 
-            doc.setFontSize(36); // Font grande per il titolo
+            doc.setFontSize(36);
             
-            // Calcoli per centrare il testo orizzontalmente e verticalmente
             const splitTitle = doc.splitTextToSize(sec.name.toUpperCase(), PAGE_WIDTH - 40);
-            const textHeight = splitTitle.length * 15; // Stima altezza blocco testo
-            // Posiziona a metà pagina (148.5mm) meno metà altezza testo
+            const textHeight = splitTitle.length * 15; 
             doc.text(splitTitle, PAGE_WIDTH/2, (PAGE_HEIGHT/2) - (textHeight/4), {align: 'center'});
 
-            // 4. Pagina nuova pulita per iniziare le canzoni (Reset colori)
             doc.addPage();
-            doc.setTextColor(0, 0, 0); // Reset nero per il testo successivo
-            currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
-        }
-
-            doc.setTextColor(0, 51, 102); 
-            doc.setFont("helvetica", "bold"); 
-            doc.setFontSize(30);
-            doc.text(sec.name.toUpperCase(), PAGE_WIDTH/2, 100, {align: 'center'});
-            doc.addPage();
+            doc.setTextColor(0, 0, 0); 
             currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
         }
 
         // --- LOOP CANZONI ---
+        // (Nota: questo ciclo deve essere DENTRO il ciclo delle sezioni)
         for (const s of songs) {
             if (includeToc) {
                 tocData.push({ type: 'song', text: s.title, subtext: s.author, page: doc.internal.getCurrentPageInfo().pageNumber });
@@ -594,11 +575,11 @@ window.generateFullPDF = async () => {
 
             checkLimit(25);
 
-            // Titolo (Dimensione variabile)
+            // Titolo
             doc.setFont("helvetica", "bold"); doc.setFontSize(titleSize); doc.setTextColor(0, 51, 102);
             const titleLines = doc.splitTextToSize(s.title.toUpperCase(), COL_WIDTH);
             doc.text(titleLines, currentX, currentY);
-            currentY += (titleLines.length * (lineHeight + 0.5)); // Adatta spaziatura
+            currentY += (titleLines.length * (lineHeight + 0.5));
 
             // Autore
             if(s.author) {
@@ -627,7 +608,7 @@ window.generateFullPDF = async () => {
             doc.line(currentX, currentY - 1, currentX + COL_WIDTH, currentY - 1);
             currentY += 4; 
             
-            // Testo e Accordi (Dimensione variabile)
+            // Testo e Accordi
             doc.setFont("helvetica", "normal"); doc.setFontSize(lyricSize); doc.setTextColor(0);
             const lines = (s.lyrics || "").split("\n");
             
@@ -635,7 +616,6 @@ window.generateFullPDF = async () => {
                 l = l.replace(/\*\*|__/g, ''); 
                 const parts = l.split(/(\[.*?\])/);
                 const hasChords = parts.some(p => p.startsWith("["));
-                // Altezza necessaria dipende se ci sono accordi
                 const heightNeeded = (hasChords && showChords) ? (lineHeight * 2) : lineHeight;
                 
                 checkLimit(heightNeeded);
@@ -647,13 +627,11 @@ window.generateFullPDF = async () => {
                         if (p.startsWith("[")) {
                             let c = p.replace(/[\[\]]/g,'');
                             c = transposeChord(normalizeChord(c), 0); 
-                            // Font Accordi
                             doc.setFont(undefined, 'bold'); doc.setFontSize(chordSize); doc.setTextColor(220, 53, 69);
                             doc.text(c, lineX, currentY);
                             const chordWidth = doc.getTextWidth(c);
                             lastChordEnd = lineX + chordWidth + 1; 
                         } else {
-                            // Font Testo
                             doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
                             doc.text(p, lineX, currentY + 4);
                             const textWidth = doc.getTextWidth(p);
@@ -672,7 +650,7 @@ window.generateFullPDF = async () => {
             }
             currentY += 6; // Spazio tra canzoni
         }
-    }
+    } // <--- CHIUSURA CORRETTA DEL CICLO SEZIONI
 
     // --- 4. STAMPA INDICE (Solo se richiesto) ---
     if (includeToc && tocPagesNeeded > 0 && tocData.length > 0) {
@@ -692,7 +670,6 @@ window.generateFullPDF = async () => {
             if(tocY > 270) {
                  if(tocCol === 1) { tocCol = 2; tocY = 40; } else { 
                      tocPageIdx++;
-                     // Gestione inserimento pagine se abbiamo sforato quelle prenotate
                      if (tocPageIdx <= 1 + tocPagesNeeded) {
                          doc.setPage(tocPageIdx);
                      } else {
@@ -723,9 +700,7 @@ window.generateFullPDF = async () => {
     if (includePageNumbers) {
         const totalPages = doc.internal.getNumberOfPages();
         for (let i = 1; i <= totalPages; i++) {
-            // Salta la copertina
             if (i === 1 && coverInput) continue; 
-            
             doc.setPage(i);
             doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(150);
             doc.text(String(i), PAGE_WIDTH/2, 290, {align:'center'});
@@ -2047,6 +2022,7 @@ window.toggleExportSection = (index) => {
         window.renderExportList(); 
     }
 };
+
 
 
 
