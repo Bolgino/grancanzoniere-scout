@@ -436,7 +436,6 @@ window.generateFullPDF = async () => {
             doc.addImage(coverBase64, 'JPEG', 0, 0, PAGE_WIDTH, PAGE_HEIGHT);
         } catch(e) { console.error("Errore copertina", e); }
     } else {
-        // Default Cover
         doc.setFillColor(0, 51, 102); 
         doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, 'F');
         doc.setTextColor(255, 255, 255);
@@ -446,12 +445,10 @@ window.generateFullPDF = async () => {
         doc.text("SCOUT", PAGE_WIDTH/2, 135, {align: 'center'});
     }
 
-    // --- 2. PREPARAZIONE E STIMA INDICE ---
+    // --- 2. PREPARAZIONE INDICE ---
     const sourceList = (typeof exportSectionOrder !== 'undefined' && exportSectionOrder.length > 0) 
                         ? exportSectionOrder 
                         : allSections;
-    
-    // Mappa l'oggetto sezione completo, non solo il nome
     const finalSections = sourceList; 
 
     let totalTocItems = 0;
@@ -502,55 +499,55 @@ window.generateFullPDF = async () => {
         const songs = allSongs.filter(s => s.category === sec.name).sort((a,b)=>a.title.localeCompare(b.title));
         if (songs.length === 0) continue;
 
-        // --- GESTIONE COPERTINA SEZIONE ---
-        // 1. Controllo se c'è una copertina custom caricata ora
+        // Recupera immagine (Custom o Default dal DB)
         let sectionCoverImg = exportSectionCovers[sec.id];
-        // 2. Se no, uso quella del DB
         if (!sectionCoverImg && sec.coverUrl) {
             sectionCoverImg = sec.coverUrl;
         }
 
-        // Se abbiamo un'immagine, creiamo una pagina dedicata
+        // Salva dati per l'indice
+        tocData.push({ type: 'section', text: sec.name.toUpperCase(), page: doc.internal.getCurrentPageInfo().pageNumber });
+
+        // LOGICA INTESTAZIONE SEZIONE
         if (sectionCoverImg) {
-            // Se siamo a metà pagina, vai a nuova pagina per la copertina
+            // CASO A: C'è un'immagine -> Nuova pagina solo immagine, poi nuova pagina bianca per i testi
             if (doc.internal.getCurrentPageInfo().pageNumber > 1) {
                 doc.addPage(); 
             }
             try {
                 doc.addImage(sectionCoverImg, 'JPEG', 0, 0, PAGE_WIDTH, PAGE_HEIGHT);
-                // Dopo l'immagine, aggiungi una nuova pagina per iniziare il testo
+                // Dopo la copertina, vai a pagina nuova pulita per le canzoni
                 doc.addPage();
                 currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
             } catch(e) {
                 console.error("Errore img sezione", e);
             }
         } else {
-            // Se non c'è immagine, ma siamo in fondo alla pagina precedente, vai a capo
-            if (currentY > MARGIN_TOP) {
+            // CASO B: Nessuna immagine -> Titolo Testuale
+            
+            // Se siamo troppo in basso nella pagina precedente, vai a capo
+            if (currentY > MARGIN_TOP + 20) {
+                 doc.addPage();
+                 currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
+            } else if (currentCol === 2) {
+                 // Se siamo nella seconda colonna, per bellezza andiamo a pagina nuova per il titolo di sezione
                  doc.addPage();
                  currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
             }
-        }
-        
-        // TOC: Salva pagina corrente
-        tocData.push({ type: 'section', text: sec.name.toUpperCase(), page: doc.internal.getCurrentPageInfo().pageNumber });
-        
-        // TITOLO SEZIONE (Testo)
-        doc.setTextColor(0, 51, 102); doc.setFont("helvetica", "bold"); doc.setFontSize(30);
-        
-        // Se c'era la copertina, il titolo lo mettiamo comunque in alto alla nuova pagina
-        // Se non c'era, lo scriviamo dove siamo. Ma per uniformità, meglio centrarlo un po'
-        if (sectionCoverImg) {
-             doc.text(sec.name.toUpperCase(), PAGE_WIDTH/2, 100, {align: 'center'});
-             doc.addPage();
-             currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
-        } else {
-             // Versione senza copertina: Titolo centrato in alto
-             doc.text(sec.name.toUpperCase(), PAGE_WIDTH/2, 100, {align: 'center'});
-             doc.addPage();
-             currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
+
+            doc.setTextColor(0, 51, 102); 
+            doc.setFont("helvetica", "bold"); 
+            doc.setFontSize(30);
+            
+            // Centra il titolo nella pagina
+            doc.text(sec.name.toUpperCase(), PAGE_WIDTH/2, 100, {align: 'center'});
+            
+            // Vai alla prossima pagina per le canzoni
+            doc.addPage();
+            currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
         }
 
+        // --- LOOP CANZONI ---
         for (const s of songs) {
             tocData.push({ type: 'song', text: s.title, subtext: s.author, page: doc.internal.getCurrentPageInfo().pageNumber });
 
@@ -569,7 +566,7 @@ window.generateFullPDF = async () => {
                 doc.text(authTxt, currentX + COL_WIDTH, currentY - 5, {align: 'right'}); 
             }
 
-            // Note/Descrizione
+            // Descrizione
             if (s.description) {
                 doc.setFont("helvetica", "italic"); doc.setFontSize(8); doc.setTextColor(50);
                 const noteWidth = COL_WIDTH - 4; 
@@ -676,7 +673,7 @@ window.generateFullPDF = async () => {
         });
     }
 
-    // --- 5. NUMERAZIONE ---
+    // --- 5. NUMERAZIONE PAGINE ---
     const totalPages = doc.internal.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
         if (i === 1) continue;
@@ -688,7 +685,6 @@ window.generateFullPDF = async () => {
     doc.save("Canzoniere_Completo.pdf");
     if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display="none"; 
     window.showToast("PDF Scaricato!", "success");
-    // Non chiudere il modale, così l'utente può fare altre modifiche
 };
 
 window.generateFullLatex=()=>{if(!isAdmin)return;let l=`\\documentclass{article}\n\\usepackage[utf8]{inputenc}\n\\usepackage[a5paper]{geometry}\n\\usepackage{songs}\n\\begin{document}\n\\title{Canzoniere}\\maketitle\\tableofcontents\\newpage\n`;sectionOrder.forEach(secName=>{l+=`\\section{${secName}}\n`;allSongs.filter(s=>s.category===secName).sort((a,b)=>a.title.localeCompare(b.title)).forEach(s=>{l+=`\\beginsong{${s.title}}[by={${s.author||''}}]\n\\beginverse\n`;(s.lyrics||"").split("\n").forEach(line=>{l+=line.replace(/\[(.*?)\]/g,(m,p1)=>`\\[${normalizeChord(p1)}]`)+"\n";});l+=`\\endverse\n\\endsong\n`;});});l+=`\\end{document}`;const b=new Blob([l],{type:'text/plain'});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="Canzoniere.tex";a.click();};
@@ -1489,57 +1485,41 @@ window.renderManageSections = () => {
 };
 window.moveSection = async (sectionId, direction) => {
     // 1. Ordina l'array locale ESATTAMENTE come lo vede l'utente a video
-    // (Prima per Ordine numerico, poi Alfabetico per risolvere i pari merito)
     allSections.sort((a, b) => {
         const orderA = (a.order !== undefined && a.order !== null) ? a.order : 9999;
         const orderB = (b.order !== undefined && b.order !== null) ? b.order : 9999;
-        
-        // Se l'ordine è diverso, usa quello
-        if (orderA !== orderB) {
-            return orderA - orderB;
-        }
-        // Se l'ordine è uguale (es. entrambi 9999), usa il nome per stabilità
+        if (orderA !== orderB) return orderA - orderB;
         return a.name.localeCompare(b.name);
     });
 
-    // 2. Trova l'indice dell'elemento che vogliamo spostare
+    // 2. Trova l'indice
     const idx = allSections.findIndex(s => s.id === sectionId);
-    if (idx === -1) return; // Errore: ID non trovato
+    if (idx === -1) return;
 
     // 3. Calcola il nuovo indice
     const newIdx = idx + direction;
-
-    // 4. Controllo limiti (non possiamo andare sopra la lista o sotto zero)
     if (newIdx < 0 || newIdx >= allSections.length) return;
 
-    // 5. SCAMBIO FISICO DEGLI ELEMENTI NELL'ARRAY
-    // Usiamo lo splice per essere sicuri di spostare l'oggetto intero
+    // 4. Scambio
     const itemToMove = allSections[idx];
     const itemTarget = allSections[newIdx];
-    
-    // Scambio posizioni
     allSections[idx] = itemTarget;
     allSections[newIdx] = itemToMove;
 
-    // 6. NORMALIZZAZIONE: Riassegna i numeri 0, 1, 2, 3... a TUTTI
-    // Questo è il passaggio fondamentale che ripara gli ordini "rotti"
+    // 5. Normalizzazione numeri
     allSections.forEach((sec, i) => {
         sec.order = i;
     });
-
-    // Aggiorna anche la lista nomi globale usata per l'export
     sectionOrder = allSections.map(s => s.name);
 
-    // 7. AGGIORNA L'INTERFACCIA UTENTE (UI) IMMEDIATAMENTE
-    // Capisce in quale schermata sei e aggiorna solo quella
-    if (document.getElementById('view-export').classList.contains('active')) {
-        window.openExportView();
+    // 6. Aggiornamento UI (CORRETTO QUI)
+    if (document.getElementById('view-export') && document.getElementById('view-export').classList.contains('active')) {
+        window.openExportView(); // <--- ORA E' CORRETTO
     } else {
-        window.renderManageSections(); // Ridisegna lista gestione
+        window.renderManageSections(); 
     }
 
-    // 8. SALVA SU DATABASE IN BACKGROUND (Batch write)
-    // Non blocchiamo l'utente con un loading, salviamo "silenziosamente"
+    // 7. Salvataggio DB
     try {
         const batch = writeBatch(db);
         allSections.forEach(s => {
@@ -1897,6 +1877,7 @@ window.hoverSectionPreview = (secId, secName) => {
         }
     }
 };
+
 
 
 
