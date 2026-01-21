@@ -412,14 +412,35 @@ window.openExportModal = () => {
 /* ==========================================
    FUNZIONE PDF CORRETTA (DAL VECCHIO SCRIPT)
    ========================================== */
+// script.js - Sostituisci la funzione esistente
+
 window.generateFullPDF = async () => {
+    // --- LETTURA OPZIONI UI ---
     const showChords = document.getElementById("pdfShowChords").checked;
-    
+    const isTwoColumns = document.getElementById("pdfTwoColumns").checked;
+    const includeToc = document.getElementById("pdfShowToc").checked;
+    const includePageNumbers = document.getElementById("pdfShowPageNumbers").checked;
+    const fontSizeMode = document.getElementById("pdfFontSize").value;
+
+    // --- CONFIGURAZIONE FONT SIZE ---
+    let titleSize = 12;
+    let metaSize = 9;
+    let lyricSize = 9;
+    let chordSize = 9;
+    let lineHeight = 5;
+
+    if (fontSizeMode === 'small') {
+        titleSize = 11; lyricSize = 8; chordSize = 8; lineHeight = 4;
+    } else if (fontSizeMode === 'large') {
+        titleSize = 14; lyricSize = 11; chordSize = 11; lineHeight = 6;
+    } else {
+        // Normal (Default)
+        titleSize = 12; lyricSize = 10; chordSize = 10; lineHeight = 5;
+    }
+
     if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display="flex";
     
     const { jsPDF } = window.jspdf;
-    const isTwoColumns = document.getElementById("pdfTwoColumns").checked;
-
     const doc = new jsPDF({ format: 'a4', orientation: 'portrait', unit: 'mm' });
     const PAGE_WIDTH = 210;
     const PAGE_HEIGHT = 297;
@@ -445,27 +466,30 @@ window.generateFullPDF = async () => {
         doc.text("SCOUT", PAGE_WIDTH/2, 135, {align: 'center'});
     }
 
-    // --- 2. PREPARAZIONE INDICE ---
+    // --- 2. PREPARAZIONE DATI INDICE ---
     const sourceList = (typeof exportSectionOrder !== 'undefined' && exportSectionOrder.length > 0) 
                         ? exportSectionOrder 
                         : allSections;
     const finalSections = sourceList; 
+    
+    // Calcoliamo le pagine necessarie per l'indice solo se richiesto
+    let tocData = []; 
+    let tocPagesNeeded = 0;
 
-    let totalTocItems = 0;
-    for (const sec of finalSections) {
-        const songs = allSongs.filter(s => s.category === sec.name);
-        if (songs.length > 0) {
-            totalTocItems++; 
-            totalTocItems += songs.length;
+    if (includeToc) {
+        let totalTocItems = 0;
+        for (const sec of finalSections) {
+            const songs = allSongs.filter(s => s.category === sec.name);
+            if (songs.length > 0) {
+                totalTocItems++; // Titolo sezione
+                totalTocItems += songs.length; // Canzoni
+            }
         }
+        tocPagesNeeded = Math.ceil(totalTocItems / 90); // Stima 90 righe per pagina (doppia colonna indice)
+        for(let i=0; i < tocPagesNeeded; i++) doc.addPage(); 
     }
 
-    const tocPagesNeeded = Math.ceil(totalTocItems / 90);
-    for(let i=0; i < tocPagesNeeded; i++) doc.addPage(); 
-
-    let tocData = []; 
-
-    // Parametri layout
+    // Parametri layout colonne
     const COL_WIDTH = isTwoColumns ? (PAGE_WIDTH - (SIDE_MARGIN * 2) - GUTTER) / 2 : (PAGE_WIDTH - (SIDE_MARGIN * 2));
     const COL_1_X = SIDE_MARGIN;
     const COL_2_X = isTwoColumns ? (SIDE_MARGIN + COL_WIDTH + GUTTER) : SIDE_MARGIN;
@@ -491,7 +515,7 @@ window.generateFullPDF = async () => {
         return false;
     };
 
-    // --- 3. LOOP PRINCIPALE ---
+    // --- 3. LOOP PRINCIPALE CONTENUTO ---
     doc.addPage();
     currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
 
@@ -499,38 +523,30 @@ window.generateFullPDF = async () => {
         const songs = allSongs.filter(s => s.category === sec.name).sort((a,b)=>a.title.localeCompare(b.title));
         if (songs.length === 0) continue;
 
-        // Recupera immagine (Custom o Default dal DB)
         let sectionCoverImg = exportSectionCovers[sec.id];
         if (!sectionCoverImg && sec.coverUrl) {
             sectionCoverImg = sec.coverUrl;
         }
 
-        // Salva dati per l'indice
-        tocData.push({ type: 'section', text: sec.name.toUpperCase(), page: doc.internal.getCurrentPageInfo().pageNumber });
+        if (includeToc) {
+            tocData.push({ type: 'section', text: sec.name.toUpperCase(), page: doc.internal.getCurrentPageInfo().pageNumber });
+        }
 
         // LOGICA INTESTAZIONE SEZIONE
         if (sectionCoverImg) {
-            // CASO A: C'è un'immagine -> Nuova pagina solo immagine, poi nuova pagina bianca per i testi
             if (doc.internal.getCurrentPageInfo().pageNumber > 1) {
                 doc.addPage(); 
             }
             try {
                 doc.addImage(sectionCoverImg, 'JPEG', 0, 0, PAGE_WIDTH, PAGE_HEIGHT);
-                // Dopo la copertina, vai a pagina nuova pulita per le canzoni
                 doc.addPage();
                 currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
-            } catch(e) {
-                console.error("Errore img sezione", e);
-            }
+            } catch(e) { console.error("Errore img sezione", e); }
         } else {
-            // CASO B: Nessuna immagine -> Titolo Testuale
-            
-            // Se siamo troppo in basso nella pagina precedente, vai a capo
             if (currentY > MARGIN_TOP + 20) {
                  doc.addPage();
                  currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
             } else if (currentCol === 2) {
-                 // Se siamo nella seconda colonna, per bellezza andiamo a pagina nuova per il titolo di sezione
                  doc.addPage();
                  currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
             }
@@ -538,37 +554,35 @@ window.generateFullPDF = async () => {
             doc.setTextColor(0, 51, 102); 
             doc.setFont("helvetica", "bold"); 
             doc.setFontSize(30);
-            
-            // Centra il titolo nella pagina
             doc.text(sec.name.toUpperCase(), PAGE_WIDTH/2, 100, {align: 'center'});
-            
-            // Vai alla prossima pagina per le canzoni
             doc.addPage();
             currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
         }
 
         // --- LOOP CANZONI ---
         for (const s of songs) {
-            tocData.push({ type: 'song', text: s.title, subtext: s.author, page: doc.internal.getCurrentPageInfo().pageNumber });
+            if (includeToc) {
+                tocData.push({ type: 'song', text: s.title, subtext: s.author, page: doc.internal.getCurrentPageInfo().pageNumber });
+            }
 
             checkLimit(25);
 
-            // Titolo
-            doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(0, 51, 102);
+            // Titolo (Dimensione variabile)
+            doc.setFont("helvetica", "bold"); doc.setFontSize(titleSize); doc.setTextColor(0, 51, 102);
             const titleLines = doc.splitTextToSize(s.title.toUpperCase(), COL_WIDTH);
             doc.text(titleLines, currentX, currentY);
-            currentY += (titleLines.length * 5);
+            currentY += (titleLines.length * (lineHeight + 0.5)); // Adatta spaziatura
 
             // Autore
             if(s.author) {
-                doc.setFont("helvetica", "italic"); doc.setFontSize(9); doc.setTextColor(100);
+                doc.setFont("helvetica", "italic"); doc.setFontSize(metaSize); doc.setTextColor(100);
                 const authTxt = s.year ? `${s.author} (${s.year})` : s.author;
-                doc.text(authTxt, currentX + COL_WIDTH, currentY - 5, {align: 'right'}); 
+                doc.text(authTxt, currentX + COL_WIDTH, currentY - lineHeight, {align: 'right'}); 
             }
 
             // Descrizione
             if (s.description) {
-                doc.setFont("helvetica", "italic"); doc.setFontSize(8); doc.setTextColor(50);
+                doc.setFont("helvetica", "italic"); doc.setFontSize(metaSize - 1); doc.setTextColor(50);
                 const noteWidth = COL_WIDTH - 4; 
                 const splitNotes = doc.splitTextToSize(s.description, noteWidth);
                 const blockHeight = (splitNotes.length * 3.5) + 4; 
@@ -578,23 +592,24 @@ window.generateFullPDF = async () => {
                 doc.text(splitNotes, currentX + 2, currentY + 3.5);
                 currentY += blockHeight + 2; 
             } else {
-                currentY += 4; 
+                currentY += 2; 
             }
 
-            // Linea
+            // Linea separatrice
             doc.setDrawColor(200); doc.setLineWidth(0.2);
-            doc.line(currentX, currentY - 2, currentX + COL_WIDTH, currentY - 2);
-            currentY += 9; 
+            doc.line(currentX, currentY - 1, currentX + COL_WIDTH, currentY - 1);
+            currentY += 4; 
             
-            // Testo
-            doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(0);
+            // Testo e Accordi (Dimensione variabile)
+            doc.setFont("helvetica", "normal"); doc.setFontSize(lyricSize); doc.setTextColor(0);
             const lines = (s.lyrics || "").split("\n");
             
             for (let l of lines) {
                 l = l.replace(/\*\*|__/g, ''); 
                 const parts = l.split(/(\[.*?\])/);
                 const hasChords = parts.some(p => p.startsWith("["));
-                const heightNeeded = hasChords ? 10 : 5;
+                // Altezza necessaria dipende se ci sono accordi
+                const heightNeeded = (hasChords && showChords) ? (lineHeight * 2) : lineHeight;
                 
                 checkLimit(heightNeeded);
                 let lineX = currentX;
@@ -605,35 +620,38 @@ window.generateFullPDF = async () => {
                         if (p.startsWith("[")) {
                             let c = p.replace(/[\[\]]/g,'');
                             c = transposeChord(normalizeChord(c), 0); 
-                            doc.setFont(undefined, 'bold'); doc.setTextColor(220, 53, 69);
+                            // Font Accordi
+                            doc.setFont(undefined, 'bold'); doc.setFontSize(chordSize); doc.setTextColor(220, 53, 69);
                             doc.text(c, lineX, currentY);
                             const chordWidth = doc.getTextWidth(c);
                             lastChordEnd = lineX + chordWidth + 1; 
                         } else {
-                            doc.setFont(undefined, 'normal'); doc.setTextColor(0);
+                            // Font Testo
+                            doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
                             doc.text(p, lineX, currentY + 4);
                             const textWidth = doc.getTextWidth(p);
                             lineX += textWidth;
                             if (lineX < lastChordEnd) lineX = lastChordEnd;
                         }
                     });
-                    currentY += 9; 
+                    currentY += (lineHeight + 4); 
                 } else {
                     const cleanLine = l.replace(/\[.*?\]/g, ''); 
-                    doc.setFont(undefined, 'normal'); doc.setTextColor(0);
+                    doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
                     const splitText = doc.splitTextToSize(cleanLine, COL_WIDTH);
                     doc.text(splitText, lineX, currentY);
-                    currentY += (splitText.length * 5);
+                    currentY += (splitText.length * lineHeight);
                 }
             }
-            currentY += 8; 
+            currentY += 6; // Spazio tra canzoni
         }
     }
 
-    // --- 4. STAMPA INDICE ---
-    if (tocPagesNeeded > 0 && tocData.length > 0) {
-        let tocPageIdx = 2; 
+    // --- 4. STAMPA INDICE (Solo se richiesto) ---
+    if (includeToc && tocPagesNeeded > 0 && tocData.length > 0) {
+        let tocPageIdx = 2; // Pagina 1 è copertina
         doc.setPage(tocPageIdx); 
+        
         doc.setTextColor(0, 51, 102); doc.setFont("helvetica", "bold"); doc.setFontSize(22);
         doc.text("INDICE", PAGE_WIDTH/2, 20, {align: 'center'});
         
@@ -647,16 +665,17 @@ window.generateFullPDF = async () => {
             if(tocY > 270) {
                  if(tocCol === 1) { tocCol = 2; tocY = 40; } else { 
                      tocPageIdx++;
+                     // Gestione inserimento pagine se abbiamo sforato quelle prenotate
                      if (tocPageIdx <= 1 + tocPagesNeeded) {
                          doc.setPage(tocPageIdx);
-                         tocCol = 1; tocY = 40; 
                      } else {
                          doc.insertPage(tocPageIdx); doc.setPage(tocPageIdx);
-                         tocCol = 1; tocY = 40;
                      }
+                     tocCol = 1; tocY = 40;
                  }
             }
             let tx = tocCol === 1 ? TOC_COL_1_X : TOC_COL_2_X;
+            
             if (item.type === 'section') {
                 tocY += 5;
                 doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(0);
@@ -673,20 +692,23 @@ window.generateFullPDF = async () => {
         });
     }
 
-    // --- 5. NUMERAZIONE PAGINE ---
-    const totalPages = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= totalPages; i++) {
-        if (i === 1) continue;
-        doc.setPage(i);
-        doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(150);
-        doc.text(String(i), PAGE_WIDTH/2, 290, {align:'center'});
+    // --- 5. NUMERAZIONE PAGINE (Solo se richiesto) ---
+    if (includePageNumbers) {
+        const totalPages = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= totalPages; i++) {
+            // Salta la copertina
+            if (i === 1 && coverInput) continue; 
+            
+            doc.setPage(i);
+            doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(150);
+            doc.text(String(i), PAGE_WIDTH/2, 290, {align:'center'});
+        }
     }
 
     doc.save("Canzoniere_Completo.pdf");
     if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display="none"; 
     window.showToast("PDF Scaricato!", "success");
 };
-
 window.generateFullLatex=()=>{if(!isAdmin)return;let l=`\\documentclass{article}\n\\usepackage[utf8]{inputenc}\n\\usepackage[a5paper]{geometry}\n\\usepackage{songs}\n\\begin{document}\n\\title{Canzoniere}\\maketitle\\tableofcontents\\newpage\n`;sectionOrder.forEach(secName=>{l+=`\\section{${secName}}\n`;allSongs.filter(s=>s.category===secName).sort((a,b)=>a.title.localeCompare(b.title)).forEach(s=>{l+=`\\beginsong{${s.title}}[by={${s.author||''}}]\n\\beginverse\n`;(s.lyrics||"").split("\n").forEach(line=>{l+=line.replace(/\[(.*?)\]/g,(m,p1)=>`\\[${normalizeChord(p1)}]`)+"\n";});l+=`\\endverse\n\\endsong\n`;});});l+=`\\end{document}`;const b=new Blob([l],{type:'text/plain'});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="Canzoniere.tex";a.click();};
 
 // UTILS & EXTRAS
@@ -1878,6 +1900,34 @@ window.hoverSectionPreview = (secId, secName) => {
     }
 };
 
+window.generateExcelList = () => {
+    // 1. Ordina alfabeticamente
+    const sorted = [...allSongs].sort((a,b) => a.title.localeCompare(b.title));
+    
+    // 2. Crea intestazione CSV (Usa ; come separatore per Excel Italiano)
+    // \ufeff è il BOM per dire a Excel che è UTF-8 (corregge accenti)
+    let csvContent = "\ufeffTitolo;Autore;Anno;Sezione\n";
+    
+    sorted.forEach(s => {
+        // Pulisci i campi da eventuali punti e virgola che romperebbero il CSV
+        const safeTitle = (s.title || "").replace(/;/g, ",");
+        const safeAuthor = (s.author || "").replace(/;/g, ",");
+        const safeYear = (s.year || "").replace(/;/g, "");
+        const safeCategory = (s.category || "").replace(/;/g, ",");
+        
+        csvContent += `${safeTitle};${safeAuthor};${safeYear};${safeCategory}\n`;
+    });
+
+    // 3. Download
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "Inventario_Canzoniere.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.showToast("File Excel scaricato!", "success");
+};
 
 
 
