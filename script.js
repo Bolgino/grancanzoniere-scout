@@ -367,19 +367,87 @@ window.renderPreview = () => {
 };
 
 window.handleSongSubmission = async () => {
-    // Nuovi ID della vista Proponi
-    const t = document.getElementById("propTitle").value.trim();
-    const a = document.getElementById("propAuthor").value.trim(); 
-    const c = document.getElementById("propCategory").value; 
-    const l = document.getElementById("propLyrics").value; 
-    const p = document.getElementById("propUser").value.trim();
-    const d = document.getElementById("propDesc").value.trim();
-    const y = document.getElementById("propYear").value;
+    // --- 1. RECUPERO DATI INPUT ---
+    const t = document.getElementById("propTitle").value.trim() || document.getElementById("newSongTitle").value.trim();
+    const a = document.getElementById("propAuthor").value.trim() || document.getElementById("newSongAuthor").value.trim(); 
+    const c = document.getElementById("propCategory").value || document.getElementById("newSongCategorySelect").value; 
+    const l = document.getElementById("propLyrics").value || document.getElementById("newSongLyrics").value; 
+    const p = document.getElementById("propUser").value.trim() || document.getElementById("newSongProposer").value.trim();
+    const d = document.getElementById("propDesc").value.trim() || document.getElementById("newSongDescription").value.trim();
+    const y = document.getElementById("propYear").value || document.getElementById("newSongYear").value;
 
+    // --- 2. VALIDAZIONI BASE ---
     if(!t) return showToast("Manca il Titolo!", 'warning');
     if(!isAdmin && !p) return showToast("Il tuo nome è obbligatorio", 'warning'); 
 
-    if (checkTitleDuplicate(t)) return showToast(`Esiste già "${t}"!`, 'danger');
+    // --- 3. CONTROLLO DUPLICATI INTELLIGENTE (INTEGRAZIONE) ---
+    const cleanTitle = t.trim().toLowerCase();
+    // Cerchiamo se esiste una canzone con lo stesso titolo
+    const existingSong = allSongs.find(s => s.title.trim().toLowerCase() === cleanTitle);
+
+    if (existingSong) {
+        // Logica: La nuova ha testo (più di 10 caratteri) E la vecchia è "vuota"?
+        const newHasLyrics = l && l.trim().length > 10;
+        const oldHasLyrics = existingSong.lyrics && existingSong.lyrics.trim().length > 10;
+
+        // SE stiamo portando informazioni nuove (testo) su una canzone vuota...
+        if (newHasLyrics && !oldHasLyrics) {
+            
+            // CASO A: ADMIN -> Aggiorna direttamente la canzone esistente
+            if (isAdmin) {
+                if(confirm(`Attenzione: "${existingSong.title}" esiste già nel database ma è senza testo.\n\nVuoi sovrascriverla inserendo il testo e gli accordi che hai appena scritto?`)) {
+                    
+                    document.getElementById("loadingOverlay").style.display = "flex";
+                    try {
+                        // Aggiorniamo il documento esistente
+                        await updateDoc(doc(db, "songs", existingSong.id), {
+                            lyrics: l,
+                            chords: window.extractChords(l),
+                            author: a || existingSong.author, // Se non metti autore, mantieni il vecchio
+                            year: y || existingSong.year,
+                            description: d || existingSong.description,
+                            category: c // Aggiorna la categoria se necessario
+                        });
+
+                        // Aggiorna l'array locale (per vedere subito le modifiche senza ricaricare)
+                        const localS = allSongs.find(x => x.id === existingSong.id);
+                        if(localS) {
+                            localS.lyrics = l;
+                            localS.chords = window.extractChords(l);
+                            localS.author = a || localS.author;
+                            localS.year = y || localS.year;
+                            localS.category = c;
+                        }
+
+                        showToast("Canzone esistente integrata con successo!", 'success');
+                        
+                        // Chiudi modali e apri editor
+                        mAddSong.hide();
+                        window.openEditor(existingSong.id);
+                        
+                    } catch(e) {
+                        showToast("Errore aggiornamento: " + e.message, 'danger');
+                    } finally {
+                        document.getElementById("loadingOverlay").style.display = "none";
+                    }
+                    return; // STOP: Non creare una nuova canzone
+                } else {
+                    return; // Utente ha annullato l'operazione
+                }
+            } 
+            // CASO B: GUEST -> Lascia passare la proposta (Bypass del blocco duplicati)
+            // Il codice continuerà sotto e creerà una proposta nella collezione "proposals"
+            // L'admin vedrà la proposta e potrà approvarla.
+            
+        } else {
+            // Caso Classico: La canzone esiste già E ha già il testo (o noi non ne stiamo aggiungendo).
+            // Blocchiamo per evitare doppioni inutili.
+            return showToast(`Esiste già una canzone chiamata "${t}"!`, 'danger');
+        }
+    }
+
+    // --- 4. CREAZIONE NUOVA CANZONE (O PROPOSTA) ---
+    // Se siamo arrivati qui, o la canzone non esiste, o è una proposta di integrazione (Guest)
 
     const songData = { 
         title: t, 
@@ -396,13 +464,17 @@ window.handleSongSubmission = async () => {
 
     try {
         if(isAdmin){ 
+            // Admin crea nuova canzone (se non esisteva)
             const r = await addDoc(collection(db,"songs"), {...songData, added:true}); 
             allSongs.push({ id: r.id, ...songData, added: true });
             showToast("Canzone Creata!", 'success'); 
+            mAddSong.hide();
             window.openEditor(r.id); 
         } else { 
+            // Guest crea proposta (anche se titolo esisteva ma era vuoto, ora viene permessa)
             await addDoc(collection(db,"proposals"), {...songData, proposer: p}); 
             showToast("Proposta inviata con successo!", 'success'); 
+            mAddSong.hide();
             window.goHome();
         }
     } catch(e) { 
@@ -410,7 +482,7 @@ window.handleSongSubmission = async () => {
         showToast("Errore: " + e.message, 'danger');
     } finally { 
         document.getElementById("loadingOverlay").style.display = "none"; 
-        loadData(); 
+        loadData(); // Ricarica per sicurezza
     }
 };
 
@@ -2355,6 +2427,7 @@ window.updateExportPreview = async (type, inputOrUrl, labelText) => {
         }
     }
 };
+
 
 
 
