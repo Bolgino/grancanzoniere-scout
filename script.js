@@ -1347,11 +1347,72 @@ window.exportSinglePDF = () => {
     }
     doc.save(`${s.title}.pdf`);
 };
-window.exportSingleLatex = () => { showToast("LaTeX Canzone in arrivo...", "warning"); };
+window.exportSingleLatex = () => {
+    // 1. Controllo sicurezza
+    const s = allSongs.find(x => x.id === currentSongId);
+    if (!s) return showToast("Nessuna canzone aperta.", "warning");
 
-/* ==========================================
-   LOGICA GESTIONE SEZIONI (FIX LISTA VUOTA)
-   ========================================== */
+    // 2. Prendi il testo dall'editor (così esporti anche modifiche non salvate)
+    const rawLyrics = document.getElementById("lyricsEditor").value;
+
+    // 3. Costruzione documento LaTeX
+    let l = `\\documentclass{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[a4paper, margin=2cm]{geometry}
+\\usepackage{songs}
+\\noversenumbers
+\\begin{document}
+\\begin{songs}{}
+`;
+
+    // Metadati (Autore e Anno se presenti)
+    let meta = [];
+    if(s.author) meta.push(`by={${s.author}}`);
+    if(s.year) meta.push(`sr={${s.year}}`);
+    const metaStr = meta.length > 0 ? `[${meta.join(',')}]` : "";
+
+    // Inizio Canzone
+    l += `\\beginsong{${s.title}}${metaStr}\n`;
+    l += `\\beginverse\n`;
+
+    // Processamento righe
+    const lines = rawLyrics.split("\n");
+    lines.forEach(line => {
+        // A. Gestione Accordi: [Do] -> \[C] 
+        // Il pacchetto songs lavora meglio con accordi in Inglese (normalizeChord)
+        let processed = line.replace(/\[(.*?)\]/g, (m, p1) => {
+            return `\\[${normalizeChord(p1)}]`;
+        });
+
+        // B. Gestione Formattazione
+        processed = processed.replace(/\*\*(.*?)\*\*/g, "\\textbf{$1}"); // Grassetto
+        processed = processed.replace(/__(.*?)__/g, "\\textit{$1}");     // Corsivo
+
+        l += processed + "\n";
+    });
+
+    // Chiusura
+    l += `\\endverse\n`;
+    l += `\\endsong\n`;
+    l += `\\end{songs}\n\\end{document}`;
+
+    // 4. Download File
+    try {
+        const blob = new Blob([l], {type: 'text/plain'});
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        // Pulisce il nome del file da caratteri strani
+        const safeName = s.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        a.download = `${safeName}.tex`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        showToast("File LaTeX scaricato!", "success");
+    } catch(e) {
+        console.error(e);
+        showToast("Errore download LaTeX", "danger");
+    }
+};
 
 // Apre la vista e FORZA IL CARICAMENTO DATI
 window.openManageSectionsView = async () => {
@@ -1836,5 +1897,6 @@ window.hoverSectionPreview = (secId, secName) => {
         }
     }
 };
+
 
 
