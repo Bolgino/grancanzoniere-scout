@@ -666,17 +666,47 @@ window.previewCoverFile = () => {
     if (f) { const r = new FileReader(); r.onload = e => { const img = document.getElementById("coverPreviewImg"); img.src = e.target.result; img.style.display = 'block'; }; r.readAsDataURL(f); }
 };
 window.saveSectionSettings=async()=>{const n=document.getElementById("editSectionNameInput").value;const f=document.getElementById("coverFileInput").files[0];document.getElementById("loadingOverlay").style.display="flex";try{let u=currentCoverUrl;if(f)u=await fileToBase64(f);if(n!==currentCategory){const b=writeBatch(db);b.update(doc(db,"sections",editingSectionId),{name:n,coverUrl:u});allSongs.filter(s=>s.category===currentCategory).forEach(s=>b.update(doc(db,"songs",s.id),{category:n}));await b.commit();}else{await updateDoc(doc(db,"sections",editingSectionId),{coverUrl:u});}mEditSection.hide();showToast("Salvato");loadData();}catch(e){showToast(e.message,'danger');}finally{document.getElementById("loadingOverlay").style.display="none";}};
-window.triggerDeleteSection = () => window.confirmModal("Eliminare sezione e tutte le sue canzoni?", async () => {
-    try {
-        document.getElementById("loadingOverlay").style.display = "flex"; 
-        await deleteDoc(doc(db, "sections", editingSectionId));
-        const b = writeBatch(db);
-        const songsToDelete = allSongs.filter(s => s.category === currentCategory);
-        songsToDelete.forEach(s => b.delete(doc(db, "songs", s.id)));
-        await b.commit();
-        mEditSection.hide(); currentCategory = null; window.goHome(); await loadData(); showToast("Sezione eliminata correttamante");
-    } catch(e) { showToast("Errore: " + e.message, 'danger'); } finally { document.getElementById("loadingOverlay").style.display = "none"; }
-});
+window.triggerDeleteSection = (id, name) => {
+    // 1. Controllo di sicurezza: se l'ID è nullo, fermati (evita l'errore "indexOf")
+    if (!id) return window.showToast("Errore: ID Sezione non valido", "danger");
+
+    // 2. Imposta le variabili globali necessarie per l'operazione
+    editingSectionId = id;
+    currentCategory = name;
+
+    // 3. Rimuovi il focus dal pulsante (Risolve l'errore "aria-hidden")
+    if (document.activeElement) document.activeElement.blur();
+
+    // 4. Avvia il modale di conferma
+    window.confirmModal("Eliminare la sezione '" + name + "' e tutte le sue canzoni?", async () => {
+        try {
+            document.getElementById("loadingOverlay").style.display = "flex"; 
+            
+            // Cancella la sezione
+            await deleteDoc(doc(db, "sections", editingSectionId));
+            
+            // Cancella le canzoni associate
+            const b = writeBatch(db);
+            const songsToDelete = allSongs.filter(s => s.category === currentCategory);
+            songsToDelete.forEach(s => b.delete(doc(db, "songs", s.id)));
+            await b.commit();
+
+            // Reset interfaccia
+            if(typeof mEditSection !== 'undefined') mEditSection.hide(); 
+            currentCategory = null; 
+            
+            // Ricarica e notifica
+            await loadData(); 
+            window.goHome(); // Torna alla home dopo l'eliminazione
+            showToast("Sezione eliminata correttamente", "success");
+        } catch(e) { 
+            console.error(e);
+            showToast("Errore eliminazione: " + e.message, 'danger'); 
+        } finally { 
+            document.getElementById("loadingOverlay").style.display = "none"; 
+        }
+    });
+};
 window.showAddModal=()=>{const s=document.getElementById("newSongCategorySelect");s.innerHTML="";allSections.forEach(sec=>s.innerHTML+=`<option value="${sec.name}">${sec.name}</option>`);document.getElementById("newSongTitle").value="";document.getElementById("newSongAuthor").value="";document.getElementById("newSongLyrics").value="";mAddSong.show();};
 window.saveSong = async () => {
     const t = document.getElementById("lyricsEditor").value;
@@ -1170,6 +1200,9 @@ window.renderManageSections = () => {
         const songCount = allSongs.filter(s => s.category === sec.name).length;
         const isFirst = index === 0;
         const isLast = index === sortedSections.length - 1;
+        
+        // CORREZIONE QUI SOTTO: Escape del nome per evitare errori con gli apostrofi
+        const safeName = sec.name.replace(/'/g, "\\'"); 
 
         c.innerHTML += `
         <div class="card bg-dark border-secondary shadow-sm p-2 mb-2" style="border: 1px solid #444;">
@@ -1197,10 +1230,10 @@ window.renderManageSections = () => {
                 </div>
 
                 <div class="d-flex gap-2">
-                    <button class="btn btn-outline-light btn-sm" title="Modifica" onclick="window.openSectionSettings('${sec.id}','${sec.name}','${sec.coverUrl||''}', event)">
+                    <button class="btn btn-outline-light btn-sm" title="Modifica" onclick="window.openSectionSettings('${sec.id}','${safeName}','${sec.coverUrl||''}', event)">
                         <i class="bi bi-pencil"></i>
                     </button>
-                    <button class="btn btn-outline-danger btn-sm" title="Elimina" onclick="editingSectionId='${sec.id}'; currentCategory='${sec.name}'; window.triggerDeleteSection()">
+                    <button class="btn btn-outline-danger btn-sm" title="Elimina" onclick="window.triggerDeleteSection('${sec.id}', '${safeName}')">
                         <i class="bi bi-trash"></i>
                     </button>
                 </div>
@@ -1283,6 +1316,7 @@ window.createNewSection = async () => {
         if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display = "none";
     }
 };
+
 
 
 
