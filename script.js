@@ -48,7 +48,8 @@ let autoScrollInterval = null;
 let exportSectionOrder = [];
 let exportSectionCovers = {};
 let targetMergeSongId = null;
-
+let mDuplicateWarning; // Variabile per il modale
+let pendingMergeData = null; // Dove salviamo i dati in attesa di conferma
 // Loader phrases
 const loaderPhrases = [
     "Allineo gli astri...", "Accordo la chitarra...", "Scaldo le corde vocali...",
@@ -75,6 +76,7 @@ window.addEventListener('load', () => {
     mExportSetlist = new bootstrap.Modal(document.getElementById('exportSetlistModal'));
     mAddToSetlist = new bootstrap.Modal(document.getElementById('addToSetlistModal'));
     mReviewProposal = new bootstrap.Modal(document.getElementById('reviewProposalModal'));
+    mDuplicateWarning = new bootstrap.Modal(document.getElementById('duplicateWarningModal'));
     
     // NUOVO MODAL
     const createSetlistEl = document.getElementById('createSetlistModal');
@@ -369,7 +371,7 @@ window.renderPreview = () => {
 };
 
 window.handleSongSubmission = async () => {
-    // --- 1. RECUPERO DATI INPUT ---
+    // 1. RECUPERO DATI
     const t = document.getElementById("propTitle").value.trim() || document.getElementById("newSongTitle").value.trim();
     const a = document.getElementById("propAuthor").value.trim() || document.getElementById("newSongAuthor").value.trim(); 
     const c = document.getElementById("propCategory").value || document.getElementById("newSongCategorySelect").value; 
@@ -381,71 +383,67 @@ window.handleSongSubmission = async () => {
     if(!t) return showToast("Manca il Titolo!", 'warning');
     if(!isAdmin && !p) return showToast("Il tuo nome è obbligatorio", 'warning'); 
 
-    // --- 2. CONTROLLO INTELLIGENTE ---
-    const cleanTitle = t.trim().toLowerCase();
-    const existingSong = allSongs.find(s => s.title.trim().toLowerCase() === cleanTitle);
+    // 2. CONTROLLO DUPLICATI ROBUSTO (Usa la nuova funzione robustNormalize)
+    const normInputTitle = robustNormalize(t);
+    const existingSong = allSongs.find(s => robustNormalize(s.title) === normInputTitle);
 
-    // Se la canzone esiste già...
-    if (existingSong) {
-        const dbHasLyrics = existingSong.lyrics && existingSong.lyrics.trim().length > 10;
-        const inputHasLyrics = l && l.trim().length > 10;
-
-        if (dbHasLyrics) {
-            // CASO 1: Esiste ed è già completa -> BLOCCO TOTALE
-            return showToast(`La canzone "${existingSong.title}" esiste già ed è completa!`, 'danger');
-        } 
-        
-        if (!inputHasLyrics) {
-            // CASO 2: Esiste (vuota o piena) e l'utente NON sta mettendo testo nuovo -> BLOCCO
-            return showToast(`"${existingSong.title}" esiste già e non stai aggiungendo il testo!`, 'warning');
-        }
-
-        // CASO 3: Esiste MA è vuota, e l'utente sta mettendo il testo -> LASCIA PASSARE
-        // (Il codice prosegue sotto e crea la proposta o aggiorna se admin)
-    }
-
-    // --- 3. PREPARAZIONE DATI ---
+    // Preparazione oggetto dati
     const songData = { 
         title: t, author: a, category: c, lyrics: l, description: d, year: y, 
         chords: window.extractChords(l), createdAt: Date.now()
     };
 
+    if (existingSong) {
+        const dbHasLyrics = existingSong.lyrics && existingSong.lyrics.trim().length > 10;
+        const inputHasLyrics = l && l.trim().length > 10;
+
+        if (dbHasLyrics) {
+            return showToast(`Esiste già "${existingSong.title}" ed è completa!`, 'danger');
+        } 
+        
+        if (!inputHasLyrics) {
+            return showToast(`"${existingSong.title}" esiste già e non stai aggiungendo testo!`, 'warning');
+        }
+
+        // --- CASO MERGE (Integrazione) ---
+        if (isAdmin) {
+            // Invece di confirm(), salviamo i dati e apriamo il modale
+            pendingMergeData = {
+                targetId: existingSong.id,
+                newData: {
+                    lyrics: l, 
+                    chords: window.extractChords(l),
+                    author: a || existingSong.author,
+                    year: y || existingSong.year,
+                    description: d || existingSong.description,
+                    category: c
+                }
+            };
+
+            // Riempiamo i testi del modale
+            document.getElementById('dupSongTitle').innerText = t;
+            document.getElementById('dupDbTitle').innerText = existingSong.title;
+            document.getElementById('dupDbAuth').innerText = existingSong.author ? `(${existingSong.author})` : '';
+            
+            // Mostra il popup
+            mDuplicateWarning.show();
+            return; // STOP QUI, aspettiamo il click sul modale
+        }
+    }
+
+    // --- SE NON E' DUPLICATO O SEI GUEST, PROCEDI NORMALE ---
     document.getElementById("loadingOverlay").style.display = "flex"; 
 
     try {
         if (isAdmin) {
-            // SE SEI ADMIN:
-            if (existingSong) {
-                // Se esiste (ed era vuota), chiedi conferma per sovrascrivere subito
-                if(confirm(`"${t}" esiste già ma è vuota. Vuoi aggiornarla con questo testo?`)) {
-                    await updateDoc(doc(db, "songs", existingSong.id), {
-                        lyrics: l, chords: window.extractChords(l),
-                        author: a || existingSong.author,
-                        year: y || existingSong.year,
-                        description: d || existingSong.description,
-                        category: c
-                    });
-                    
-                    // Aggiorna locale
-                    const loc = allSongs.find(x => x.id === existingSong.id);
-                    if(loc) { loc.lyrics = l; loc.chords = window.extractChords(l); loc.category = c; }
-                    
-                    showToast("Canzone aggiornata!", 'success');
-                    mAddSong.hide();
-                    window.openEditor(existingSong.id);
-                }
-            } else {
-                // Se non esiste, crea nuova
-                const r = await addDoc(collection(db,"songs"), {...songData, added:true}); 
-                allSongs.push({ id: r.id, ...songData, added: true });
-                showToast("Canzone Creata!", 'success'); 
-                mAddSong.hide();
-                window.openEditor(r.id); 
-            }
+            const r = await addDoc(collection(db,"songs"), {...songData, added:true}); 
+            allSongs.push({ id: r.id, ...songData, added: true });
+            showToast("Canzone Creata!", 'success'); 
+            mAddSong.hide();
+            window.openEditor(r.id); 
         } else { 
-            // SE SEI GUEST: Crea sempre una proposta (anche se esiste la canzone vuota)
             await addDoc(collection(db,"proposals"), {...songData, proposer: p}); 
-            showToast("Proposta inviata! Sarà revisionata dai capi.", 'success'); 
+            showToast("Proposta inviata!", 'success'); 
             mAddSong.hide();
             window.goHome();
         }
@@ -458,6 +456,34 @@ window.handleSongSubmission = async () => {
     }
 };
 
+// Funzione chiamata dal tasto "Sì, Unisci" del nuovo modale
+window.executeMerge = async () => {
+    if (!pendingMergeData) return;
+
+    mDuplicateWarning.hide();
+    document.getElementById("loadingOverlay").style.display = "flex";
+
+    try {
+        // Esegui l'aggiornamento su Firestore
+        await updateDoc(doc(db, "songs", pendingMergeData.targetId), pendingMergeData.newData);
+        
+        // Aggiorna array locale
+        const loc = allSongs.find(x => x.id === pendingMergeData.targetId);
+        if(loc) { 
+            Object.assign(loc, pendingMergeData.newData);
+        }
+        
+        showToast("Canzone integrata con successo!", 'success');
+        mAddSong.hide(); // Chiudi modale aggiunta se aperto
+        window.openEditor(pendingMergeData.targetId); // Vai all'editor della canzone aggiornata
+
+    } catch(e) {
+        showToast("Errore merge: " + e.message, 'danger');
+    } finally {
+        document.getElementById("loadingOverlay").style.display = "none";
+        pendingMergeData = null; // Reset
+    }
+};
 window.openExportModal = () => {
     const list = document.getElementById("sectionOrderList"); list.innerHTML = "";
     sectionOrder = allSections.map(s=>s.name);
@@ -2450,6 +2476,14 @@ window.updateExportPreview = async (type, inputOrUrl, labelText) => {
             title.innerText = "Anteprima Copertina";
         }
     }
+};
+const robustNormalize = (str) => {
+    if (!str) return "";
+    return str.toLowerCase()
+              .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Toglie accenti
+              .replace(/[^a-z0-9\s]/g, "") // Toglie punteggiatura speciale
+              .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
+              .trim();
 };
 
 
