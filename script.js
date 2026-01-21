@@ -575,18 +575,46 @@ window.generateFullPDF = async () => {
 
             checkLimit(25);
 
-            // Titolo
-            doc.setFont("helvetica", "bold"); doc.setFontSize(titleSize); doc.setTextColor(0, 51, 102);
-            const titleLines = doc.splitTextToSize(s.title.toUpperCase(), COL_WIDTH);
+            // 1. Calcoliamo PRIMA quanto spazio occupa l'autore
+            let authTxt = "";
+            let authWidth = 0;
+            if (s.author) {
+                doc.setFont("helvetica", "italic"); 
+                doc.setFontSize(metaSize);
+                authTxt = s.year ? `${s.author} (${s.year})` : s.author;
+                authWidth = doc.getTextWidth(authTxt);
+            }
+
+            // 2. Calcoliamo lo spazio effettivo rimasto per il titolo
+            // Sottraiamo la larghezza autore + 3mm di spazio "cuscinetto"
+            const maxTitleWidth = s.author ? (COL_WIDTH - authWidth - 3) : COL_WIDTH;
+
+            // 3. Prepariamo e stampiamo il Titolo
+            doc.setFont("helvetica", "bold"); 
+            doc.setFontSize(titleSize); 
+            doc.setTextColor(0, 51, 102);
+            
+            // Usiamo maxTitleWidth invece di COL_WIDTH per forzare l'a capo se serve
+            const titleLines = doc.splitTextToSize(s.title.toUpperCase(), maxTitleWidth);
             doc.text(titleLines, currentX, currentY);
+
+            // 4. Stampiamo l'Autore (Allineato all'ultima riga del titolo)
+            if (authTxt) {
+                doc.setFont("helvetica", "italic"); 
+                doc.setFontSize(metaSize); 
+                doc.setTextColor(100);
+                
+                // Calcoliamo la posizione Y dell'ultima riga del titolo
+                // Così l'autore appare allineato in basso a destra rispetto al titolo
+                const lineSpacing = lineHeight + 0.5;
+                const lastLineY = currentY + ((titleLines.length - 1) * lineSpacing);
+                
+                doc.text(authTxt, currentX + COL_WIDTH, lastLineY, {align: 'right'}); 
+            }
+
+            // Aggiorniamo la Y per il prossimo elemento
             currentY += (titleLines.length * (lineHeight + 0.5));
 
-            // Autore
-            if(s.author) {
-                doc.setFont("helvetica", "italic"); doc.setFontSize(metaSize); doc.setTextColor(100);
-                const authTxt = s.year ? `${s.author} (${s.year})` : s.author;
-                doc.text(authTxt, currentX + COL_WIDTH, currentY - lineHeight, {align: 'right'}); 
-            }
 
             // Descrizione
             if (s.description) {
@@ -2024,11 +2052,16 @@ window.toggleExportSection = (index) => {
 };
 // script.js - Aggiungi in fondo
 
+/* ============================================================
+   GESTIONE ANTEPRIMA DINAMICA EXPORT CON ETICHETTA AGGIORNATA
+   ============================================================ */
+
 window.showFormatPreview = (type) => {
     const container = document.getElementById("formatPreviewContainer");
     const img = document.getElementById("exportPreviewImg");
     const ph = document.getElementById("exportPreviewPlaceholder");
     const headerTitle = document.getElementById("previewHeaderTitle");
+    const label = document.getElementById("exportPreviewLabel"); // <--- Elemento testo in basso
     
     // 1. Nascondi le copertine attuali
     if (img) img.style.display = "none";
@@ -2040,8 +2073,29 @@ window.showFormatPreview = (type) => {
         container.classList.add("d-flex");
     }
 
-    // 3. Aggiorna il titolo del pannello
-    if (headerTitle) headerTitle.innerText = "Anteprima " + type.toUpperCase();
+    // 3. Aggiorna l'intestazione e l'etichetta in basso
+    let labelText = "";
+    let headerText = "Anteprima " + type.toUpperCase();
+
+    switch(type) {
+        case 'pdf':
+            labelText = "Anteprima Documento PDF (A5)";
+            break;
+        case 'excel':
+            labelText = "Anteprima Foglio Excel (.csv)";
+            break;
+        case 'txt':
+            labelText = "Anteprima File di Testo (.txt)";
+            break;
+        case 'latex':
+            labelText = "Anteprima Sorgente LaTeX (.tex)";
+            break;
+        default:
+            labelText = "Anteprima Formato";
+    }
+
+    if (headerTitle) headerTitle.innerText = headerText;
+    if (label) label.innerText = labelText; // <--- Qui aggiorniamo la scritta sotto
 
     let html = "";
 
@@ -2226,6 +2280,7 @@ window.updateExportPreview = async (type, inputOrUrl, labelText) => {
         }
     }
 };
+
 
 
 
