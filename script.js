@@ -351,33 +351,51 @@ window.renderPreview = () => {
 };
 
 window.handleSongSubmission = async () => {
-    const t = document.getElementById("newSongTitle").value;
-    const a = document.getElementById("newSongAuthor").value; 
-    const c = document.getElementById("newSongCategorySelect").value; 
-    const l = document.getElementById("newSongLyrics").value; 
-    const p = document.getElementById("newSongProposer").value;
-    const d = document.getElementById("newSongDescription").value;
-    const y = document.getElementById("newSongYear").value;
+    // Nuovi ID della vista Proponi
+    const t = document.getElementById("propTitle").value.trim();
+    const a = document.getElementById("propAuthor").value.trim(); 
+    const c = document.getElementById("propCategory").value; 
+    const l = document.getElementById("propLyrics").value; 
+    const p = document.getElementById("propUser").value.trim();
+    const d = document.getElementById("propDesc").value.trim();
+    const y = document.getElementById("propYear").value;
 
-    if(!t||!c) return showToast("Titolo e Sezione obbligatori", 'warning');
+    if(!t) return showToast("Manca il Titolo!", 'warning');
     if(!isAdmin && !p) return showToast("Il tuo nome è obbligatorio", 'warning'); 
 
-    if (checkTitleDuplicate(t)) return showToast(`Esiste già una canzone intitolata "${t}"!`, 'danger');
+    if (checkTitleDuplicate(t)) return showToast(`Esiste già "${t}"!`, 'danger');
 
-    const songData = { title:t, author:a, category:c, lyrics:l, description:d, year:y, chords:window.extractChords(l) };
+    const songData = { 
+        title: t, 
+        author: a, 
+        category: c, 
+        lyrics: l, 
+        description: d, 
+        year: y, 
+        chords: window.extractChords(l),
+        createdAt: Date.now()
+    };
+
     document.getElementById("loadingOverlay").style.display = "flex"; 
 
     try {
         if(isAdmin){ 
             const r = await addDoc(collection(db,"songs"), {...songData, added:true}); 
             allSongs.push({ id: r.id, ...songData, added: true });
-            mAddSong.hide(); showToast("Creata!", 'success'); window.openEditor(r.id); 
+            showToast("Canzone Creata!", 'success'); 
+            window.openEditor(r.id); 
         } else { 
-            await addDoc(collection(db,"proposals"), {...songData, proposer:p}); 
-            mAddSong.hide(); showToast("Proposta inviata!", 'success'); 
+            await addDoc(collection(db,"proposals"), {...songData, proposer: p}); 
+            showToast("Proposta inviata con successo!", 'success'); 
+            window.goHome();
         }
-    } catch(e) { console.error(e); showToast("Errore creazione: " + e.message, 'danger');
-    } finally { document.getElementById("loadingOverlay").style.display = "none"; loadData(); }
+    } catch(e) { 
+        console.error(e); 
+        showToast("Errore: " + e.message, 'danger');
+    } finally { 
+        document.getElementById("loadingOverlay").style.display = "none"; 
+        loadData(); 
+    }
 };
 
 window.openExportModal = () => {
@@ -1457,5 +1475,45 @@ window.createNewSetlistPrompt = () => {
             console.error("Modale createSetlistModal non trovato nell'HTML");
         }
     }
+};
+
+// --- NUOVE FUNZIONI PER LA TAB PROPONI ---
+
+window.openProposeView = () => {
+    // Resetta i campi
+    document.getElementById("propTitle").value = "";
+    document.getElementById("propAuthor").value = "";
+    document.getElementById("propLyrics").value = "";
+    document.getElementById("propYear").value = "";
+    document.getElementById("propDesc").value = "";
+    document.getElementById("propUser").value = ""; // O lascia salvato se vuoi
+    document.getElementById("propPreviewArea").innerHTML = "";
+
+    // Popola le sezioni
+    const sel = document.getElementById("propCategory");
+    sel.innerHTML = "";
+    allSections.forEach(sec => {
+        sel.innerHTML += `<option value="${sec.name}">${sec.name}</option>`;
+    });
+
+    // Switch view
+    window.switchView('view-propose');
+};
+
+window.renderProposePreview = () => {
+    const txt = document.getElementById("propLyrics").value;
+    const div = document.getElementById("propPreviewArea");
+    div.innerHTML = "";
+    
+    // Usa la stessa logica di rendering dell'editor principale
+    txt.split("\n").forEach(l => {
+        let formattedLine = l.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+                             .replace(/__(.*?)__/g, '<i>$1</i>');
+        
+        let pl = formattedLine.replace(/\[(.*?)\]/g, (m, p1) => 
+            `<span class="chord-span">${normalizeChord(p1)}</span>`
+        );
+        div.innerHTML += `<div>${pl || '&nbsp;'}</div>`;
+    });
 };
 
