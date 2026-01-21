@@ -2022,6 +2022,84 @@ window.toggleExportSection = (index) => {
         window.renderExportList(); 
     }
 };
+// script.js - Aggiungi in fondo
+
+window.showFormatPreview = (type) => {
+    const c = document.getElementById("formatPreviewContainer");
+    if(!c) return;
+
+    let html = "";
+
+    if (type === 'pdf') {
+        // Simula una pagina A5 con testo e accordi
+        html = `
+        <div class="bg-white text-dark p-2 shadow-sm" style="width: 100px; height: 140px; font-size: 4px; overflow:hidden; border-radius: 2px;">
+            <div class="fw-bold text-center mb-1" style="color:#003366; font-size:6px;">TITOLO CANZONE</div>
+            <div class="text-end fst-italic mb-1" style="color:#666;">Autore (2023)</div>
+            <hr class="m-0 mb-1">
+            <div class="mb-1"><span class="text-danger fw-bold">[Do]</span> La la la la</div>
+            <div class="mb-1"><span class="text-danger fw-bold">[Sol]</span> Cantiamo insieme</div>
+            <div class="mb-1">Senza accordi qui</div>
+            <div class="mb-1"><span class="text-danger fw-bold">[Lam]</span> Ancora testo...</div>
+            <div style="margin-top:20px; font-size: 8px; text-align:center; color: #ddd;">A5</div>
+        </div>`;
+    } 
+    else if (type === 'excel') {
+        // Simula una griglia Excel
+        html = `
+        <div class="bg-white text-dark shadow-sm" style="width: 120px; height: 100px; font-size: 5px; overflow:hidden; border-radius: 2px; border:1px solid #ccc;">
+            <div class="d-flex bg-success text-white fw-bold border-bottom border-secondary">
+                <div class="border-end border-light px-1 w-25">Titolo</div>
+                <div class="border-end border-light px-1 w-25">Autore</div>
+                <div class="px-1 w-25">Anno</div>
+            </div>
+            <div class="d-flex border-bottom border-light">
+                <div class="border-end px-1 w-25">Albachiara</div>
+                <div class="border-end px-1 w-25">Vasco</div>
+                <div class="px-1 w-25">1979</div>
+            </div>
+            <div class="d-flex border-bottom border-light bg-light">
+                <div class="border-end px-1 w-25">Certe Notti</div>
+                <div class="border-end px-1 w-25">Ligabue</div>
+                <div class="px-1 w-25">1995</div>
+            </div>
+             <div class="d-flex border-bottom border-light">
+                <div class="border-end px-1 w-25">Azzurro</div>
+                <div class="border-end px-1 w-25">Celentano</div>
+                <div class="px-1 w-25">1968</div>
+            </div>
+        </div>`;
+    }
+    else if (type === 'txt') {
+        // Simula un blocco note semplice
+        html = `
+        <div class="bg-white text-dark p-2 shadow-sm border" style="width: 110px; height: 120px; font-size: 5px; font-family: monospace; overflow:hidden;">
+            LISTA CANZONI<br><br>
+            1. Albachiara (Vasco)<br>
+            - Cat: Fuoco<br><br>
+            2. Azzurro (Celentano)<br>
+            - Cat: Vari<br><br>
+            3. Certe Notti (Liga)<br>
+            - Cat: Fuoco
+        </div>`;
+    }
+    else if (type === 'latex') {
+        // Simula codice scuro
+        html = `
+        <div class="bg-dark text-warning p-2 shadow-sm border border-secondary" style="width: 110px; height: 120px; font-size: 4px; font-family: monospace; overflow:hidden;">
+            <span class="text-info">\\documentclass</span>{article}<br>
+            <span class="text-info">\\usepackage</span>{songs}<br>
+            <span class="text-info">\\begin</span>{document}<br><br>
+            <span class="text-info">\\beginsong</span>{Albachiara}<br>
+            <span class="text-info">\\beginverse</span><br>
+            \\[C] Respire piano...<br>
+            <span class="text-info">\\endverse</span><br>
+            <span class="text-info">\\endsong</span>
+        </div>`;
+    }
+
+    c.innerHTML = html;
+};
 
 
 
