@@ -236,33 +236,41 @@ window.renderDashboard = () => {
 };
 
 window.performGlobalSearch = () => {
-    const q=document.getElementById('globalSearch').value.toLowerCase();
-    if(!q) { window.renderDashboard(); return; }
-    const res=allSongs.filter(s=>s.title.toLowerCase().includes(q) || (s.author&&s.author.toLowerCase().includes(q)));
-    document.getElementById("favoritesSection").style.display='none';
+    const q = document.getElementById('globalSearch').value.toLowerCase();
+    if (!q) { window.renderDashboard(); return; }
+    
+    const res = allSongs.filter(s => s.title.toLowerCase().includes(q) || (s.author && s.author.toLowerCase().includes(q)));
+    document.getElementById("favoritesSection").style.display = 'none';
     
     document.getElementById("categoriesContainer").innerHTML = res.length ? res.map(s => {
         let badgeHtml = "";
+        
+        // LOGICA BOLLINI ADMIN (Esistente)
         if (isAdmin) {
-            // LOGICA BOLLINI:
             const hasLyrics = s.lyrics && s.lyrics.trim().length > 5;
             const hasChords = s.lyrics && s.lyrics.includes("[");
             
             if (hasLyrics && hasChords) {
-                // VERDE: Completo
                 badgeHtml = `<span class="status-dot status-green" title="Completo"></span>`;
             } else if (hasLyrics) {
-                // ARANCIO: Solo Testo
                 badgeHtml = `<span class="status-dot status-orange" title="Solo Testo"></span>`;
             } else {
-                // ROSSO: Vuoto
                 badgeHtml = `<span class="status-dot status-red" title="Vuoto"></span>`;
             }
         }
+
+        // --- NUOVO: LOGICA BOLLINO TONALITÀ ---
+        let transBadge = "";
+        if (s.savedTranspose && s.savedTranspose !== 0) {
+            const sign = s.savedTranspose > 0 ? "+" : "";
+            transBadge = `<span class="badge bg-secondary bg-opacity-25 text-white border border-secondary ms-2" style="font-size: 0.75rem;">${sign}${s.savedTranspose}</span>`;
+        }
+        // --------------------------------------
+
         return `<div class="col-12"><div class="card shadow-sm border-0" onclick="window.openEditor('${s.id}')" style="cursor:pointer">
             <div class="card-body d-flex justify-content-between align-items-center">
                 <div>
-                    <h6 class="fw-bold mb-0">${s.title} ${badgeHtml}</h6>
+                    <h6 class="fw-bold mb-0">${s.title} ${badgeHtml} ${transBadge}</h6>
                     <small>${s.author} <span class="badge bg-light text-dark ms-2">${s.category}</span></small>
                 </div>
                 <i class="bi bi-chevron-right text-muted"></i>
@@ -270,7 +278,6 @@ window.performGlobalSearch = () => {
         </div></div>`;
     }).join('') : `<div class="text-center mt-4">Nessun risultato.</div>`;
 };
-
 window.openList = (cat) => {
     currentSetlistId = null;
     currentCategory=cat; switchView('view-list'); document.getElementById("listTitle").innerText=cat; document.getElementById("sectionSearchBox").value=""; 
@@ -289,34 +296,36 @@ window.renderList = (songs) => {
     
     songs.forEach(s => {
         let badgeHtml = "";
+        
+        // --- LOGICA BOLLINI ESISTENTE ---
         if (isAdmin) {
-            // LOGICA BOLLINI:
             const hasLyrics = s.lyrics && s.lyrics.trim().length > 5;
             const hasChords = s.lyrics && s.lyrics.includes("[");
-            
-            if (hasLyrics && hasChords) {
-                // VERDE
-                badgeHtml = `<span class="status-dot status-green" title="Completo"></span>`;
-            } else if (hasLyrics) {
-                // ARANCIO
-                badgeHtml = `<span class="status-dot status-orange" title="Solo Testo"></span>`;
-            } else {
-                // ROSSO
-                badgeHtml = `<span class="status-dot status-red" title="Vuoto"></span>`;
-            }
+            if (hasLyrics && hasChords) badgeHtml = `<span class="status-dot status-green" title="Completo"></span>`;
+            else if (hasLyrics) badgeHtml = `<span class="status-dot status-orange" title="Solo Testo"></span>`;
+            else badgeHtml = `<span class="status-dot status-red" title="Vuoto"></span>`;
         }
+
+        // --- NUOVO: BADGE TONALITÀ SALVATA ---
+        let transBadge = "";
+        if (s.savedTranspose && s.savedTranspose !== 0) {
+            const sign = s.savedTranspose > 0 ? "+" : "";
+            // Mostra un piccolo badge grigio chiaro con la tonalità
+            transBadge = `<span class="badge bg-secondary bg-opacity-25 text-white border border-secondary ms-2" style="font-size: 0.75rem;">${sign}${s.savedTranspose}</span>`;
+        }
+
         c.innerHTML += `
             <button class="list-group-item list-group-item-action p-3 border-0 mb-1 rounded shadow-sm" onclick="window.openEditor('${s.id}')">
                 <div class="d-flex w-100 justify-content-between align-items-center">
-                    <div><h6 class="mb-1 fw-bold">${s.title} ${badgeHtml}</h6></div>
+                    <div><h6 class="mb-1 fw-bold">${s.title} ${badgeHtml} ${transBadge}</h6></div>
                     <small class="text-muted">${s.author || ''}</small>
                 </div>
             </button>`;
     });
 };
-
 window.openEditor = (id) => {
-    currentSongId=id; const s=allSongs.find(x=>x.id===id);
+    currentSongId=id; 
+    const s=allSongs.find(x=>x.id===id);
     switchView('view-editor');
     document.getElementById("editorTitle").innerText=s.title;
     document.getElementById("editorAuthor").innerText=s.author;
@@ -331,8 +340,13 @@ window.openEditor = (id) => {
     hasUnsavedChanges = false; 
     editor.oninput = () => { hasUnsavedChanges = true; window.renderPreview(); };
 
-    currentTranspose=0; document.getElementById("toneDisplay").innerText="0";
-    updateFavIcon(); window.renderPreview();
+    // MODIFICA: Carica la tonalità salvata o metti 0 se non esiste
+    currentTranspose = s.savedTranspose || 0; 
+    const sign = currentTranspose > 0 ? "+" : "";
+    document.getElementById("toneDisplay").innerText = currentTranspose === 0 ? "0" : sign + currentTranspose;
+
+    updateFavIcon(); 
+    window.renderPreview(); // Renderizzerà con la tonalità caricata
     if (autoScrollInterval) window.toggleAutoScroll();
 };
 
@@ -654,7 +668,7 @@ window.generateFullPDF = async () => {
                     parts.forEach(p => {
                         if (p.startsWith("[")) {
                             let c = p.replace(/[\[\]]/g,'');
-                            c = transposeChord(normalizeChord(c), 0); 
+                            c = transposeChord(normalizeChord(c), songTrans);
                             doc.setFont(undefined, 'bold'); doc.setFontSize(chordSize); doc.setTextColor(220, 53, 69);
                             doc.text(c, lineX, currentY);
                             const chordWidth = doc.getTextWidth(c);
@@ -739,8 +753,44 @@ window.generateFullPDF = async () => {
     if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display="none"; 
     window.showToast("PDF Scaricato!", "success");
 };
-window.generateFullLatex=()=>{if(!isAdmin)return;let l=`\\documentclass{article}\n\\usepackage[utf8]{inputenc}\n\\usepackage[a5paper]{geometry}\n\\usepackage{songs}\n\\begin{document}\n\\title{Canzoniere}\\maketitle\\tableofcontents\\newpage\n`;sectionOrder.forEach(secName=>{l+=`\\section{${secName}}\n`;allSongs.filter(s=>s.category===secName).sort((a,b)=>a.title.localeCompare(b.title)).forEach(s=>{l+=`\\beginsong{${s.title}}[by={${s.author||''}}]\n\\beginverse\n`;(s.lyrics||"").split("\n").forEach(line=>{l+=line.replace(/\[(.*?)\]/g,(m,p1)=>`\\[${normalizeChord(p1)}]`)+"\n";});l+=`\\endverse\n\\endsong\n`;});});l+=`\\end{document}`;const b=new Blob([l],{type:'text/plain'});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="Canzoniere.tex";a.click();};
+window.generateFullLatex = () => {
+    if (!isAdmin) return;
+    
+    let l = `\\documentclass{article}\n\\usepackage[utf8]{inputenc}\n\\usepackage[a5paper]{geometry}\n\\usepackage{songs}\n\\begin{document}\n\\title{Canzoniere}\\maketitle\\tableofcontents\\newpage\n`;
+    
+    sectionOrder.forEach(secName => {
+        l += `\\section{${secName}}\n`;
+        
+        allSongs.filter(s => s.category === secName)
+                .sort((a, b) => a.title.localeCompare(b.title))
+                .forEach(s => {
+                    // RECUPERA TONALITÀ SALVATA
+                    const tr = s.savedTranspose || 0;
 
+                    l += `\\beginsong{${s.title}}[by={${s.author || ''}}]\n\\beginverse\n`;
+                    
+                    (s.lyrics || "").split("\n").forEach(line => {
+                        // APPLICA TRASPOSIZIONE AGLI ACCORDI
+                        let processedLine = line.replace(/\[(.*?)\]/g, (m, p1) => {
+                            // Normalizza e poi Trasponi
+                            const transposed = transposeChord(normalizeChord(p1), tr);
+                            return `\\[${transposed}]`;
+                        });
+                        l += processedLine + "\n";
+                    });
+                    
+                    l += `\\endverse\n\\endsong\n`;
+                });
+    });
+    
+    l += `\\end{document}`;
+    
+    const b = new Blob([l], { type: 'text/plain' });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(b);
+    a.download = "Canzoniere.tex";
+    a.click();
+};
 // UTILS & EXTRAS
 const fileToBase64 = file => new Promise((resolve, reject) => { const r = new FileReader(); r.readAsDataURL(file); r.onload = () => resolve(r.result); r.onerror = error => reject(error); });
 
@@ -826,10 +876,30 @@ window.showAddModal=()=>{const s=document.getElementById("newSongCategorySelect"
 window.saveSong = async () => {
     const t = document.getElementById("lyricsEditor").value;
     try {
-        await updateDoc(doc(db,"songs",currentSongId), { lyrics: t, chords: window.extractChords(t) });
-        const s = allSongs.find(x => x.id === currentSongId); if(s) { s.lyrics = t; s.chords = window.extractChords(t); }
-        hasUnsavedChanges = false; showToast("Salvato con successo!", 'success');
-    } catch(e) { showToast("Errore salvataggio: " + e.message, 'danger'); }
+        // MODIFICA: Salviamo anche savedTranspose
+        await updateDoc(doc(db,"songs",currentSongId), { 
+            lyrics: t, 
+            chords: window.extractChords(t),
+            savedTranspose: currentTranspose // Salva la tonalità attuale (+2, -1, ecc)
+        });
+        
+        // Aggiorniamo l'array locale
+        const s = allSongs.find(x => x.id === currentSongId); 
+        if(s) { 
+            s.lyrics = t; 
+            s.chords = window.extractChords(t); 
+            s.savedTranspose = currentTranspose; // Aggiorna locale
+        }
+        
+        hasUnsavedChanges = false; 
+        showToast("Salvato con Tonalità " + (currentTranspose > 0 ? '+'+currentTranspose : currentTranspose), 'success');
+        
+        // Aggiorniamo la lista visuale per far apparire il bollino della tonalità se siamo tornati indietro
+        if(currentCategory) window.renderList(allSongs.filter(song => song.category === currentCategory));
+        
+    } catch(e) { 
+        showToast("Errore salvataggio: " + e.message, 'danger'); 
+    }
 };
 window.deleteCurrentSong = () => window.confirmModal('Eliminare definitivamente?', async () => {
     try {
@@ -2280,6 +2350,7 @@ window.updateExportPreview = async (type, inputOrUrl, labelText) => {
         }
     }
 };
+
 
 
 
