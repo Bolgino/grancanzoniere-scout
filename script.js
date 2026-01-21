@@ -540,12 +540,12 @@ window.generateFullPDF = async () => {
                 
                 currentY += blockHeight + 2; 
             } else {
-                currentY += 2; 
+                currentY += 4; 
             }
-
+            
             doc.setDrawColor(200); doc.setLineWidth(0.2);
             doc.line(currentX, currentY - 2, currentX + COL_WIDTH, currentY - 2);
-            
+            currentY += 9;
             // -- TESTO E ACCORDI --
             doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(0);
             
@@ -1490,24 +1490,28 @@ window.createNewSection = async () => {
     }
 };
 window.openExportView = () => {
-    switchView('view-export');
+    window.switchView('view-export');
     
     // Popola la lista per l'ordinamento sezioni nella nuova tab
     const list = document.getElementById("sectionOrderListExport"); 
     if(list) {
         list.innerHTML = "";
         
-        // --- ORDINAMENTO ROBUSTO (UGUALE A MOVE SECTION) ---
+        // --- ORDINAMENTO ROBUSTO ---
         const sorted = [...allSections].sort((a, b) => {
             const orderA = (a.order !== undefined && a.order !== null) ? a.order : 9999;
             const orderB = (b.order !== undefined && b.order !== null) ? b.order : 9999;
             if (orderA !== orderB) return orderA - orderB;
             return a.name.localeCompare(b.name);
         });
-        // ----------------------------------------------------
+        // ---------------------------
+
+        // [AGGIUNTA CONSIGLIATA] 
+        // Sincronizza subito la variabile globale per il PDF con l'ordine visivo attuale
+        sectionOrder = sorted.map(s => s.name); 
         
         sorted.forEach((sec, idx) => {
-            // Nota: passiamo sec.id alle funzioni di spostamento
+            // Nota: passiamo sec.id alle funzioni di spostamento (CORRETTO)
             list.innerHTML += `
             <div class="d-flex justify-content-between align-items-center bg-secondary bg-opacity-25 p-2 mb-1 rounded">
                 <span class="text-white small fw-bold">${sec.name}</span>
@@ -1573,7 +1577,7 @@ window.renderProposePreview = () => {
                              .replace(/__(.*?)__/g, '<i>$1</i>');
         
         let pl = formattedLine.replace(/\[(.*?)\]/g, (m, p1) => 
-            `<span class="chord-span">${normalizeChord(p1)}</span>`
+            `<span class="chord-span">${transposeChord(normalizeChord(p1), 0)}</span>`
         );
         div.innerHTML += `<div>${pl || '&nbsp;'}</div>`;
     });
@@ -1626,7 +1630,7 @@ window.renderReviewPreview = () => {
         
         // Evidenzia accordi
         let pl = formattedLine.replace(/\[(.*?)\]/g, (m, p1) => 
-            `<span class="chord-span" style="color: #ff85c0; font-weight:bold;">${normalizeChord(p1)}</span>`
+            `<span class="chord-span" style="color: #ff85c0; font-weight:bold;">${transposeChord(normalizeChord(p1), 0)}</span>`
         );
         div.innerHTML += `<div>${pl || '&nbsp;'}</div>`;
     });
@@ -1682,5 +1686,6 @@ window.saveAndApproveProposal = async () => {
         document.getElementById("loadingOverlay").style.display = "none";
     }
 };
+
 
 
