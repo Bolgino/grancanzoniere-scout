@@ -1494,14 +1494,8 @@ window.toggleAutoScroll = () => {
         area.removeEventListener('touchend', setInteractingFalse);
     } else {
         // --- START SCROLL ---
+        // Abbiamo RIMOSSO il controllo sulla lunghezza. Parte sempre.
         
-        // Controllo tolleranza: se il contenuto è più alto del contenitore (+1px per sicurezza arrotondamenti)
-        // Se hai applicato il CSS nuovo, scrollHeight sarà es. 2000 e clientHeight sarà es. 600.
-        if (area.scrollHeight <= area.clientHeight + 1) {
-            window.showToast("Il testo è tutto visibile, non serve scorrere!", "warning");
-            return;
-        }
-
         if(btn) {
             btn.classList.replace('btn-outline-success', 'btn-success');
             btn.innerHTML = '<i class="bi bi-pause-fill"></i>';
@@ -1516,13 +1510,14 @@ window.toggleAutoScroll = () => {
         autoScrollInterval = setInterval(() => {
             if (isUserInteracting) return; // Pausa se l'utente tocca
             
-            // Logica fine pagina
-            if (Math.ceil(area.scrollTop + area.clientHeight) >= area.scrollHeight - 1) {
-                window.toggleAutoScroll(); // Ferma tutto
+            // Logica fine pagina: controlla se siamo arrivati in fondo
+            // Usiamo una tolleranza di 2px per sicurezza
+            if (Math.ceil(area.scrollTop + area.clientHeight) >= area.scrollHeight - 2) {
+                window.toggleAutoScroll(); // Ferma tutto quando arriva in fondo
                 return;
             }
             area.scrollTop += 1; 
-        }, 50); // Velocità (più basso = più veloce, ma 50 è standard leggibile)
+        }, 50); // Velocità
     }
 };
 window.handleSetlistBack = () => { const detail = document.getElementById('activeSetlistDetail'); if (detail.style.display === 'block') { detail.style.display = 'none'; currentSetlistId = null; window.renderSetlistsList(); } else { window.goHome(); } };
@@ -2494,6 +2489,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
