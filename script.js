@@ -813,14 +813,13 @@ window.confirmCreateSetlist = async () => {
             createdAt: Date.now() 
         });
         
-        // --- LOGICA PROPRIETARIO ---
-        // Salviamo l'ID della scaletta nel LocalStorage dell'utente
+        // --- SALVA PROPRIETÀ NEL BROWSER ---
         let mySetlists = JSON.parse(localStorage.getItem('mySetlists')) || [];
         mySetlists.push(docRef.id);
         localStorage.setItem('mySetlists', JSON.stringify(mySetlists));
-        // ---------------------------
+        // -----------------------------------
 
-        await loadData(); 
+        await loadData(); // Qui ricarichiamo per vedere la nuova scaletta
         showToast("Scaletta creata!", "success"); 
     } catch(e) { 
         showToast("Errore: " + e.message, 'danger'); 
@@ -828,32 +827,25 @@ window.confirmCreateSetlist = async () => {
         document.getElementById("loadingOverlay").style.display = "none"; 
     }
 };
-window.confirmCreateSetlist = async () => {
-    const name = document.getElementById("newSetlistNameInput").value.trim();
-    if (!name) return showToast("Inserisci un nome", "warning");
-    mCreateSetlist.hide(); document.getElementById("loadingOverlay").style.display = "flex";
-    try { await addDoc(collection(db, "setlists"), { name: name, songs: [], createdAt: Date.now() }); await loadData(); showToast("Scaletta creata!", "success"); } catch(e) { showToast("Errore: " + e.message, 'danger'); } finally { document.getElementById("loadingOverlay").style.display = "none"; }
-};
+
+
 window.openSetlistDetail = (id) => {
     currentSetlistId = id;
     const sl = allSetlists.find(s => s.id === id);
     if (!sl) return;
 
-    // --- CONTROLLO PERMESSI ---
+    // --- CONTROLLO: CHI SEI? ---
     const mySetlists = JSON.parse(localStorage.getItem('mySetlists')) || [];
     const isOwner = mySetlists.includes(id);
     
-    // Aggiungiamo una classe al body se l'utente è proprietario
+    // Aggiungi classe al body: il CSS farà mostrare/nascondere i tasti
     if (isOwner) {
         document.body.classList.add('is-owner');
     } else {
         document.body.classList.remove('is-owner');
     }
     
-    // Se NON è admin E NON è owner, nascondiamo i bottoni di modifica
-    // (Questo è gestito dal CSS che ti ho dato al punto 1)
-    
-    switchView('view-setlists'); // Assicuriamoci di essere nella vista giusta
+    switchView('view-setlists'); 
     document.getElementById('setlistsContainer').innerHTML = "";
     document.getElementById('activeSetlistDetail').style.display = 'block';
     document.getElementById('activeSetlistTitle').innerText = sl.name;
@@ -1341,35 +1333,45 @@ window.renderManageSections = () => {
     });
 };
 window.moveSection = async (sectionId, direction) => {
-    // 1. Prepara la lista ordinata corrente
-    let sorted = [...allSections].sort((a, b) => {
-        const orderA = (a.order !== undefined) ? a.order : 9999;
-        const orderB = (b.order !== undefined) ? b.order : 9999;
-        return orderA - orderB;
-    });
-    
-    // 2. Trova indici
-    const idx = sorted.findIndex(s => s.id === sectionId);
+    // 1. Ordiniamo l'array locale per sicurezza
+    allSections.sort((a, b) => (a.order || 9999) - (b.order || 9999));
+
+    // 2. Troviamo gli indici
+    const idx = allSections.findIndex(s => s.id === sectionId);
     if (idx === -1) return;
     const newIdx = idx + direction;
-    if (newIdx < 0 || newIdx >= sorted.length) return;
+    if (newIdx < 0 || newIdx >= allSections.length) return;
 
-    // 3. Scambia localmente per feedback immediato
-    const temp = sorted[idx];
-    sorted[idx] = sorted[newIdx];
-    sorted[newIdx] = temp;
+    // 3. SCAMBIO IMMEDIATO IN MEMORIA (Array Locale)
+    const temp = allSections[idx];
+    allSections[idx] = allSections[newIdx];
+    allSections[newIdx] = temp;
 
-    // 4. Salva su Firebase
+    // 4. Aggiorniamo subito l'indice 'order' nell'oggetto locale
+    allSections.forEach((sec, i) => sec.order = i);
+    sectionOrder = allSections.map(s => s.name); // Aggiorna anche l'ordine globale per la Home
+
+    // 5. RIDISEGNA SUBITO L'INTERFACCIA (Feedback Istantaneo)
+    // Se siamo nella tab Export, aggiorna quella lista, altrimenti la gestione sezioni
+    if(document.getElementById('view-export').classList.contains('active')){
+        window.openExportView(); 
+    } else {
+        window.renderManageSections();
+    }
+
+    // 6. SALVATAGGIO IN BACKGROUND (L'utente non aspetta)
     const batch = writeBatch(db);
-    sorted.forEach((sec, i) => {
-        const ref = doc(db, "sections", sec.id);
-        batch.update(ref, { order: i });
-        sec.order = i; // Aggiorna anche locale
+    allSections.forEach(s => {
+        const ref = doc(db, "sections", s.id);
+        batch.update(ref, { order: s.order });
     });
-
-    await batch.commit();
-    window.renderManageSections();
-    showToast("Ordine salvato", "success");
+    
+    // Non usiamo await qui per non bloccare l'UI, ma gestiamo errori
+    batch.commit().then(() => {
+        console.log("Ordine salvato su DB");
+    }).catch(err => {
+        showToast("Errore salvataggio ordine: " + err.message, "danger");
+    });
 };
 
 // Funzione Creazione (invariata ma reinserita per sicurezza)
@@ -1418,25 +1420,25 @@ window.createNewSection = async () => {
 window.openExportView = () => {
     switchView('view-export');
     
-    // Popola la lista per l'ordinamento sezioni (preso dal vecchio modal)
-    const list = document.getElementById("sectionOrderList"); 
+    // Popola la lista per l'ordinamento sezioni nella nuova tab
+    const list = document.getElementById("sectionOrderListExport"); 
     if(list) {
         list.innerHTML = "";
-        sectionOrder = allSections.map(s => s.name);
-        sectionOrder.forEach((name, idx) => {
+        // Assicuriamoci che siano ordinate
+        const sorted = [...allSections].sort((a, b) => (a.order || 9999) - (b.order || 9999));
+        
+        sorted.forEach((sec, idx) => {
             list.innerHTML += `
             <div class="d-flex justify-content-between align-items-center bg-secondary bg-opacity-25 p-2 mb-1 rounded">
-                <span class="text-white small">${name}</span>
+                <span class="text-white small fw-bold">${sec.name}</span>
                 <div>
-                    <button class="btn btn-sm btn-link text-white py-0" onclick="window.moveSection(${idx},-1)">⬆</button>
-                    <button class="btn btn-sm btn-link text-white py-0" onclick="window.moveSection(${idx},1)">⬇</button>
+                    <button class="btn btn-sm btn-link text-white py-0" onclick="window.moveSection('${sec.id}',-1)">⬆</button>
+                    <button class="btn btn-sm btn-link text-white py-0" onclick="window.moveSection('${sec.id}',1)">⬇</button>
                 </div>
             </div>`;
         });
     }
 };
-
-
 
 
 
