@@ -1381,47 +1381,71 @@ window.renderManageSections = () => {
     });
 };
 window.moveSection = async (sectionId, direction) => {
-    // 1. Ordiniamo l'array locale per sicurezza
-    allSections.sort((a, b) => (a.order || 9999) - (b.order || 9999));
+    // 1. Ordina l'array locale ESATTAMENTE come lo vede l'utente a video
+    // (Prima per Ordine numerico, poi Alfabetico per risolvere i pari merito)
+    allSections.sort((a, b) => {
+        const orderA = (a.order !== undefined && a.order !== null) ? a.order : 9999;
+        const orderB = (b.order !== undefined && b.order !== null) ? b.order : 9999;
+        
+        // Se l'ordine è diverso, usa quello
+        if (orderA !== orderB) {
+            return orderA - orderB;
+        }
+        // Se l'ordine è uguale (es. entrambi 9999), usa il nome per stabilità
+        return a.name.localeCompare(b.name);
+    });
 
-    // 2. Troviamo gli indici
+    // 2. Trova l'indice dell'elemento che vogliamo spostare
     const idx = allSections.findIndex(s => s.id === sectionId);
-    if (idx === -1) return;
+    if (idx === -1) return; // Errore: ID non trovato
+
+    // 3. Calcola il nuovo indice
     const newIdx = idx + direction;
+
+    // 4. Controllo limiti (non possiamo andare sopra la lista o sotto zero)
     if (newIdx < 0 || newIdx >= allSections.length) return;
 
-    // 3. SCAMBIO IMMEDIATO IN MEMORIA (Array Locale)
-    const temp = allSections[idx];
-    allSections[idx] = allSections[newIdx];
-    allSections[newIdx] = temp;
+    // 5. SCAMBIO FISICO DEGLI ELEMENTI NELL'ARRAY
+    // Usiamo lo splice per essere sicuri di spostare l'oggetto intero
+    const itemToMove = allSections[idx];
+    const itemTarget = allSections[newIdx];
+    
+    // Scambio posizioni
+    allSections[idx] = itemTarget;
+    allSections[newIdx] = itemToMove;
 
-    // 4. Aggiorniamo subito l'indice 'order' nell'oggetto locale
-    allSections.forEach((sec, i) => sec.order = i);
-    sectionOrder = allSections.map(s => s.name); // Aggiorna anche l'ordine globale per la Home
+    // 6. NORMALIZZAZIONE: Riassegna i numeri 0, 1, 2, 3... a TUTTI
+    // Questo è il passaggio fondamentale che ripara gli ordini "rotti"
+    allSections.forEach((sec, i) => {
+        sec.order = i;
+    });
 
-    // 5. RIDISEGNA SUBITO L'INTERFACCIA (Feedback Istantaneo)
-    // Se siamo nella tab Export, aggiorna quella lista, altrimenti la gestione sezioni
-    if(document.getElementById('view-export').classList.contains('active')){
-        window.openExportView(); 
+    // Aggiorna anche la lista nomi globale usata per l'export
+    sectionOrder = allSections.map(s => s.name);
+
+    // 7. AGGIORNA L'INTERFACCIA UTENTE (UI) IMMEDIATAMENTE
+    // Capisce in quale schermata sei e aggiorna solo quella
+    if (document.getElementById('view-export').classList.contains('active')) {
+        window.openExportView(); // Ridisegna lista export
     } else {
-        window.renderManageSections();
+        window.renderManageSections(); // Ridisegna lista gestione
     }
 
-    // 6. SALVATAGGIO IN BACKGROUND (L'utente non aspetta)
-    const batch = writeBatch(db);
-    allSections.forEach(s => {
-        const ref = doc(db, "sections", s.id);
-        batch.update(ref, { order: s.order });
-    });
-    
-    // Non usiamo await qui per non bloccare l'UI, ma gestiamo errori
-    batch.commit().then(() => {
-        console.log("Ordine salvato su DB");
-    }).catch(err => {
-        showToast("Errore salvataggio ordine: " + err.message, "danger");
-    });
+    // 8. SALVA SU DATABASE IN BACKGROUND (Batch write)
+    // Non blocchiamo l'utente con un loading, salviamo "silenziosamente"
+    try {
+        const batch = writeBatch(db);
+        allSections.forEach(s => {
+            const ref = doc(db, "sections", s.id);
+            batch.update(ref, { order: s.order });
+        });
+        await batch.commit();
+        console.log("Ordine ri-normalizzato e salvato.");
+    } catch(e) {
+        console.error("Errore salvataggio ordine:", e);
+        showToast("Errore salvataggio ordine (controlla connessione)", "danger");
+    }
 };
-
 // Funzione Creazione (invariata ma reinserita per sicurezza)
 window.createNewSection = async () => {
     const n = document.getElementById("newSectionName").value.trim();
@@ -1472,10 +1496,18 @@ window.openExportView = () => {
     const list = document.getElementById("sectionOrderListExport"); 
     if(list) {
         list.innerHTML = "";
-        // Assicuriamoci che siano ordinate
-        const sorted = [...allSections].sort((a, b) => (a.order || 9999) - (b.order || 9999));
+        
+        // --- ORDINAMENTO ROBUSTO (UGUALE A MOVE SECTION) ---
+        const sorted = [...allSections].sort((a, b) => {
+            const orderA = (a.order !== undefined && a.order !== null) ? a.order : 9999;
+            const orderB = (b.order !== undefined && b.order !== null) ? b.order : 9999;
+            if (orderA !== orderB) return orderA - orderB;
+            return a.name.localeCompare(b.name);
+        });
+        // ----------------------------------------------------
         
         sorted.forEach((sec, idx) => {
+            // Nota: passiamo sec.id alle funzioni di spostamento
             list.innerHTML += `
             <div class="d-flex justify-content-between align-items-center bg-secondary bg-opacity-25 p-2 mb-1 rounded">
                 <span class="text-white small fw-bold">${sec.name}</span>
@@ -1650,4 +1682,5 @@ window.saveAndApproveProposal = async () => {
         document.getElementById("loadingOverlay").style.display = "none";
     }
 };
+
 
