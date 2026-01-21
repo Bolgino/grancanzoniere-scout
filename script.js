@@ -2101,7 +2101,50 @@ window.showFormatPreview = (type) => {
     c.innerHTML = html;
 };
 
+window.resetFormatPreview = () => {
+    const img = document.getElementById("exportPreviewImg");
+    const ph = document.getElementById("exportPreviewPlaceholder");
+    const container = document.getElementById("formatPreviewContainer");
+    const label = document.getElementById("exportPreviewLabel");
+    
+    // Nascondi il container dei formati (testo/excel/pdf)
+    if(container) {
+        container.classList.add("d-none");
+        container.classList.remove("d-flex");
+        container.innerHTML = "";
+    }
 
+    // Se c'era un'immagine caricata precedentemente (es. copertina generale), mostrala
+    if (img && img.src && img.src !== window.location.href && img.src !== "") {
+        img.style.display = "block";
+        if(label) label.innerText = "Copertina Selezionata";
+    } else {
+        // Altrimenti mostra il placeholder generico
+        if(ph) ph.style.display = "block";
+        if(label) label.innerText = "Anteprima Copertina";
+    }
+};
 
+// --- PATCH FINALE PER GESTIONE ANTEPRIMA (Incolla alla fine di script.js) ---
+
+// Salviamo la funzione originale che hai già definito sopra
+const originalUpdateExportPreview = window.updateExportPreview;
+
+// La ridefiniamo per aggiungere la logica di nascondere i formati testuali
+window.updateExportPreview = async (type, inputOrUrl, labelText) => {
+    // 1. Esegui la logica originale (carica immagine, aggiorna variabili)
+    await originalUpdateExportPreview(type, inputOrUrl, labelText);
+    
+    // 2. Assicura che il contenitore dei formati (PDF/Excel) sia nascosto e mostri l'immagine
+    const container = document.getElementById("formatPreviewContainer");
+    const title = document.getElementById("previewHeaderTitle");
+    
+    if(container) {
+        container.classList.add("d-none");
+        container.classList.remove("d-flex");
+    }
+    
+    if(title) title.innerText = "Anteprima Copertina";
+};
 
 
