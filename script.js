@@ -2167,7 +2167,7 @@ window.showFormatPreview = (type) => {
     container.innerHTML = html;
 };
 window.resetFormatPreview = () => {
-    const container = document.getElementById("formatPreviewContainer");
+    /*const container = document.getElementById("formatPreviewContainer");
     const img = document.getElementById("exportPreviewImg");
     const ph = document.getElementById("exportPreviewPlaceholder");
     const headerTitle = document.getElementById("previewHeaderTitle");
@@ -2193,26 +2193,38 @@ window.resetFormatPreview = () => {
         if(img) img.style.display = "none";
         if(ph) ph.style.display = "block";
     }
-};
+*/};
 
 // --- PATCH GESTIONE ANTEPRIMA ---
 // Sovrascriviamo updateExportPreview per gestire la visibilità del nuovo contenitore formati
 const _originalUpdateExportPreview = window.updateExportPreview;
 
 window.updateExportPreview = async (type, inputOrUrl, labelText) => {
-    // Chiama la logica originale per caricare l'immagine
+    // 1. Chiama la logica originale per caricare l'immagine della copertina
     await _originalUpdateExportPreview(type, inputOrUrl, labelText);
     
-    // Assicura che il contenitore dei formati (PDF/Excel) sia nascosto
+    // 2. FORZA la chiusura dell'anteprima formati (PDF/Excel)
+    // Questo serve perché se l'anteprima era rimasta bloccata su "PDF",
+    // ora che stiamo toccando le copertine dobbiamo nasconderla.
     const container = document.getElementById("formatPreviewContainer");
     const title = document.getElementById("previewHeaderTitle");
+    const img = document.getElementById("exportPreviewImg");
+    const ph = document.getElementById("exportPreviewPlaceholder");
     
     if(container) {
         container.classList.add("d-none");
         container.classList.remove("d-flex");
     }
     
-    if(title) title.innerText = "Anteprima Copertina";
+    // Ripristina il titolo corretto
+    if(title) {
+        // Se c'è un'immagine caricata
+        if (img && img.style.display !== 'none') {
+            title.innerText = "Copertina Selezionata";
+        } else {
+            title.innerText = "Anteprima Copertina";
+        }
+    }
 };
 
 
