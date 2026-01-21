@@ -228,8 +228,8 @@ window.renderDashboard = () => {
         const count=allSongs.filter(s=>s.category===sec.name).length;
         const bg=sec.coverUrl ? `background-image:url('${sec.coverUrl}')` : "";
         const ico=sec.coverUrl ? "" : `<i class="bi bi-music-note-beamed cat-icon"></i>`;
-        const btnEdit=`<div class="cat-actions"><button class="btn btn-light btn-sm rounded-circle shadow-sm" onclick="window.openSectionSettings('${sec.id}','${sec.name}','${sec.coverUrl||''}',event)"><i class="bi bi-gear-fill text-secondary"></i></button></div>`;
-        c.innerHTML+=`<div class="col-md-4 col-sm-6"><div class="category-card shadow-sm">${isAdmin?btnEdit:''}<div class="cat-cover" style="${bg}" onclick="window.openList('${sec.name}')">${ico}</div><div class="p-3 text-center" onclick="window.openList('${sec.name}')"><h5 class="fw-bold mb-1 text-truncate">${sec.name}</h5><small class="text-muted">${count} canzoni</small></div></div></div>`;
+        
+        c.innerHTML+=`<div class="col-md-4 col-sm-6"><div class="category-card shadow-sm"><div class="cat-cover" style="${bg}" onclick="window.openList('${sec.name}')">${ico}</div><div class="p-3 text-center" onclick="window.openList('${sec.name}')"><h5 class="fw-bold mb-1 text-truncate">${sec.name}</h5><small class="text-muted">${count} canzoni</small></div></div></div>`;
     });
 };
 
@@ -667,14 +667,14 @@ window.previewCoverFile = () => {
 };
 window.saveSectionSettings=async()=>{const n=document.getElementById("editSectionNameInput").value;const f=document.getElementById("coverFileInput").files[0];document.getElementById("loadingOverlay").style.display="flex";try{let u=currentCoverUrl;if(f)u=await fileToBase64(f);if(n!==currentCategory){const b=writeBatch(db);b.update(doc(db,"sections",editingSectionId),{name:n,coverUrl:u});allSongs.filter(s=>s.category===currentCategory).forEach(s=>b.update(doc(db,"songs",s.id),{category:n}));await b.commit();}else{await updateDoc(doc(db,"sections",editingSectionId),{coverUrl:u});}mEditSection.hide();showToast("Salvato");loadData();}catch(e){showToast(e.message,'danger');}finally{document.getElementById("loadingOverlay").style.display="none";}};
 window.triggerDeleteSection = (id, name) => {
-    // 1. Controllo di sicurezza: se l'ID è nullo, fermati (evita l'errore "indexOf")
+    // 1. Controllo di sicurezza
     if (!id) return window.showToast("Errore: ID Sezione non valido", "danger");
 
-    // 2. Imposta le variabili globali necessarie per l'operazione
+    // 2. Imposta le variabili
     editingSectionId = id;
     currentCategory = name;
 
-    // 3. Rimuovi il focus dal pulsante (Risolve l'errore "aria-hidden")
+    // 3. Rimuovi il focus dal pulsante
     if (document.activeElement) document.activeElement.blur();
 
     // 4. Avvia il modale di conferma
@@ -695,9 +695,11 @@ window.triggerDeleteSection = (id, name) => {
             if(typeof mEditSection !== 'undefined') mEditSection.hide(); 
             currentCategory = null; 
             
-            // Ricarica e notifica
+            // MODIFICA QUI: Ricarica i dati ma NON tornare alla Home
             await loadData(); 
-            window.goHome(); // Torna alla home dopo l'eliminazione
+            // window.goHome(); <--- RIMOSSO
+            window.renderManageSections(); // <--- AGGIUNTO: Ridisegna la lista gestione
+            
             showToast("Sezione eliminata correttamente", "success");
         } catch(e) { 
             console.error(e);
@@ -1316,6 +1318,7 @@ window.createNewSection = async () => {
         if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display = "none";
     }
 };
+
 
 
 
