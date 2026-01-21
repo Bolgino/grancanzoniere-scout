@@ -456,3 +456,20 @@ body.user-admin .cat-actions { display: block; }
 #setlistSongsContainer .bg-light * {
     color: #000 !important;
 }
+/* Aggiungi questo al tuo CSS esistente */
+
+/* Di base, gli elementi guest-only sono visibili */
+.guest-only { display: block !important; }
+
+/* Se l'utente è admin, nascondi gli elementi guest-only */
+body.user-admin .guest-only { display: none !important; }
+
+/* Nascondi i controlli della scaletta se non si hanno i permessi */
+.setlist-controls { display: none; }
+body.user-admin .setlist-controls, 
+body.is-owner .setlist-controls { display: flex !important; } /* Flex o block a seconda del layout */
+
+/* Per i pulsanti singoli in lista */
+.setlist-item-controls { display: none; }
+body.user-admin .setlist-item-controls,
+body.is-owner .setlist-item-controls { display: inline-flex !important; }
