@@ -498,3 +498,30 @@ body.user-admin .setlist-item-controls {
     from { opacity: 0; transform: scale(0.9); }
     to { opacity: 1; transform: scale(1); }
 }
+/* --- FIX LEGGIBILITÀ POPUP DUPLICATI --- */
+
+/* 1. Rende il box "Esiste già..." scuro ma ben contrastato */
+#duplicateWarningModal .alert-secondary {
+    background-color: #2c3035 !important; /* Grigio scuro solido */
+    color: #ffffff !important;             /* Testo bianco puro */
+    border: 1px solid #adb5bd !important;  /* Bordo grigio chiaro per stacco */
+}
+
+/* 2. Rende il testo "piccolo" (autore) molto più leggibile */
+#duplicateWarningModal .text-muted {
+    color: #d0d0d0 !important; /* Grigio quasi bianco invece che scuro */
+}
+
+/* 3. Evidenzia il titolo della canzone esistente */
+#duplicateWarningModal .text-warning {
+    color: #ffc107 !important; /* Giallo acceso */
+    text-shadow: 0 0 5px rgba(0,0,0,0.5); /* Ombra per staccarlo dallo sfondo */
+    font-size: 1.1em;
+}
+
+/* 4. Migliora il corpo del modale */
+#duplicateWarningModal .modal-body {
+    background-color: #121212 !important; /* Nero profondo */
+    color: #fff !important;
+    font-size: 1.05rem; /* Testo leggermente più grande */
+}
