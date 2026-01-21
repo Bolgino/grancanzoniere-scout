@@ -103,7 +103,6 @@ input::placeholder, textarea::placeholder { color: #888 !important; }
 .btn-warning i, .btn-light i, .btn-white i {
     color: #000 !important;
 }
-/* --- AREA TESTO E ACCORDI (FIX AUTOSCROLL) --- */
 /* --- AREA TESTO E ACCORDI (FIX FULLSCREEN) --- */
 .preview-area {
     background: #121212 !important; 
@@ -537,6 +536,7 @@ body.user-admin .setlist-item-controls {
     border: 2px solid #ffc107 !important; /* Bordo giallo esterno */
     box-shadow: 0 0 20px rgba(255, 193, 7, 0.2); /* Alone giallo */
 }
+
 
 
 
