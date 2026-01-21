@@ -45,6 +45,7 @@ let editingSectionId=null, currentCoverUrl="", sectionOrder=[];
 let favorites = JSON.parse(localStorage.getItem('scoutFavorites')) || [];
 let currentSetlistId = null;
 let autoScrollInterval = null;
+let exportSectionOrder = [];
 
 // Loader phrases
 const loaderPhrases = [
@@ -414,7 +415,6 @@ window.openExportModal = () => {
 window.generateFullPDF = async () => {
     const showChords = document.getElementById("pdfShowChords").checked;
     
-    // Mostra loading
     if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display="flex";
     
     const { jsPDF } = window.jspdf;
@@ -428,46 +428,12 @@ window.generateFullPDF = async () => {
     const SIDE_MARGIN = 15;
     const GUTTER = 10;
 
-    // DEFINIZIONE VARIABILI MANCANTI (FIX "tocData is not defined")
-    let tocData = []; 
-    let pageNum = 1;
-
-    // CALCOLO DINAMICO LARGHEZZA
-    const COL_WIDTH = isTwoColumns ? (PAGE_WIDTH - (SIDE_MARGIN * 2) - GUTTER) / 2 : (PAGE_WIDTH - (SIDE_MARGIN * 2));
-    const COL_1_X = SIDE_MARGIN;
-    const COL_2_X = isTwoColumns ? (SIDE_MARGIN + COL_WIDTH + GUTTER) : SIDE_MARGIN;
-
-    let currentX = COL_1_X;
-    let currentY = MARGIN_TOP;
-    let currentCol = 1;
-
-    const checkLimit = (heightNeeded) => {
-        if (currentY + heightNeeded > MARGIN_BOTTOM) {
-            if (isTwoColumns && currentCol === 1) {
-                currentCol = 2;
-                currentX = COL_2_X;
-                currentY = MARGIN_TOP;
-            } else {
-                doc.addPage();
-                pageNum++;
-                currentCol = 1;
-                currentX = COL_1_X;
-                currentY = MARGIN_TOP;
-                doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(150);
-                doc.text(String(pageNum), PAGE_WIDTH/2, 290, {align:'center'});
-            }
-            return true;
-        }
-        return false;
-    };
-
-    // --- 1. COPERTINA ---
+    // --- 1. GENERAZIONE COPERTINA ---
     const coverInput = document.getElementById("globalCoverInput").files[0];
     if (coverInput) {
         try {
             const coverBase64 = await fileToBase64(coverInput);
             doc.addImage(coverBase64, 'JPEG', 0, 0, PAGE_WIDTH, PAGE_HEIGHT);
-            doc.addPage(); pageNum++;
         } catch(e) { console.error("Errore copertina", e); }
     } else {
         doc.setFillColor(0, 51, 102); 
@@ -477,35 +443,91 @@ window.generateFullPDF = async () => {
         doc.text("CANZONIERE", PAGE_WIDTH/2, 120, {align: 'center'});
         doc.setFontSize(20);
         doc.text("SCOUT", PAGE_WIDTH/2, 135, {align: 'center'});
-        doc.addPage(); pageNum++;
     }
 
-    // --- 2. LOOP SEZIONI ---
-    // Assicuriamoci che sectionOrder sia popolato
-    if(!sectionOrder || sectionOrder.length === 0) sectionOrder = allSections.map(s => s.name);
+    // --- 2. PREPARAZIONE DATI E STIMA PAGINE INDICE ---
+    // Usa l'ordine locale se definito, altrimenti quello standard
+    const sourceList = (typeof exportSectionOrder !== 'undefined' && exportSectionOrder.length > 0) 
+                        ? exportSectionOrder 
+                        : allSections;
+    const finalOrderNames = sourceList.map(s => s.name);
 
-    for (const secName of sectionOrder) {
+    // Calcoliamo quanti elementi totali abbiamo per l'indice
+    let totalTocItems = 0;
+    for (const secName of finalOrderNames) {
+        const songs = allSongs.filter(s => s.category === secName);
+        if (songs.length > 0) {
+            totalTocItems++; // Titolo sezione
+            totalTocItems += songs.length; // Canzoni
+        }
+    }
+
+    // STIMA: Circa 90 righe per pagina (su 2 colonne). 
+    // Arrotondiamo per eccesso per stare sicuri.
+    const tocPagesNeeded = Math.ceil(totalTocItems / 90);
+    
+    // Aggiungi le pagine bianche per l'indice (dopo la copertina che è pag 1)
+    for(let i=0; i < tocPagesNeeded; i++) {
+        doc.addPage(); 
+    }
+
+    let tocData = []; 
+
+    // Parametri layout canzoni
+    const COL_WIDTH = isTwoColumns ? (PAGE_WIDTH - (SIDE_MARGIN * 2) - GUTTER) / 2 : (PAGE_WIDTH - (SIDE_MARGIN * 2));
+    const COL_1_X = SIDE_MARGIN;
+    const COL_2_X = isTwoColumns ? (SIDE_MARGIN + COL_WIDTH + GUTTER) : SIDE_MARGIN;
+
+    let currentX = COL_1_X;
+    let currentY = MARGIN_TOP;
+    let currentCol = 1;
+
+    // Funzione controllo fine pagina
+    const checkLimit = (heightNeeded) => {
+        if (currentY + heightNeeded > MARGIN_BOTTOM) {
+            if (isTwoColumns && currentCol === 1) {
+                currentCol = 2;
+                currentX = COL_2_X;
+                currentY = MARGIN_TOP;
+            } else {
+                doc.addPage();
+                currentCol = 1;
+                currentX = COL_1_X;
+                currentY = MARGIN_TOP;
+            }
+            return true;
+        }
+        return false;
+    };
+
+    // --- 3. LOOP SEZIONI E CANZONI ---
+    // Partiamo con una nuova pagina dopo quelle prenotate per l'indice
+    doc.addPage();
+    currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
+
+    for (const secName of finalOrderNames) {
         const songs = allSongs.filter(s => s.category === secName).sort((a,b)=>a.title.localeCompare(b.title));
         if (songs.length === 0) continue;
 
-        doc.addPage(); pageNum++;
+        // Nuova pagina per ogni nuova sezione (opzionale, ma più pulito)
+        if (currentY > MARGIN_TOP) {
+             doc.addPage();
+             currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
+        }
         
-        // Aggiungi alla TOC (Indice)
-        tocData.push({ type: 'section', text: secName.toUpperCase(), page: pageNum });
+        // Salviamo dati per l'indice (Pagina corrente)
+        tocData.push({ type: 'section', text: secName.toUpperCase(), page: doc.internal.getCurrentPageInfo().pageNumber });
         
-        currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
-        
+        // Titolo Sezione nella pagina
         doc.setTextColor(0, 51, 102); doc.setFont("helvetica", "bold"); doc.setFontSize(30);
         doc.text(secName.toUpperCase(), PAGE_WIDTH/2, 100, {align: 'center'});
         
-        doc.addPage(); pageNum++;
+        doc.addPage();
         currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
-        doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(150);
-        doc.text(String(pageNum), PAGE_WIDTH/2, 290, {align:'center'});
 
-        // --- 3. LOOP CANZONI ---
         for (const s of songs) {
-            tocData.push({ type: 'song', text: s.title, subtext: s.author, page: pageNum });
+            // Aggiungi canzone all'indice
+            tocData.push({ type: 'song', text: s.title, subtext: s.author, page: doc.internal.getCurrentPageInfo().pageNumber });
 
             checkLimit(25);
 
@@ -542,10 +564,12 @@ window.generateFullPDF = async () => {
             } else {
                 currentY += 4; 
             }
-            
+
+            // -- LINEA DIVISORIA (FIX SOVRAPPOSIZIONE) --
             doc.setDrawColor(200); doc.setLineWidth(0.2);
             doc.line(currentX, currentY - 2, currentX + COL_WIDTH, currentY - 2);
-            currentY += 9;
+            currentY += 9; // Aumentato spazio per evitare che gli accordi Intro tocchino la linea
+            
             // -- TESTO E ACCORDI --
             doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(0);
             
@@ -600,9 +624,13 @@ window.generateFullPDF = async () => {
         }
     }
 
-    // --- 4. INDICE FINALE (Ora funziona perché tocData esiste) ---
-    if (tocData.length > 0) {
-        doc.addPage();
+    // --- 4. SCRITTURA INDICE (Nelle pagine prenotate all'inizio) ---
+    // Torniamo alla pagina 2 (la prima dopo la copertina)
+    if (tocPagesNeeded > 0 && tocData.length > 0) {
+        let tocPageIdx = 2; // Pagina fisica (1-based)
+        doc.setPage(tocPageIdx); 
+
+        // Titolo Indice
         doc.setTextColor(0, 51, 102); doc.setFont("helvetica", "bold"); doc.setFontSize(22);
         doc.text("INDICE", PAGE_WIDTH/2, 20, {align: 'center'});
         
@@ -613,9 +641,27 @@ window.generateFullPDF = async () => {
         const TOC_COL_2_X = 115;
         
         tocData.forEach(item => {
+            // Se la colonna finisce
             if(tocY > 270) {
-                 if(tocCol === 1) { tocCol = 2; tocY = 40; }
-                 else { doc.addPage(); tocCol = 1; tocY = 40; }
+                 if(tocCol === 1) { 
+                     tocCol = 2; 
+                     tocY = 40; 
+                 } else { 
+                     // Se finisce la pagina, passa alla prossima pagina prenotata
+                     tocPageIdx++;
+                     if (tocPageIdx <= 1 + tocPagesNeeded) {
+                         doc.setPage(tocPageIdx);
+                         tocCol = 1; 
+                         tocY = 40; 
+                     } else {
+                         // Sicurezza: se abbiamo sottostimato le pagine, ne aggiungiamo una nuova
+                         // Nota: questo è raro se la stima è generosa
+                         doc.insertPage(tocPageIdx); 
+                         doc.setPage(tocPageIdx);
+                         tocCol = 1; 
+                         tocY = 40;
+                     }
+                 }
             }
             
             let tx = tocCol === 1 ? TOC_COL_1_X : TOC_COL_2_X;
@@ -631,16 +677,30 @@ window.generateFullPDF = async () => {
                 if (title.length > 35) title = title.substring(0, 32) + "...";
                 
                 doc.text(title, tx, tocY);
+                // Stampa il numero di pagina salvato
                 doc.text(String(item.page), tx + TOC_COL_WIDTH, tocY, {align:'right'});
                 tocY += 5;
             }
         });
     }
 
+    // --- 5. NUMERAZIONE PAGINE (PIÈ DI PAGINA SU TUTTO) ---
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+        // Salta copertina (pag 1)
+        if (i === 1) continue;
+        
+        doc.setPage(i);
+        doc.setFont("helvetica", "normal"); 
+        doc.setFontSize(9); 
+        doc.setTextColor(150);
+        doc.text(String(i), PAGE_WIDTH/2, 290, {align:'center'});
+    }
+
     doc.save("Canzoniere_Completo.pdf");
     if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display="none"; 
     window.showToast("PDF Scaricato!", "success");
-    // Chiudi modale se aperto
+    
     const exportModal = bootstrap.Modal.getInstance(document.getElementById('exportOptionsModal'));
     if(exportModal) exportModal.hide();
 };
@@ -1426,7 +1486,7 @@ window.moveSection = async (sectionId, direction) => {
     // 7. AGGIORNA L'INTERFACCIA UTENTE (UI) IMMEDIATAMENTE
     // Capisce in quale schermata sei e aggiorna solo quella
     if (document.getElementById('view-export').classList.contains('active')) {
-        window.openExportView(); // Ridisegna lista export
+        (); // Ridisegna lista export
     } else {
         window.renderManageSections(); // Ridisegna lista gestione
     }
@@ -1490,38 +1550,19 @@ window.createNewSection = async () => {
     }
 };
 window.openExportView = () => {
-    window.switchView('view-export');
+    switchView('view-export');
     
-    // Popola la lista per l'ordinamento sezioni nella nuova tab
-    const list = document.getElementById("sectionOrderListExport"); 
-    if(list) {
-        list.innerHTML = "";
-        
-        // --- ORDINAMENTO ROBUSTO ---
-        const sorted = [...allSections].sort((a, b) => {
-            const orderA = (a.order !== undefined && a.order !== null) ? a.order : 9999;
-            const orderB = (b.order !== undefined && b.order !== null) ? b.order : 9999;
-            if (orderA !== orderB) return orderA - orderB;
-            return a.name.localeCompare(b.name);
-        });
-        // ---------------------------
+    // 1. Crea una COPIA locale dell'array sezioni, ordinata come il default attuale
+    // Usiamo lo spread operator [...] per rompere il riferimento all'array originale
+    exportSectionOrder = [...allSections].sort((a, b) => {
+        const orderA = (a.order !== undefined && a.order !== null) ? a.order : 9999;
+        const orderB = (b.order !== undefined && b.order !== null) ? b.order : 9999;
+        if (orderA !== orderB) return orderA - orderB;
+        return a.name.localeCompare(b.name);
+    });
 
-        // [AGGIUNTA CONSIGLIATA] 
-        // Sincronizza subito la variabile globale per il PDF con l'ordine visivo attuale
-        sectionOrder = sorted.map(s => s.name); 
-        
-        sorted.forEach((sec, idx) => {
-            // Nota: passiamo sec.id alle funzioni di spostamento (CORRETTO)
-            list.innerHTML += `
-            <div class="d-flex justify-content-between align-items-center bg-secondary bg-opacity-25 p-2 mb-1 rounded">
-                <span class="text-white small fw-bold">${sec.name}</span>
-                <div>
-                    <button class="btn btn-sm btn-link text-white py-0" onclick="window.moveSection('${sec.id}',-1)">⬆</button>
-                    <button class="btn btn-sm btn-link text-white py-0" onclick="window.moveSection('${sec.id}',1)">⬇</button>
-                </div>
-            </div>`;
-        });
-    }
+    // 2. Renderizza la lista visuale basata su questa copia locale
+    window.renderExportList();
 };
 window.createNewSetlistPrompt = () => {
     // Pulisce l'input
@@ -1687,5 +1728,40 @@ window.saveAndApproveProposal = async () => {
     }
 };
 
+// Renderizza la lista nella tab Export (senza toccare il DB)
+window.renderExportList = () => {
+    const list = document.getElementById("sectionOrderListExport"); 
+    if(!list) return;
+    
+    list.innerHTML = "";
+    
+    exportSectionOrder.forEach((sec, idx) => {
+        // NOTA: Qui passiamo l'indice (idx) array, non l'ID, perché lavoriamo su una lista locale
+        list.innerHTML += `
+        <div class="d-flex justify-content-between align-items-center bg-secondary bg-opacity-25 p-2 mb-1 rounded">
+            <span class="text-white small fw-bold">${sec.name}</span>
+            <div>
+                <button class="btn btn-sm btn-link text-white py-0" onclick="window.moveExportSection(${idx}, -1)">⬆</button>
+                <button class="btn btn-sm btn-link text-white py-0" onclick="window.moveExportSection(${idx}, 1)">⬇</button>
+            </div>
+        </div>`;
+    });
+};
+
+// Sposta elementi SOLO nell'array locale exportSectionOrder
+window.moveExportSection = (index, direction) => {
+    const newIndex = index + direction;
+
+    // Controlli limiti array
+    if (newIndex < 0 || newIndex >= exportSectionOrder.length) return;
+
+    // Scambio elementi nell'array locale
+    const temp = exportSectionOrder[index];
+    exportSectionOrder[index] = exportSectionOrder[newIndex];
+    exportSectionOrder[newIndex] = temp;
+
+    // Ridisegna solo la lista visuale
+    window.renderExportList();
+};
 
 
