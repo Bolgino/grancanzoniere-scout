@@ -46,7 +46,7 @@ let favorites = JSON.parse(localStorage.getItem('scoutFavorites')) || [];
 let currentSetlistId = null;
 let autoScrollInterval = null;
 let exportSectionOrder = [];
-
+let exportSectionCovers = {};
 // Loader phrases
 const loaderPhrases = [
     "Allineo gli astri...", "Accordo la chitarra...", "Scaldo le corde vocali...",
@@ -428,7 +428,7 @@ window.generateFullPDF = async () => {
     const SIDE_MARGIN = 15;
     const GUTTER = 10;
 
-    // --- 1. GENERAZIONE COPERTINA ---
+    // --- 1. COPERTINA GLOBALE ---
     const coverInput = document.getElementById("globalCoverInput").files[0];
     if (coverInput) {
         try {
@@ -436,6 +436,7 @@ window.generateFullPDF = async () => {
             doc.addImage(coverBase64, 'JPEG', 0, 0, PAGE_WIDTH, PAGE_HEIGHT);
         } catch(e) { console.error("Errore copertina", e); }
     } else {
+        // Default Cover
         doc.setFillColor(0, 51, 102); 
         doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, 'F');
         doc.setTextColor(255, 255, 255);
@@ -445,35 +446,29 @@ window.generateFullPDF = async () => {
         doc.text("SCOUT", PAGE_WIDTH/2, 135, {align: 'center'});
     }
 
-    // --- 2. PREPARAZIONE DATI E STIMA PAGINE INDICE ---
-    // Usa l'ordine locale se definito, altrimenti quello standard
+    // --- 2. PREPARAZIONE E STIMA INDICE ---
     const sourceList = (typeof exportSectionOrder !== 'undefined' && exportSectionOrder.length > 0) 
                         ? exportSectionOrder 
                         : allSections;
-    const finalOrderNames = sourceList.map(s => s.name);
+    
+    // Mappa l'oggetto sezione completo, non solo il nome
+    const finalSections = sourceList; 
 
-    // Calcoliamo quanti elementi totali abbiamo per l'indice
     let totalTocItems = 0;
-    for (const secName of finalOrderNames) {
-        const songs = allSongs.filter(s => s.category === secName);
+    for (const sec of finalSections) {
+        const songs = allSongs.filter(s => s.category === sec.name);
         if (songs.length > 0) {
-            totalTocItems++; // Titolo sezione
-            totalTocItems += songs.length; // Canzoni
+            totalTocItems++; 
+            totalTocItems += songs.length;
         }
     }
 
-    // STIMA: Circa 90 righe per pagina (su 2 colonne). 
-    // Arrotondiamo per eccesso per stare sicuri.
     const tocPagesNeeded = Math.ceil(totalTocItems / 90);
-    
-    // Aggiungi le pagine bianche per l'indice (dopo la copertina che è pag 1)
-    for(let i=0; i < tocPagesNeeded; i++) {
-        doc.addPage(); 
-    }
+    for(let i=0; i < tocPagesNeeded; i++) doc.addPage(); 
 
     let tocData = []; 
 
-    // Parametri layout canzoni
+    // Parametri layout
     const COL_WIDTH = isTwoColumns ? (PAGE_WIDTH - (SIDE_MARGIN * 2) - GUTTER) / 2 : (PAGE_WIDTH - (SIDE_MARGIN * 2));
     const COL_1_X = SIDE_MARGIN;
     const COL_2_X = isTwoColumns ? (SIDE_MARGIN + COL_WIDTH + GUTTER) : SIDE_MARGIN;
@@ -482,7 +477,6 @@ window.generateFullPDF = async () => {
     let currentY = MARGIN_TOP;
     let currentCol = 1;
 
-    // Funzione controllo fine pagina
     const checkLimit = (heightNeeded) => {
         if (currentY + heightNeeded > MARGIN_BOTTOM) {
             if (isTwoColumns && currentCol === 1) {
@@ -500,90 +494,112 @@ window.generateFullPDF = async () => {
         return false;
     };
 
-    // --- 3. LOOP SEZIONI E CANZONI ---
-    // Partiamo con una nuova pagina dopo quelle prenotate per l'indice
+    // --- 3. LOOP PRINCIPALE ---
     doc.addPage();
     currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
 
-    for (const secName of finalOrderNames) {
-        const songs = allSongs.filter(s => s.category === secName).sort((a,b)=>a.title.localeCompare(b.title));
+    for (const sec of finalSections) {
+        const songs = allSongs.filter(s => s.category === sec.name).sort((a,b)=>a.title.localeCompare(b.title));
         if (songs.length === 0) continue;
 
-        // Nuova pagina per ogni nuova sezione (opzionale, ma più pulito)
-        if (currentY > MARGIN_TOP) {
+        // --- GESTIONE COPERTINA SEZIONE ---
+        // 1. Controllo se c'è una copertina custom caricata ora
+        let sectionCoverImg = exportSectionCovers[sec.id];
+        // 2. Se no, uso quella del DB
+        if (!sectionCoverImg && sec.coverUrl) {
+            sectionCoverImg = sec.coverUrl;
+        }
+
+        // Se abbiamo un'immagine, creiamo una pagina dedicata
+        if (sectionCoverImg) {
+            // Se siamo a metà pagina, vai a nuova pagina per la copertina
+            if (doc.internal.getCurrentPageInfo().pageNumber > 1) {
+                doc.addPage(); 
+            }
+            try {
+                doc.addImage(sectionCoverImg, 'JPEG', 0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+                // Dopo l'immagine, aggiungi una nuova pagina per iniziare il testo
+                doc.addPage();
+                currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
+            } catch(e) {
+                console.error("Errore img sezione", e);
+            }
+        } else {
+            // Se non c'è immagine, ma siamo in fondo alla pagina precedente, vai a capo
+            if (currentY > MARGIN_TOP) {
+                 doc.addPage();
+                 currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
+            }
+        }
+        
+        // TOC: Salva pagina corrente
+        tocData.push({ type: 'section', text: sec.name.toUpperCase(), page: doc.internal.getCurrentPageInfo().pageNumber });
+        
+        // TITOLO SEZIONE (Testo)
+        doc.setTextColor(0, 51, 102); doc.setFont("helvetica", "bold"); doc.setFontSize(30);
+        
+        // Se c'era la copertina, il titolo lo mettiamo comunque in alto alla nuova pagina
+        // Se non c'era, lo scriviamo dove siamo. Ma per uniformità, meglio centrarlo un po'
+        if (sectionCoverImg) {
+             doc.text(sec.name.toUpperCase(), PAGE_WIDTH/2, 100, {align: 'center'});
+             doc.addPage();
+             currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
+        } else {
+             // Versione senza copertina: Titolo centrato in alto
+             doc.text(sec.name.toUpperCase(), PAGE_WIDTH/2, 100, {align: 'center'});
              doc.addPage();
              currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
         }
-        
-        // Salviamo dati per l'indice (Pagina corrente)
-        tocData.push({ type: 'section', text: secName.toUpperCase(), page: doc.internal.getCurrentPageInfo().pageNumber });
-        
-        // Titolo Sezione nella pagina
-        doc.setTextColor(0, 51, 102); doc.setFont("helvetica", "bold"); doc.setFontSize(30);
-        doc.text(secName.toUpperCase(), PAGE_WIDTH/2, 100, {align: 'center'});
-        
-        doc.addPage();
-        currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
 
         for (const s of songs) {
-            // Aggiungi canzone all'indice
             tocData.push({ type: 'song', text: s.title, subtext: s.author, page: doc.internal.getCurrentPageInfo().pageNumber });
 
             checkLimit(25);
 
-            // -- TITOLO --
+            // Titolo
             doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(0, 51, 102);
             const titleLines = doc.splitTextToSize(s.title.toUpperCase(), COL_WIDTH);
             doc.text(titleLines, currentX, currentY);
             currentY += (titleLines.length * 5);
 
-            // -- AUTORE --
+            // Autore
             if(s.author) {
                 doc.setFont("helvetica", "italic"); doc.setFontSize(9); doc.setTextColor(100);
                 const authTxt = s.year ? `${s.author} (${s.year})` : s.author;
                 doc.text(authTxt, currentX + COL_WIDTH, currentY - 5, {align: 'right'}); 
             }
 
-            // -- NOTE (Descrizione) --
+            // Note/Descrizione
             if (s.description) {
-                doc.setFont("helvetica", "italic"); 
-                doc.setFontSize(8); 
-                doc.setTextColor(50);
-                
+                doc.setFont("helvetica", "italic"); doc.setFontSize(8); doc.setTextColor(50);
                 const noteWidth = COL_WIDTH - 4; 
                 const splitNotes = doc.splitTextToSize(s.description, noteWidth);
                 const blockHeight = (splitNotes.length * 3.5) + 4; 
-                
                 checkLimit(blockHeight);
-
                 doc.setFillColor(240, 240, 240);
                 doc.rect(currentX, currentY, COL_WIDTH, blockHeight, 'F');
                 doc.text(splitNotes, currentX + 2, currentY + 3.5);
-                
                 currentY += blockHeight + 2; 
             } else {
                 currentY += 4; 
             }
 
-            // -- LINEA DIVISORIA (FIX SOVRAPPOSIZIONE) --
+            // Linea
             doc.setDrawColor(200); doc.setLineWidth(0.2);
             doc.line(currentX, currentY - 2, currentX + COL_WIDTH, currentY - 2);
-            currentY += 9; // Aumentato spazio per evitare che gli accordi Intro tocchino la linea
+            currentY += 9; 
             
-            // -- TESTO E ACCORDI --
+            // Testo
             doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(0);
-            
             const lines = (s.lyrics || "").split("\n");
             
             for (let l of lines) {
                 l = l.replace(/\*\*|__/g, ''); 
-                
                 const parts = l.split(/(\[.*?\])/);
                 const hasChords = parts.some(p => p.startsWith("["));
                 const heightNeeded = hasChords ? 10 : 5;
                 
                 checkLimit(heightNeeded);
-
                 let lineX = currentX;
                 
                 if (hasChords && showChords) { 
@@ -592,23 +608,16 @@ window.generateFullPDF = async () => {
                         if (p.startsWith("[")) {
                             let c = p.replace(/[\[\]]/g,'');
                             c = transposeChord(normalizeChord(c), 0); 
-                            
                             doc.setFont(undefined, 'bold'); doc.setTextColor(220, 53, 69);
                             doc.text(c, lineX, currentY);
-                            
                             const chordWidth = doc.getTextWidth(c);
                             lastChordEnd = lineX + chordWidth + 1; 
-
                         } else {
                             doc.setFont(undefined, 'normal'); doc.setTextColor(0);
                             doc.text(p, lineX, currentY + 4);
-                            
                             const textWidth = doc.getTextWidth(p);
                             lineX += textWidth;
-
-                            if (lineX < lastChordEnd) {
-                                lineX = lastChordEnd;
-                            }
+                            if (lineX < lastChordEnd) lineX = lastChordEnd;
                         }
                     });
                     currentY += 9; 
@@ -624,13 +633,10 @@ window.generateFullPDF = async () => {
         }
     }
 
-    // --- 4. SCRITTURA INDICE (Nelle pagine prenotate all'inizio) ---
-    // Torniamo alla pagina 2 (la prima dopo la copertina)
+    // --- 4. STAMPA INDICE ---
     if (tocPagesNeeded > 0 && tocData.length > 0) {
-        let tocPageIdx = 2; // Pagina fisica (1-based)
+        let tocPageIdx = 2; 
         doc.setPage(tocPageIdx); 
-
-        // Titolo Indice
         doc.setTextColor(0, 51, 102); doc.setFont("helvetica", "bold"); doc.setFontSize(22);
         doc.text("INDICE", PAGE_WIDTH/2, 20, {align: 'center'});
         
@@ -641,31 +647,19 @@ window.generateFullPDF = async () => {
         const TOC_COL_2_X = 115;
         
         tocData.forEach(item => {
-            // Se la colonna finisce
             if(tocY > 270) {
-                 if(tocCol === 1) { 
-                     tocCol = 2; 
-                     tocY = 40; 
-                 } else { 
-                     // Se finisce la pagina, passa alla prossima pagina prenotata
+                 if(tocCol === 1) { tocCol = 2; tocY = 40; } else { 
                      tocPageIdx++;
                      if (tocPageIdx <= 1 + tocPagesNeeded) {
                          doc.setPage(tocPageIdx);
-                         tocCol = 1; 
-                         tocY = 40; 
+                         tocCol = 1; tocY = 40; 
                      } else {
-                         // Sicurezza: se abbiamo sottostimato le pagine, ne aggiungiamo una nuova
-                         // Nota: questo è raro se la stima è generosa
-                         doc.insertPage(tocPageIdx); 
-                         doc.setPage(tocPageIdx);
-                         tocCol = 1; 
-                         tocY = 40;
+                         doc.insertPage(tocPageIdx); doc.setPage(tocPageIdx);
+                         tocCol = 1; tocY = 40;
                      }
                  }
             }
-            
             let tx = tocCol === 1 ? TOC_COL_1_X : TOC_COL_2_X;
-
             if (item.type === 'section') {
                 tocY += 5;
                 doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(0);
@@ -675,34 +669,26 @@ window.generateFullPDF = async () => {
                 doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(50);
                 let title = item.text;
                 if (title.length > 35) title = title.substring(0, 32) + "...";
-                
                 doc.text(title, tx, tocY);
-                // Stampa il numero di pagina salvato
                 doc.text(String(item.page), tx + TOC_COL_WIDTH, tocY, {align:'right'});
                 tocY += 5;
             }
         });
     }
 
-    // --- 5. NUMERAZIONE PAGINE (PIÈ DI PAGINA SU TUTTO) ---
+    // --- 5. NUMERAZIONE ---
     const totalPages = doc.internal.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
-        // Salta copertina (pag 1)
         if (i === 1) continue;
-        
         doc.setPage(i);
-        doc.setFont("helvetica", "normal"); 
-        doc.setFontSize(9); 
-        doc.setTextColor(150);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(150);
         doc.text(String(i), PAGE_WIDTH/2, 290, {align:'center'});
     }
 
     doc.save("Canzoniere_Completo.pdf");
     if(document.getElementById("loadingOverlay")) document.getElementById("loadingOverlay").style.display="none"; 
     window.showToast("PDF Scaricato!", "success");
-    
-    const exportModal = bootstrap.Modal.getInstance(document.getElementById('exportOptionsModal'));
-    if(exportModal) exportModal.hide();
+    // Non chiudere il modale, così l'utente può fare altre modifiche
 };
 
 window.generateFullLatex=()=>{if(!isAdmin)return;let l=`\\documentclass{article}\n\\usepackage[utf8]{inputenc}\n\\usepackage[a5paper]{geometry}\n\\usepackage{songs}\n\\begin{document}\n\\title{Canzoniere}\\maketitle\\tableofcontents\\newpage\n`;sectionOrder.forEach(secName=>{l+=`\\section{${secName}}\n`;allSongs.filter(s=>s.category===secName).sort((a,b)=>a.title.localeCompare(b.title)).forEach(s=>{l+=`\\beginsong{${s.title}}[by={${s.author||''}}]\n\\beginverse\n`;(s.lyrics||"").split("\n").forEach(line=>{l+=line.replace(/\[(.*?)\]/g,(m,p1)=>`\\[${normalizeChord(p1)}]`)+"\n";});l+=`\\endverse\n\\endsong\n`;});});l+=`\\end{document}`;const b=new Blob([l],{type:'text/plain'});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="Canzoniere.tex";a.click();};
@@ -1552,8 +1538,13 @@ window.createNewSection = async () => {
 window.openExportView = () => {
     switchView('view-export');
     
-    // 1. Crea una COPIA locale dell'array sezioni, ordinata come il default attuale
-    // Usiamo lo spread operator [...] per rompere il riferimento all'array originale
+    // Reset variabili temporanee
+    exportSectionCovers = {}; 
+    document.getElementById("globalCoverInput").value = "";
+    document.getElementById("exportPreviewImg").style.display = "none";
+    document.getElementById("exportPreviewPlaceholder").style.display = "block";
+
+    // Copia locale ordine sezioni
     exportSectionOrder = [...allSections].sort((a, b) => {
         const orderA = (a.order !== undefined && a.order !== null) ? a.order : 9999;
         const orderB = (b.order !== undefined && b.order !== null) ? b.order : 9999;
@@ -1561,7 +1552,6 @@ window.openExportView = () => {
         return a.name.localeCompare(b.name);
     });
 
-    // 2. Renderizza la lista visuale basata su questa copia locale
     window.renderExportList();
 };
 window.createNewSetlistPrompt = () => {
@@ -1736,13 +1726,30 @@ window.renderExportList = () => {
     list.innerHTML = "";
     
     exportSectionOrder.forEach((sec, idx) => {
-        // NOTA: Qui passiamo l'indice (idx) array, non l'ID, perché lavoriamo su una lista locale
+        const hasDbCover = sec.coverUrl ? '<i class="bi bi-image text-success" title="Presente nel DB"></i>' : '<i class="bi bi-image text-muted" title="Nessuna"></i>';
+        
         list.innerHTML += `
-        <div class="d-flex justify-content-between align-items-center bg-secondary bg-opacity-25 p-2 mb-1 rounded">
-            <span class="text-white small fw-bold">${sec.name}</span>
-            <div>
-                <button class="btn btn-sm btn-link text-white py-0" onclick="window.moveExportSection(${idx}, -1)">⬆</button>
-                <button class="btn btn-sm btn-link text-white py-0" onclick="window.moveExportSection(${idx}, 1)">⬇</button>
+        <div class="list-group-item bg-dark border-secondary text-white d-flex align-items-center justify-content-between p-2 mb-1 rounded" 
+             onmouseenter="window.hoverSectionPreview('${sec.id}', '${sec.name.replace(/'/g, "\\'")}')">
+            
+            <div class="d-flex align-items-center gap-2 flex-grow-1" style="min-width:0;">
+                <div class="d-flex flex-column">
+                    <button class="btn btn-sm btn-link text-white py-0" onclick="window.moveExportSection(${idx}, -1)"><i class="bi bi-caret-up-fill"></i></button>
+                    <button class="btn btn-sm btn-link text-white py-0" onclick="window.moveExportSection(${idx}, 1)"><i class="bi bi-caret-down-fill"></i></button>
+                </div>
+                
+                <div class="text-truncate">
+                    <div class="fw-bold small">${sec.name}</div>
+                    <div class="d-flex align-items-center gap-1">
+                        <small>${hasDbCover}</small>
+                        <label class="btn btn-outline-secondary btn-xs py-0 px-1 border-0" style="font-size: 0.7rem;">
+                            <i class="bi bi-upload"></i> Cambia
+                            <input type="file" hidden accept="image/*" 
+                                   data-sec-id="${sec.id}"
+                                   onchange="window.updateExportPreview('section_custom', this, '${sec.name.replace(/'/g, "\\'")}')">
+                        </label>
+                    </div>
+                </div>
             </div>
         </div>`;
     });
@@ -1762,6 +1769,72 @@ window.moveExportSection = (index, direction) => {
 
     // Ridisegna solo la lista visuale
     window.renderExportList();
+};
+// Aggiorna l'anteprima a sinistra quando si carica un file o si passa sopra una sezione
+window.updateExportPreview = async (type, inputOrUrl, labelText) => {
+    const img = document.getElementById("exportPreviewImg");
+    const ph = document.getElementById("exportPreviewPlaceholder");
+    const lbl = document.getElementById("exportPreviewLabel");
+    
+    let src = "";
+
+    if (type === 'global') {
+        // Copertina generale da input file
+        if (inputOrUrl.files && inputOrUrl.files[0]) {
+            src = await fileToBase64(inputOrUrl.files[0]);
+            lbl.innerText = "Copertina Generale (Personalizzata)";
+        } else {
+            lbl.innerText = "Copertina Generale (Default)";
+            ph.style.display = "block"; img.style.display = "none";
+            return;
+        }
+    } else if (type === 'section_custom') {
+        // Copertina sezione caricata al momento
+        if (inputOrUrl.files && inputOrUrl.files[0]) {
+            src = await fileToBase64(inputOrUrl.files[0]);
+            // Salva nella variabile temporanea
+            const sectionId = inputOrUrl.getAttribute('data-sec-id');
+            exportSectionCovers[sectionId] = src;
+            lbl.innerText = "Copertina Sezione: " + labelText + " (Nuova)";
+        }
+    } else if (type === 'section_db') {
+        // Copertina sezione dal DB (al mouseover)
+        src = inputOrUrl; // Qui inputOrUrl è l'URL base64
+        lbl.innerText = "Copertina Sezione: " + labelText + " (App)";
+    }
+
+    if (src) {
+        img.src = src;
+        img.style.display = "block";
+        ph.style.display = "none";
+    } else {
+        img.style.display = "none";
+        ph.style.display = "block";
+    }
+};
+
+// Funzione helper per gestire il mouseover sulla lista
+window.hoverSectionPreview = (secId, secName) => {
+    // Se c'è una custom caricata ora, mostra quella
+    if (exportSectionCovers[secId]) {
+        const img = document.getElementById("exportPreviewImg");
+        img.src = exportSectionCovers[secId];
+        img.style.display = "block";
+        document.getElementById("exportPreviewPlaceholder").style.display = "none";
+        document.getElementById("exportPreviewLabel").innerText = secName + " (Custom)";
+    } 
+    // Altrimenti se c'è quella del DB, mostra quella
+    else {
+        const sec = allSections.find(s => s.id === secId);
+        if (sec && sec.coverUrl) {
+            window.updateExportPreview('section_db', sec.coverUrl, secName);
+        } else {
+            // Nessuna copertina
+            document.getElementById("exportPreviewImg").style.display = "none";
+            document.getElementById("exportPreviewPlaceholder").style.display = "block";
+            document.getElementById("exportPreviewLabel").innerText = secName + " (Nessuna)";
+        }
+    }
 };
 
 
