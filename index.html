@@ -183,7 +183,7 @@
         </div>
 
         <div id="view-export" class="view-screen">
-            <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-secondary pb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom border-secondary pb-3">
                 <button class="btn btn-outline-secondary btn-sm" onclick="window.goHome()">
                     <i class="bi bi-arrow-left"></i> Home
                 </button>
@@ -191,67 +191,99 @@
                 <div style="width: 80px;"></div>
             </div>
         
-            <div class="row g-4">
-                <div class="col-md-7">
-                    <div class="card bg-dark border-secondary shadow h-100">
-                        <div class="card-body">
-                            <h5 class="card-title text-primary fw-bold mb-3">Crea Canzoniere PDF</h5>
-                            <p class="text-muted small mb-4">Seleziona l'ordine delle sezioni. Le sezioni non desiderate verranno incluse in fondo se non filtrate.</p>
-                            
-                            <div class="row mb-3">
-                                <div class="col-6">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="pdfTwoColumns" checked>
-                                        <label class="form-check-label text-white" for="pdfTwoColumns">Due colonne</label>
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="pdfShowChords" checked>
-                                        <label class="form-check-label text-white" for="pdfShowChords">Includi Accordi</label>
-                                    </div>
-                                </div>
+            <div class="row g-4 h-100">
+                <div class="col-lg-5 mb-4">
+                    <div class="card bg-dark border-secondary shadow sticky-top" style="top: 100px;">
+                        <div class="card-header border-bottom border-secondary text-center text-muted text-uppercase small fw-bold">
+                            Anteprima Copertina
+                        </div>
+                        <div class="card-body p-4 d-flex justify-content-center align-items-center bg-secondary bg-opacity-10" style="min-height: 400px;">
+                            <img id="exportPreviewImg" src="" class="img-fluid shadow-lg rounded" style="max-height: 350px; display: none;">
+                            <div id="exportPreviewPlaceholder" class="text-center text-muted">
+                                <i class="bi bi-book fs-1 mb-2"></i><br>
+                                <span class="small">Seleziona una sezione o carica una copertina<br>per vederla qui.</span>
                             </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label text-white-50 small">Copertina Personalizzata (Opzionale)</label>
-                                <input class="form-control bg-secondary text-white border-0" type="file" id="globalCoverInput" accept="image/*">
-                            </div>
-        
-                            <div class="mb-3">
-                                <label class="form-label text-white-50 small">Ordine Sezioni:</label>
-                                <div id="sectionOrderListExport" class="list-group" style="max-height: 250px; overflow-y:auto;"></div>
-                            </div>
-        
-                            <button class="btn btn-primary w-100 fw-bold py-2" onclick="window.generateFullPDF()">
-                                <i class="bi bi-file-earmark-pdf-fill"></i> Scarica Canzoniere (A5)
-                            </button>
+                        </div>
+                        <div class="card-footer border-top border-secondary text-center">
+                            <small class="text-white-50" id="exportPreviewLabel">Copertina Generale</small>
                         </div>
                     </div>
                 </div>
         
-                <div class="col-md-5">
-                    <div class="card bg-dark border-secondary shadow h-100">
-                        <div class="card-body">
-                            <h5 class="card-title text-warning fw-bold mb-3">Backup & Dati</h5>
-                            
-                            <div class="d-grid gap-3">
-                                <button class="btn btn-outline-light text-start py-3" onclick="window.generateFullTxtList()">
-                                    <i class="bi bi-file-text me-2 fs-4"></i> 
-                                    <div>
-                                        <strong>Lista TXT</strong><br>
-                                        <small class="text-muted">Elenco semplice titoli</small>
-                                    </div>
+                <div class="col-lg-7">
+                    <div class="accordion" id="exportAccordion">
+                        
+                        <div class="accordion-item bg-dark border-secondary">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button bg-dark text-white shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne">
+                                    <i class="bi bi-sliders me-2 text-warning"></i> Configurazione Generale
                                 </button>
-                                <button class="btn btn-outline-light text-start py-3" onclick="window.generateFullLatex()">
-                                    <i class="bi bi-code-slash me-2 fs-4"></i> 
-                                    <div>
-                                        <strong>Sorgente LaTeX</strong><br>
-                                        <small class="text-muted">Per impaginazione pro</small>
+                            </h2>
+                            <div id="collapseOne" class="accordion-collapse collapse show" data-bs-parent="#exportAccordion">
+                                <div class="accordion-body border-top border-secondary">
+                                    <div class="row g-3">
+                                        <div class="col-6">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="pdfTwoColumns" checked>
+                                                <label class="form-check-label text-white" for="pdfTwoColumns">Due colonne</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="pdfShowChords" checked>
+                                                <label class="form-check-label text-white" for="pdfShowChords">Includi Accordi</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label text-white-50 small">Copertina Generale del Canzoniere</label>
+                                            <input class="form-control bg-secondary text-white border-0 form-control-sm" type="file" id="globalCoverInput" accept="image/*" onchange="window.updateExportPreview('global', this)">
+                                        </div>
+                                        <div class="col-12 pt-2">
+                                            <button class="btn btn-success w-100 fw-bold py-2" onclick="window.generateFullPDF()">
+                                                <i class="bi bi-file-earmark-pdf-fill"></i> GENERATE PDF COMPLETO
+                                            </button>
+                                        </div>
                                     </div>
-                                </button>
+                                </div>
                             </div>
                         </div>
+        
+                        <div class="accordion-item bg-dark border-secondary">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed bg-dark text-white shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo">
+                                    <i class="bi bi-sort-down me-2 text-info"></i> Ordine e Copertine Sezioni
+                                </button>
+                            </h2>
+                            <div id="collapseTwo" class="accordion-collapse collapse" data-bs-parent="#exportAccordion">
+                                <div class="accordion-body border-top border-secondary p-2">
+                                    <p class="small text-muted mb-2 px-1">
+                                        Trascina o usa le frecce per ordinare. Carica una copertina personalizzata per la stampa (altrimenti userà quella dell'app).
+                                    </p>
+                                    <div id="sectionOrderListExport" class="list-group list-group-flush"></div>
+                                </div>
+                            </div>
+                        </div>
+        
+                        <div class="accordion-item bg-dark border-secondary">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed bg-dark text-white shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree">
+                                    <i class="bi bi-code-square me-2 text-secondary"></i> Altri Formati
+                                </button>
+                            </h2>
+                            <div id="collapseThree" class="accordion-collapse collapse" data-bs-parent="#exportAccordion">
+                                <div class="accordion-body border-top border-secondary">
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-outline-light text-start" onclick="window.generateFullTxtList()">
+                                            <i class="bi bi-file-text me-2"></i> Scarica Lista TXT
+                                        </button>
+                                        <button class="btn btn-outline-light text-start" onclick="window.generateFullLatex()">
+                                            <i class="bi bi-file-code me-2"></i> Scarica Sorgente LaTeX
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+        
                     </div>
                 </div>
             </div>
@@ -793,6 +825,7 @@
     </script>
 </body>
 </html>
+
 
 
 
