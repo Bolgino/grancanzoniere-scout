@@ -287,35 +287,61 @@
                                 </button>
                             </h2>
                             <div id="collapseThree" class="accordion-collapse collapse" data-bs-parent="#exportAccordion">
-                                <div class="accordion-body border-top border-secondary">
-                                    <div class="d-grid gap-3">
-                                        
-                                        <button class="btn btn-success fw-bold py-2 text-start" onclick="window.generateFullPDF()">
-                                            <i class="bi bi-file-earmark-pdf-fill me-2"></i> Stampa Canzoniere (PDF A5)
-                                            <div class="small fw-normal opacity-75 ms-4">Genera il file completo pronto per la stampa a libretto con le opzioni selezionate sopra.</div>
-                                        </button>
-                                    
-                                        <button class="btn btn-outline-success w-100 text-start py-2" onclick="window.generateExcelList()">
-                                            <i class="bi bi-file-earmark-spreadsheet me-2"></i> Esporta Excel (.csv)
-                                            <div class="small fw-normal text-muted ms-4">
-                                                Scarica un foglio di calcolo con colonne separate: Titolo, Autore, Anno, Sezione. Utile per inventari.
+                                <div class="accordion-body">
+                                    <div class="row g-3">
+                                        <div class="col-md-7">
+                                            <div class="d-grid gap-2">
+                                                <button class="btn btn-success fw-bold py-2 text-start position-relative export-btn" 
+                                                        onmouseenter="window.showFormatPreview('pdf')" 
+                                                        onclick="window.generateFullPDF()">
+                                                    <div class="d-flex w-100 justify-content-between align-items-center">
+                                                        <span><i class="bi bi-file-earmark-pdf-fill me-2"></i> Stampa PDF (A5)</span>
+                                                        <small class="opacity-50" style="font-size:0.7rem">Libretto</small>
+                                                    </div>
+                                                </button>
+                                
+                                                <button class="btn btn-outline-success text-start py-2 export-btn" 
+                                                        onmouseenter="window.showFormatPreview('excel')" 
+                                                        onclick="window.generateExcelList()">
+                                                    <div class="d-flex w-100 justify-content-between align-items-center">
+                                                        <span><i class="bi bi-file-earmark-spreadsheet me-2"></i> Excel (.csv)</span>
+                                                        <small class="opacity-50" style="font-size:0.7rem">Inventario</small>
+                                                    </div>
+                                                </button>
+                                
+                                                <button class="btn btn-outline-light text-start py-2 export-btn" 
+                                                        onmouseenter="window.showFormatPreview('txt')" 
+                                                        onclick="window.generateFullTxtList()">
+                                                    <div class="d-flex w-100 justify-content-between align-items-center">
+                                                        <span><i class="bi bi-file-text me-2"></i> Testo (.txt)</span>
+                                                        <small class="opacity-50" style="font-size:0.7rem">Lista</small>
+                                                    </div>
+                                                </button>
+                                
+                                                <button class="btn btn-outline-light text-start py-2 export-btn" 
+                                                        onmouseenter="window.showFormatPreview('latex')" 
+                                                        onclick="window.generateFullLatex()">
+                                                    <div class="d-flex w-100 justify-content-between align-items-center">
+                                                        <span><i class="bi bi-file-code me-2"></i> LaTeX (.tex)</span>
+                                                        <small class="opacity-50" style="font-size:0.7rem">Sorgente</small>
+                                                    </div>
+                                                </button>
                                             </div>
-                                        </button>
-                                    
-                                        <button class="btn btn-outline-light w-100 text-start py-2" onclick="window.generateFullTxtList()">
-                                            <i class="bi bi-file-text me-2"></i> Lista Semplice (.txt)
-                                            <div class="small fw-normal text-muted ms-4">
-                                                Scarica un file di testo leggero contenente solo l'elenco dei titoli e autori, senza testi o accordi.
+                                        </div>
+                                
+                                        <div class="col-md-5 d-none d-md-block">
+                                            <div class="h-100 bg-dark border border-secondary rounded d-flex align-items-center justify-content-center p-2 position-relative overflow-hidden" style="min-height: 180px;">
+                                                <div class="position-absolute top-0 start-0 w-100 bg-secondary text-white text-center py-1" style="font-size: 0.7rem; opacity: 0.8;">
+                                                    ANTEPRIMA FORMATO
+                                                </div>
+                                                
+                                                <div id="formatPreviewContainer" class="w-100 h-100 d-flex align-items-center justify-content-center pt-3">
+                                                    <div class="text-muted small text-center fst-italic">
+                                                        Passa il mouse sui pulsanti<br>per vedere l'anteprima
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </button>
-                                    
-                                        <button class="btn btn-outline-light w-100 text-start py-2" onclick="window.generateFullLatex()">
-                                            <i class="bi bi-file-code me-2"></i> Sorgente LaTeX (.tex)
-                                            <div class="small fw-normal text-muted ms-4">
-                                                Scarica il codice sorgente per utenti esperti. Richiede il pacchetto 'songs' per la compilazione manuale.
-                                            </div>
-                                        </button>
-                                    
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -845,6 +871,42 @@
             </div>
         </div>
     </div>
+    <div class="modal fade" id="infoImportModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-secondary bg-dark text-white">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title"><i class="bi bi-info-circle text-info me-2"></i>Istruzioni Importazione</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-3">
+                        Per importare correttamente le canzoni, il tuo file <strong>.txt</strong> deve seguire rigorosamente questo formato:
+                    </p>
+                    
+                    <div class="bg-black p-3 rounded border border-secondary mb-3" style="font-family: monospace; font-size: 0.85rem; color: #00ff00;">
+                        SEZIONE: Fuoco di Bivacco<br>
+                        1. Albachiara - Autore: Vasco<br>
+                        2. La Canzone del Sole<br>
+                        <br>
+                        SEZIONE: Liturgia<br>
+                        3. Symbolum 77
+                    </div>
+    
+                    <ul class="small text-white-50 mb-0">
+                        <li>Scrivi <strong>SEZIONE:</strong> seguito dal nome per creare una categoria.</li>
+                        <li>Ogni canzone deve iniziare con un <strong>numero e un punto</strong> (es. "1. ").</li>
+                        <li>Opzionale: aggiungi " - Autore: Nome" alla fine della riga.</li>
+                    </ul>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Annulla</button>
+                    <button type="button" class="btn btn-success btn-sm fw-bold" onclick="document.getElementById('txtImporter').click()">
+                        <i class="bi bi-upload me-2"></i> Scegli File .txt
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div class="modal fade" id="createSetlistModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
@@ -890,6 +952,7 @@
     </script>
 </body>
 </html>
+
 
 
 
