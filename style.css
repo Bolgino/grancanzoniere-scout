@@ -185,15 +185,32 @@ input::placeholder, textarea::placeholder { color: #888 !important; }
 }
 
 #loaderText {
-    font-family: 'Courier New', monospace;
-    font-size: 1.1rem;
-    color: var(--primary-color);
+    font-family: 'Courier New', monospace; /* Font monospaziato stile terminale */
+    font-size: 1.2rem;
+    color: #6ea8fe; /* Colore primario (o verde #0f0 per stile hacker) */
     text-transform: uppercase;
     letter-spacing: 2px;
-    min-height: 25px;
+    min-height: 28px; /* Altezza fissa per evitare salti */
     text-align: center;
+    font-weight: bold;
+    text-shadow: 0 0 5px rgba(13, 110, 253, 0.5); /* Leggero alone luminoso */
+    display: inline-block; /* Importante per tenere il cursore vicino al testo */
 }
-.typing-cursor::after { content: '|'; animation: blink 1s infinite; }
+/* Il cursore lampeggiante */
+.typing-cursor::after {
+    content: '|';
+    display: inline-block;
+    margin-left: 2px;
+    color: #fff; /* Cursore bianco */
+    animation: blink 0.8s step-end infinite; /* step-end rende il lampeggio netto */
+    font-weight: 100;
+    text-shadow: 0 0 8px white; /* Cursore luminoso */
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
 
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 @keyframes twinkle { 0%, 100% { opacity: 0.2; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
@@ -536,6 +553,7 @@ body.user-admin .setlist-item-controls {
     border: 2px solid #ffc107 !important; /* Bordo giallo esterno */
     box-shadow: 0 0 20px rgba(255, 193, 7, 0.2); /* Alone giallo */
 }
+
 
 
 
