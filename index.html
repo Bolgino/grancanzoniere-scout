@@ -182,7 +182,7 @@
             </div>
         </div>
 
-       <div id="view-export" class="view-screen">
+        <div id="view-export" class="view-screen">
             <div class="d-flex justify-content-between align-items-center mb-3 border-bottom border-secondary pb-3">
                 <button class="btn btn-outline-secondary btn-sm" onclick="window.goHome()">
                     <i class="bi bi-arrow-left"></i> Home
@@ -195,17 +195,22 @@
                 <div class="col-lg-5 mb-4">
                     <div class="card bg-dark border-secondary shadow sticky-top" style="top: 100px;">
                         <div class="card-header border-bottom border-secondary text-center text-muted text-uppercase small fw-bold">
-                            Anteprima Copertina
+                            <span id="previewHeaderTitle">Anteprima</span>
                         </div>
-                        <div class="card-body p-4 d-flex justify-content-center align-items-center bg-secondary bg-opacity-10" style="min-height: 400px;">
+                        <div class="card-body p-4 d-flex justify-content-center align-items-center bg-secondary bg-opacity-10 position-relative" style="min-height: 400px; overflow: hidden;">
+                            
                             <img id="exportPreviewImg" src="" class="img-fluid shadow-lg rounded" style="max-height: 350px; display: none;">
+                            
                             <div id="exportPreviewPlaceholder" class="text-center text-muted">
                                 <i class="bi bi-book fs-1 mb-2"></i><br>
                                 <span class="small">Seleziona una sezione o carica una copertina<br>per vederla qui.</span>
                             </div>
+        
+                            <div id="formatPreviewContainer" class="w-100 h-100 d-none flex-column align-items-center justify-content-center p-2"></div>
+        
                         </div>
                         <div class="card-footer border-top border-secondary text-center">
-                            <small class="text-white-50" id="exportPreviewLabel">Copertina Generale</small>
+                            <small class="text-white-50" id="exportPreviewLabel">Nessuna selezione</small>
                         </div>
                     </div>
                 </div>
@@ -222,59 +227,26 @@
                             <div id="collapseOne" class="accordion-collapse collapse show" data-bs-parent="#exportAccordion">
                                 <div class="accordion-body border-top border-secondary">
                                     <div class="row g-3">
-                                        <div class="col-6">
-                                            <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="pdfTwoColumns" checked>
-                                                <label class="form-check-label text-white" for="pdfTwoColumns">Due colonne</label>
-                                            </div>
-                                        </div>
-                                        <div class="col-6">
-                                            <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="pdfShowChords" checked>
-                                                <label class="form-check-label text-white" for="pdfShowChords">Includi Accordi</label>
-                                            </div>
-                                        </div>
-                                
-                                        <div class="col-6">
-                                            <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="pdfShowToc" checked>
-                                                <label class="form-check-label text-white" for="pdfShowToc">Genera Indice</label>
-                                            </div>
-                                        </div>
-                                        <div class="col-6">
-                                            <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="pdfShowPageNumbers" checked>
-                                                <label class="form-check-label text-white" for="pdfShowPageNumbers">Numeri Pagina</label>
-                                            </div>
-                                        </div>
-                                        <div class="col-12">
-                                            <label class="form-label text-white-50 small mb-1">Dimensione Testo Canzoni</label>
-                                            <select class="form-select form-select-sm bg-dark text-white border-secondary" id="pdfFontSize">
-                                                <option value="small">Compatto (Testo 9pt)</option>
-                                                <option value="normal" selected>Normale (Testo 10pt)</option>
-                                                <option value="large">Grande (Testo 12pt - Lettura facile)</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-12">
-                                            <label class="form-label text-white-50 small">Copertina Generale del Canzoniere</label>
-                                            <input class="form-control bg-secondary text-white border-0 form-control-sm" type="file" id="globalCoverInput" accept="image/*" onchange="window.updateExportPreview('global', this)">
-                                        </div>
+                                        <div class="col-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="pdfTwoColumns" checked><label class="form-check-label text-white" for="pdfTwoColumns">Due colonne</label></div></div>
+                                        <div class="col-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="pdfShowChords" checked><label class="form-check-label text-white" for="pdfShowChords">Includi Accordi</label></div></div>
+                                        <div class="col-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="pdfShowToc" checked><label class="form-check-label text-white" for="pdfShowToc">Genera Indice</label></div></div>
+                                        <div class="col-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="pdfShowPageNumbers" checked><label class="form-check-label text-white" for="pdfShowPageNumbers">Numeri Pagina</label></div></div>
+                                        <div class="col-12"><label class="form-label text-white-50 small mb-1">Dimensione Testo</label><select class="form-select form-select-sm bg-dark text-white border-secondary" id="pdfFontSize"><option value="small">Compatto</option><option value="normal" selected>Normale</option><option value="large">Grande</option></select></div>
+                                        <div class="col-12"><label class="form-label text-white-50 small">Copertina Generale</label><input class="form-control bg-secondary text-white border-0 form-control-sm" type="file" id="globalCoverInput" accept="image/*" onchange="window.updateExportPreview('global', this)"></div>
                                     </div>
                                 </div>
                             </div>
                         </div>
         
                         <div class="accordion-item bg-dark border-secondary">
-                            <h2 class="accordion-header" id="headingTwo">
+                            <h2 class="accordion-header">
                                 <button class="accordion-button collapsed bg-dark text-white shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo">
-                                    <i class="bi bi-collection-fill me-2 text-warning"></i> Configurazione e Copertine Sezioni
+                                    <i class="bi bi-collection-fill me-2 text-warning"></i> Configurazione Sezioni
                                 </button>
                             </h2>
                             <div id="collapseTwo" class="accordion-collapse collapse" data-bs-parent="#exportAccordion">
                                 <div class="accordion-body">
-                                    <div class="alert alert-info py-2 small mb-2">
-                                        <i class="bi bi-info-circle me-1"></i> Deseleziona le sezioni per escluderle dalla stampa. Trascina (frecce) per ordinare.
-                                    </div>
+                                    <div class="alert alert-info py-2 small mb-2"><i class="bi bi-info-circle me-1"></i> Deseleziona per escludere. Trascina per ordinare.</div>
                                     <div id="sectionOrderListExport" class="d-grid gap-2"></div>
                                 </div>
                             </div>
@@ -283,65 +255,31 @@
                         <div class="accordion-item bg-dark border-secondary">
                             <h2 class="accordion-header">
                                 <button class="accordion-button collapsed bg-dark text-white shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree">
-                                    <i class="bi bi-printer-fill me-2 text-success"></i> Esportazione e Stampa
+                                    <i class="bi bi-printer-fill me-2 text-success"></i> Stampa Finale
                                 </button>
                             </h2>
                             <div id="collapseThree" class="accordion-collapse collapse" data-bs-parent="#exportAccordion">
                                 <div class="accordion-body">
-                                    <div class="row g-3">
-                                        <div class="col-md-7">
-                                            <div class="d-grid gap-2">
-                                                <button class="btn btn-success fw-bold py-2 text-start position-relative export-btn" 
-                                                        onmouseenter="window.showFormatPreview('pdf')" 
-                                                        onclick="window.generateFullPDF()">
-                                                    <div class="d-flex w-100 justify-content-between align-items-center">
-                                                        <span><i class="bi bi-file-earmark-pdf-fill me-2"></i> Stampa PDF (A5)</span>
-                                                        <small class="opacity-50" style="font-size:0.7rem">Libretto</small>
-                                                    </div>
-                                                </button>
-                                
-                                                <button class="btn btn-outline-success text-start py-2 export-btn" 
-                                                        onmouseenter="window.showFormatPreview('excel')" 
-                                                        onclick="window.generateExcelList()">
-                                                    <div class="d-flex w-100 justify-content-between align-items-center">
-                                                        <span><i class="bi bi-file-earmark-spreadsheet me-2"></i> Excel (.csv)</span>
-                                                        <small class="opacity-50" style="font-size:0.7rem">Inventario</small>
-                                                    </div>
-                                                </button>
-                                
-                                                <button class="btn btn-outline-light text-start py-2 export-btn" 
-                                                        onmouseenter="window.showFormatPreview('txt')" 
-                                                        onclick="window.generateFullTxtList()">
-                                                    <div class="d-flex w-100 justify-content-between align-items-center">
-                                                        <span><i class="bi bi-file-text me-2"></i> Testo (.txt)</span>
-                                                        <small class="opacity-50" style="font-size:0.7rem">Lista</small>
-                                                    </div>
-                                                </button>
-                                
-                                                <button class="btn btn-outline-light text-start py-2 export-btn" 
-                                                        onmouseenter="window.showFormatPreview('latex')" 
-                                                        onclick="window.generateFullLatex()">
-                                                    <div class="d-flex w-100 justify-content-between align-items-center">
-                                                        <span><i class="bi bi-file-code me-2"></i> LaTeX (.tex)</span>
-                                                        <small class="opacity-50" style="font-size:0.7rem">Sorgente</small>
-                                                    </div>
-                                                </button>
-                                            </div>
-                                        </div>
-                                
-                                        <div class="col-md-5 d-none d-md-block">
-                                            <div class="h-100 bg-dark border border-secondary rounded d-flex align-items-center justify-content-center p-2 position-relative overflow-hidden" style="min-height: 180px;">
-                                                <div class="position-absolute top-0 start-0 w-100 bg-secondary text-white text-center py-1" style="font-size: 0.7rem; opacity: 0.8;">
-                                                    ANTEPRIMA FORMATO
-                                                </div>
-                                                
-                                                <div id="formatPreviewContainer" class="w-100 h-100 d-flex align-items-center justify-content-center pt-3">
-                                                    <div class="text-muted small text-center fst-italic">
-                                                        Passa il mouse sui pulsanti<br>per vedere l'anteprima
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
+                                    <div class="d-grid gap-3">
+                                        <button class="btn btn-success fw-bold py-3 text-start position-relative export-btn" 
+                                                onmouseenter="window.showFormatPreview('pdf')" onmouseleave="window.resetFormatPreview()" onclick="window.generateFullPDF()">
+                                            <div class="d-flex align-items-center"><i class="bi bi-file-earmark-pdf-fill fs-3 me-3"></i><div><div class="fw-bold">Stampa Canzoniere (PDF)</div><small class="opacity-75">Formato A5 libretto</small></div></div>
+                                        </button>
+        
+                                        <button class="btn btn-outline-success text-start py-2 export-btn" 
+                                                onmouseenter="window.showFormatPreview('excel')" onmouseleave="window.resetFormatPreview()" onclick="window.generateExcelList()">
+                                            <i class="bi bi-file-earmark-spreadsheet me-2"></i> Esporta Excel (.csv)
+                                        </button>
+                                        
+                                        <button class="btn btn-outline-light text-start py-2 export-btn" 
+                                                onmouseenter="window.showFormatPreview('txt')" onmouseleave="window.resetFormatPreview()" onclick="window.generateFullTxtList()">
+                                            <i class="bi bi-file-text me-2"></i> Lista Semplice (.txt)
+                                        </button>
+                                        
+                                        <button class="btn btn-outline-light text-start py-2 export-btn" 
+                                                onmouseenter="window.showFormatPreview('latex')" onmouseleave="window.resetFormatPreview()" onclick="window.generateFullLatex()">
+                                            <i class="bi bi-file-code me-2"></i> Sorgente LaTeX (.tex)
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -952,6 +890,7 @@
     </script>
 </body>
 </html>
+
 
 
 
