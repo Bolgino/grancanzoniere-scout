@@ -50,7 +50,9 @@ let isUserInteracting = false;
 let exportSectionCovers = {};
 let targetMergeSongId = null;
 let mDuplicateWarning; // Variabile per il modale
-let pendingMergeData = null; // Dove salviamo i dati in attesa di conferma
+let pendingMergeData = null;
+let isFirstLoad = true;
+
 // Loader phrases
 const loaderPhrases = [
     "Osservo gli astri...", "Accordo la chitarra...", "Scaldo le corde vocali...",
@@ -88,60 +90,55 @@ function startLoaderAnimation() {
     const textEl = document.getElementById('loaderText');
     if(!textEl) return;
     
-    // Assicura che la classe CSS per il cursore sia attiva
     textEl.classList.add('typing-cursor');
 
-    // Inizia da una frase casuale
-    let phraseIndex = Math.floor(Math.random() * loaderPhrases.length);
+    // Inizia sempre con "Inizializzazione..." al primo avvio per coerenza
+    let phraseIndex = isFirstLoad ? -1 : Math.floor(Math.random() * loaderPhrases.length);
+    // Se index è -1, usiamo una stringa fissa, altrimenti prendiamo dall'array
+    let currentPhrase = phraseIndex === -1 ? "Inizializzazione..." : loaderPhrases[phraseIndex];
+    
     let charIndex = 0;
     let isDeleting = false;
 
     const typeEffect = () => {
-        const currentPhrase = loaderPhrases[phraseIndex];
-
-        // Gestione testo visualizzato
+        // Aggiorna il testo
         if (isDeleting) {
-            // Cancella: prende una sottostringa sempre più corta
             textEl.innerText = currentPhrase.substring(0, charIndex - 1);
             charIndex--;
         } else {
-            // Scrive: prende una sottostringa sempre più lunga
             textEl.innerText = currentPhrase.substring(0, charIndex + 1);
             charIndex++;
         }
 
-        // Velocità di digitazione (varia leggermente per realismo)
-        let typeSpeed = 50 + Math.random() * 40; 
+        // --- CONFIGURAZIONE VELOCITÀ ---
+        let typeSpeed = 20; // BASE: Scrittura super veloce (20ms)
 
-        if (!isDeleting && charIndex === currentPhrase.length) {
-            // FRASE COMPLETATA: Pausa lunga per leggerla
-            typeSpeed = 2000; 
-            isDeleting = true; // Al prossimo ciclo inizia a cancellare
-        } else if (isDeleting && charIndex === 0) {
-            // CANCELLAZIONE COMPLETATA: Cambia frase
-            isDeleting = false;
-            // Sceglie una nuova frase diversa dalla precedente
-            let nextIndex;
-            do {
-                nextIndex = Math.floor(Math.random() * loaderPhrases.length);
-            } while (nextIndex === phraseIndex && loaderPhrases.length > 1);
-            phraseIndex = nextIndex;
-            
-            typeSpeed = 500; // Pausa breve prima di iniziare a scrivere la nuova
-        } else if (isDeleting) {
-            // Durante la cancellazione va molto più veloce
-            typeSpeed = 30; 
+        if (isDeleting) {
+            typeSpeed = 10; // Cancellazione istantanea
         }
 
-        // Salva il riferimento al timeout per poterlo fermare quando la pagina è caricata
-        // Nota: nel codice originale usavi setInterval, qui usiamo setTimeout ricorsivo
-        // Assicurati che nella funzione loadData() che chiama clearInterval, 
-        // tu usi clearTimeout(loaderInterval) invece se usi questo approccio, 
-        // oppure assegna questo timeout alla variabile loaderInterval esistente.
+        // Logica di pausa e cambio frase
+        if (!isDeleting && charIndex === currentPhrase.length) {
+            // FRASE COMPLETATA
+            typeSpeed = 2000; // Pausa di 2 secondi per leggere (bello lungo)
+            isDeleting = true; 
+        } else if (isDeleting && charIndex === 0) {
+            // CANCELLAZIONE COMPLETATA
+            isDeleting = false;
+            // Passa alla prossima frase casuale
+            phraseIndex = Math.floor(Math.random() * loaderPhrases.length);
+            currentPhrase = loaderPhrases[phraseIndex];
+            typeSpeed = 500; 
+        }
+
+        // Variazione casuale minima per sembrare digitazione umana ma veloce
+        if (!isDeleting && charIndex !== currentPhrase.length) {
+            typeSpeed += Math.random() * 15; 
+        }
+
         loaderInterval = setTimeout(typeEffect, typeSpeed);
     };
 
-    // Avvia l'effetto
     typeEffect();
 }
 // AVVIO PERSISTENZA E DATI
@@ -219,7 +216,6 @@ async function loadData() {
         });
         sectionOrder = allSections.map(s => s.name); 
 
-        // --- INIZIO MODIFICA: BLOCCO IF AGGIORNATO ---
         const viewSetlists = document.getElementById('view-setlists');
         const viewManage = document.getElementById('view-manage-sections');
 
@@ -242,9 +238,26 @@ async function loadData() {
         console.error("Errore caricamento:", e);
         window.showToast("Errore caricamento: " + e.message, 'danger');
     } finally {
+        // --- MODIFICA QUI PER IL RITARDO INTELLIGENTE ---
         const loader = document.getElementById("loadingOverlay");
-        if(loader) loader.style.display = "none";
-        if(loaderInterval) clearTimeout(loaderInterval);
+        
+        if (loader) {
+            if (isFirstLoad) {
+                // SE È IL PRIMO AVVIO: Forza un'attesa di 2.5 secondi
+                // così l'utente vede "Inizializzazione..." scritto e fermo
+                setTimeout(() => {
+                    loader.style.display = "none";
+                    if(loaderInterval) clearTimeout(loaderInterval);
+                    isFirstLoad = false; // D'ora in poi sarà veloce
+                }, 2500); 
+            } else {
+                // CARICAMENTI SUCCESSIVI: Buffer minimo per fluidità (0.4 secondi)
+                setTimeout(() => {
+                    loader.style.display = "none";
+                    if(loaderInterval) clearTimeout(loaderInterval);
+                }, 400); 
+            }
+        }
     }
 }
 
@@ -2574,6 +2587,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
