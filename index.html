@@ -559,7 +559,67 @@
             </div>
         </div>
     </div>
-
+    <div class="modal fade" id="reviewProposalModal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-dark border-secondary">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square"></i> Revisiona Proposta</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="row g-0 h-100">
+                        <div class="col-lg-6 p-3 border-end border-secondary d-flex flex-column" style="background: #222;">
+                            
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-6">
+                                    <label class="small text-muted">Titolo</label>
+                                    <input type="text" id="reviewTitle" class="form-control form-control-sm">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="small text-muted">Autore</label>
+                                    <input type="text" id="reviewAuthor" class="form-control form-control-sm">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="small text-muted">Sezione</label>
+                                    <select id="reviewCategory" class="form-select form-select-sm"></select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="small text-muted">Anno</label>
+                                    <input type="number" id="reviewYear" class="form-control form-control-sm">
+                                </div>
+                                 <div class="col-md-3">
+                                    <label class="small text-muted">Proposto da</label>
+                                    <input type="text" id="reviewProposer" class="form-control form-control-sm" readonly disabled>
+                                </div>
+                                <div class="col-12">
+                                    <label class="small text-muted">Descrizione</label>
+                                    <input type="text" id="reviewDesc" class="form-control form-control-sm">
+                                </div>
+                            </div>
+    
+                            <label class="small text-muted mb-1">Testo e Accordi (Modifica qui)</label>
+                            <textarea id="reviewLyrics" class="form-control font-monospace border-0 flex-grow-1" 
+                                      style="resize: none; background: #1a1a1a; color: #fff; min-height: 300px;" 
+                                      oninput="window.renderReviewPreview()"></textarea>
+                        </div>
+    
+                        <div class="col-lg-6 p-0 bg-dark d-flex flex-column">
+                            <div class="p-2 border-bottom border-secondary bg-secondary bg-opacity-10 text-center">
+                                <small class="text-uppercase fw-bold text-muted">Anteprima Finale</small>
+                            </div>
+                            <div id="reviewPreviewArea" class="preview-area h-100 overflow-auto p-3" style="font-size: 14px;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary justify-content-between">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Annulla (Torna alla lista)</button>
+                    <button type="button" class="btn btn-success fw-bold px-4" onclick="window.saveAndApproveProposal()">
+                        <i class="bi bi-check-lg"></i> SALVA E APPROVA
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="modal fade" id="editSongMetadataModal">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -733,5 +793,6 @@
     </script>
 </body>
 </html>
+
 
 
