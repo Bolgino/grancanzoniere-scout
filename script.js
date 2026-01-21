@@ -243,19 +243,21 @@ async function loadData() {
         
         if (loader) {
             if (isFirstLoad) {
-                // SE È IL PRIMO AVVIO: Forza un'attesa di 2.5 secondi
-                // così l'utente vede "Inizializzazione..." scritto e fermo
+                // PRIMO AVVIO: 2.5 secondi (per leggere "Inizializzazione...")
                 setTimeout(() => {
                     loader.style.display = "none";
                     if(loaderInterval) clearTimeout(loaderInterval);
-                    isFirstLoad = false; // D'ora in poi sarà veloce
+                    isFirstLoad = false; 
                 }, 2500); 
             } else {
-                // CARICAMENTI SUCCESSIVI: Buffer minimo per fluidità (0.4 secondi)
+                // CARICAMENTI SUCCESSIVI: 
+                // Aumentato a 850ms (0.85 secondi).
+                // Questo tempo è calcolato sulla frase più lunga ("Scaldo le corde vocali...")
+                // affinché venga scritta interamente prima che il loader sparisca.
                 setTimeout(() => {
                     loader.style.display = "none";
                     if(loaderInterval) clearTimeout(loaderInterval);
-                }, 400); 
+                }, 850); 
             }
         }
     }
@@ -2587,6 +2589,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
