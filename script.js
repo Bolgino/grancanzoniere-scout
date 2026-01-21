@@ -1864,26 +1864,43 @@ window.createNewSetlistPrompt = () => {
 // --- NUOVE FUNZIONI PER LA TAB PROPONI ---
 
 window.openProposeView = () => {
-    // Resetta i campi
+    // 1. Resetta i campi (come prima)
     document.getElementById("propTitle").value = "";
     document.getElementById("propAuthor").value = "";
     document.getElementById("propLyrics").value = "";
     document.getElementById("propYear").value = "";
     document.getElementById("propDesc").value = "";
-    document.getElementById("propUser").value = ""; // O lascia salvato se vuoi
+    document.getElementById("propUser").value = ""; 
     document.getElementById("propPreviewArea").innerHTML = "";
 
-    // Popola le sezioni
+    // *** 2. NUOVO BLOCCO: CAMBIO INTERFACCIA SE ADMIN ***
+    const titleEl = document.querySelector('#view-propose h4');
+    // Selezioniamo il bottone in modo sicuro tramite il suo evento onclick
+    const btnEl = document.querySelector('#view-propose button[onclick="window.handleSongSubmission()"]');
+
+    if (isAdmin) {
+        // MODALITÀ CAPO: Aggiunta diretta
+        titleEl.innerHTML = '<i class="bi bi-plus-circle-fill text-warning me-2"></i>Nuova Canzone';
+        btnEl.innerHTML = 'Crea Subito <i class="bi bi-check-lg ms-1"></i>';
+        btnEl.className = "btn btn-warning btn-sm fw-bold shadow"; // Stile Giallo
+    } else {
+        // MODALITÀ GUEST: Proposta
+        titleEl.innerText = 'Nuova Proposta';
+        btnEl.innerHTML = 'Invia <i class="bi bi-send-fill ms-1"></i>';
+        btnEl.className = "btn btn-primary btn-sm fw-bold"; // Stile Blu
+    }
+    // ****************************************************
+
+    // 3. Popola le sezioni (come prima)
     const sel = document.getElementById("propCategory");
     sel.innerHTML = "";
     allSections.forEach(sec => {
         sel.innerHTML += `<option value="${sec.name}">${sec.name}</option>`;
     });
 
-    // Switch view
+    // 4. Mostra la vista
     window.switchView('view-propose');
 };
-
 window.renderProposePreview = () => {
     const txt = document.getElementById("propLyrics").value;
     const div = document.getElementById("propPreviewArea");
@@ -2434,6 +2451,7 @@ window.updateExportPreview = async (type, inputOrUrl, labelText) => {
         }
     }
 };
+
 
 
 
