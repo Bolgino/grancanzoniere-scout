@@ -510,7 +510,28 @@
             </div>
         </div>
     </div>
-    <div class="modal fade" id="editSectionModal"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Impostazioni Sezione</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="text" id="editSectionNameInput" class="form-control mb-3" placeholder="Nome"><label class="form-label">Copertina (File)</label><input class="form-control" type="file" id="coverFileInput" accept="image/*" onchange="window.previewCoverFile()"><div class="mt-2 text-center"><img id="coverPreviewImg" src="" style="max-height:100px;display:none;border-radius:8px"></div></div><div class="modal-footer justify-content-between"><button class="btn btn-danger" onclick="window.triggerDeleteSection()">Elimina</button><button class="btn btn-primary" onclick="window.saveSectionSettings()">Salva</button></div></div></div></div>
+    <div class="modal fade" id="editSectionModal">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Impostazioni Sezione</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="text" id="editSectionNameInput" class="form-control mb-3" placeholder="Nome">
+                    <label class="form-label">Copertina (File)</label>
+                    <input class="form-control" type="file" id="coverFileInput" accept="image/*" onchange="window.previewCoverFile()">
+                    <div class="mt-2 text-center">
+                        <img id="coverPreviewImg" src="" style="max-height:100px;display:none;border-radius:8px">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                    <button type="button" class="btn btn-primary" onclick="window.saveSectionSettings()">Salva</button>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="modal fade" id="addToSetlistModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered modal-sm">
             <div class="modal-content">
@@ -595,6 +616,7 @@
     </script>
 </body>
 </html>
+
 
 
 
