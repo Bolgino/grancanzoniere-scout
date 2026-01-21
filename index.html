@@ -265,17 +265,17 @@
                         </div>
         
                         <div class="accordion-item bg-dark border-secondary">
-                            <h2 class="accordion-header">
+                            <h2 class="accordion-header" id="headingTwo">
                                 <button class="accordion-button collapsed bg-dark text-white shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo">
-                                    <i class="bi bi-sort-down me-2 text-info"></i> Ordine e Copertine Sezioni
+                                    <i class="bi bi-collection-fill me-2 text-warning"></i> Configurazione e Copertine Sezioni
                                 </button>
                             </h2>
                             <div id="collapseTwo" class="accordion-collapse collapse" data-bs-parent="#exportAccordion">
-                                <div class="accordion-body border-top border-secondary p-2">
-                                    <p class="small text-muted mb-2 px-1">
-                                        Trascina o usa le frecce per ordinare. Carica una copertina personalizzata per la stampa.
-                                    </p>
-                                    <div id="sectionOrderListExport" class="list-group list-group-flush"></div>
+                                <div class="accordion-body">
+                                    <div class="alert alert-info py-2 small mb-2">
+                                        <i class="bi bi-info-circle me-1"></i> Deseleziona le sezioni per escluderle dalla stampa. Trascina (frecce) per ordinare.
+                                    </div>
+                                    <div id="sectionOrderListExport" class="d-grid gap-2"></div>
                                 </div>
                             </div>
                         </div>
@@ -795,23 +795,51 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" id="setlistTwoColumns" checked>
-                        <label class="form-check-label" for="setlistTwoColumns">Stampa su due colonne</label>
+                    <div class="mb-3 text-center">
+                        <label class="form-label text-muted small">Carica una copertina opzionale per questa scaletta</label>
+                        <input class="form-control form-control-sm" type="file" id="setlistCoverInputModal" accept="image/*">
                     </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" id="setlistShowChords" checked>
-                        <label class="form-check-label fw-bold" for="setlistShowChords">Includi Accordi nel PDF</label>
+                    
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="setlistTwoColumns" checked>
+                                <label class="form-check-label" for="setlistTwoColumns">Due colonne</label>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="setlistShowChords" checked>
+                                <label class="form-check-label" for="setlistShowChords">Includi Accordi</label>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="setlistShowToc">
+                                <label class="form-check-label" for="setlistShowToc">Genera Indice</label>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="setlistShowPageNumbers" checked>
+                                <label class="form-check-label" for="setlistShowPageNumbers">Numeri Pagina</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small text-muted mb-1">Dimensione Testo</label>
+                            <select class="form-select form-select-sm" id="setlistFontSize">
+                                <option value="small">Compatto (Testo 9pt)</option>
+                                <option value="normal" selected>Normale (Testo 10pt)</option>
+                                <option value="large">Grande (Testo 12pt)</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Copertina Personalizzata</label>
-                        <input type="file" id="setlistCoverInputModal" class="form-control" accept="image/*">
-                        <small class="text-muted">Lascia vuoto per usare la copertina standard.</small>
-                    </div>
+    
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-success w-100" onclick="window.confirmSetlistPDF()">
-                        <i class="bi bi-printer"></i> Genera PDF
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+                    <button type="button" class="btn btn-primary fw-bold" onclick="window.confirmSetlistPDF()">
+                        <i class="bi bi-printer-fill me-2"></i> Crea PDF
                     </button>
                 </div>
             </div>
@@ -862,6 +890,7 @@
     </script>
 </body>
 </html>
+
 
 
 
