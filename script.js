@@ -88,33 +88,62 @@ function startLoaderAnimation() {
     const textEl = document.getElementById('loaderText');
     if(!textEl) return;
     
-    // Funzione helper per ottenere un indice casuale
-    const getRandomIndex = () => Math.floor(Math.random() * loaderPhrases.length);
-    
-    // Inizializza con un indice casuale
-    let currentIndex = getRandomIndex();
+    // Assicura che la classe CSS per il cursore sia attiva
+    textEl.classList.add('typing-cursor');
 
-    const changeText = () => {
-        textEl.style.opacity = 0; 
-        setTimeout(() => {
-            // Sceglie un nuovo indice casuale diverso dal precedente
+    // Inizia da una frase casuale
+    let phraseIndex = Math.floor(Math.random() * loaderPhrases.length);
+    let charIndex = 0;
+    let isDeleting = false;
+
+    const typeEffect = () => {
+        const currentPhrase = loaderPhrases[phraseIndex];
+
+        // Gestione testo visualizzato
+        if (isDeleting) {
+            // Cancella: prende una sottostringa sempre più corta
+            textEl.innerText = currentPhrase.substring(0, charIndex - 1);
+            charIndex--;
+        } else {
+            // Scrive: prende una sottostringa sempre più lunga
+            textEl.innerText = currentPhrase.substring(0, charIndex + 1);
+            charIndex++;
+        }
+
+        // Velocità di digitazione (varia leggermente per realismo)
+        let typeSpeed = 50 + Math.random() * 40; 
+
+        if (!isDeleting && charIndex === currentPhrase.length) {
+            // FRASE COMPLETATA: Pausa lunga per leggerla
+            typeSpeed = 2000; 
+            isDeleting = true; // Al prossimo ciclo inizia a cancellare
+        } else if (isDeleting && charIndex === 0) {
+            // CANCELLAZIONE COMPLETATA: Cambia frase
+            isDeleting = false;
+            // Sceglie una nuova frase diversa dalla precedente
             let nextIndex;
             do {
-                nextIndex = getRandomIndex();
-            } while (nextIndex === currentIndex && loaderPhrases.length > 1);
+                nextIndex = Math.floor(Math.random() * loaderPhrases.length);
+            } while (nextIndex === phraseIndex && loaderPhrases.length > 1);
+            phraseIndex = nextIndex;
             
-            currentIndex = nextIndex;
-            textEl.innerText = loaderPhrases[currentIndex];
-            textEl.style.opacity = 1; 
-        }, 200); 
+            typeSpeed = 500; // Pausa breve prima di iniziare a scrivere la nuova
+        } else if (isDeleting) {
+            // Durante la cancellazione va molto più veloce
+            typeSpeed = 30; 
+        }
+
+        // Salva il riferimento al timeout per poterlo fermare quando la pagina è caricata
+        // Nota: nel codice originale usavi setInterval, qui usiamo setTimeout ricorsivo
+        // Assicurati che nella funzione loadData() che chiama clearInterval, 
+        // tu usi clearTimeout(loaderInterval) invece se usi questo approccio, 
+        // oppure assegna questo timeout alla variabile loaderInterval esistente.
+        loaderInterval = setTimeout(typeEffect, typeSpeed);
     };
 
-    // Imposta subito la prima frase casuale (dopo "Inizializzazione...")
-    textEl.innerText = loaderPhrases[currentIndex];
-    
-    loaderInterval = setInterval(changeText, 1500);
+    // Avvia l'effetto
+    typeEffect();
 }
-
 // AVVIO PERSISTENZA E DATI
 enableIndexedDbPersistence(db)
   .catch((err) => {
@@ -215,7 +244,7 @@ async function loadData() {
     } finally {
         const loader = document.getElementById("loadingOverlay");
         if(loader) loader.style.display = "none";
-        if(loaderInterval) clearInterval(loaderInterval);
+        if(loaderInterval) clearTimeout(loaderInterval);
     }
 }
 
@@ -2545,6 +2574,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
