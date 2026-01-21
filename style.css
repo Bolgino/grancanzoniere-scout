@@ -461,15 +461,23 @@ body.user-admin .cat-actions { display: block; }
 /* Di base, gli elementi guest-only sono visibili */
 .guest-only { display: block !important; }
 
-/* Se l'utente è admin, nascondi gli elementi guest-only */
-body.user-admin .guest-only { display: none !important; }
+/* Nascondi elementi "guest-only" (come Proponi Canzone) se l'utente è Admin */
+body.user-admin .guest-only { 
+    display: none !important; 
+}
 
-/* Nascondi i controlli della scaletta se non si hanno i permessi */
-.setlist-controls { display: none; }
-body.user-admin .setlist-controls, 
-body.is-owner .setlist-controls { display: flex !important; } /* Flex o block a seconda del layout */
+/* Nascondi i controlli delle scalette di default */
+.setlist-controls, .setlist-item-controls { 
+    display: none !important; 
+}
 
-/* Per i pulsanti singoli in lista */
-.setlist-item-controls { display: none; }
-body.user-admin .setlist-item-controls,
-body.is-owner .setlist-item-controls { display: inline-flex !important; }
+/* Mostrali SOLO se l'utente è il proprietario (is-owner) o è Admin */
+body.is-owner .setlist-controls, 
+body.user-admin .setlist-controls { 
+    display: flex !important; 
+}
+
+body.is-owner .setlist-item-controls, 
+body.user-admin .setlist-item-controls { 
+    display: inline-flex !important; 
+}
