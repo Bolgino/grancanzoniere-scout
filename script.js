@@ -376,104 +376,74 @@ window.handleSongSubmission = async () => {
     const d = document.getElementById("propDesc").value.trim() || document.getElementById("newSongDescription").value.trim();
     const y = document.getElementById("propYear").value || document.getElementById("newSongYear").value;
 
-    // --- 2. VALIDAZIONI BASE ---
     if(!t) return showToast("Manca il Titolo!", 'warning');
     if(!isAdmin && !p) return showToast("Il tuo nome è obbligatorio", 'warning'); 
 
-    // --- 3. CONTROLLO DUPLICATI INTELLIGENTE (INTEGRAZIONE) ---
+    // --- 2. CONTROLLO INTELLIGENTE ---
     const cleanTitle = t.trim().toLowerCase();
-    // Cerchiamo se esiste una canzone con lo stesso titolo
     const existingSong = allSongs.find(s => s.title.trim().toLowerCase() === cleanTitle);
 
+    // Se la canzone esiste già...
     if (existingSong) {
-        // Logica: La nuova ha testo (più di 10 caratteri) E la vecchia è "vuota"?
-        const newHasLyrics = l && l.trim().length > 10;
-        const oldHasLyrics = existingSong.lyrics && existingSong.lyrics.trim().length > 10;
+        const dbHasLyrics = existingSong.lyrics && existingSong.lyrics.trim().length > 10;
+        const inputHasLyrics = l && l.trim().length > 10;
 
-        // SE stiamo portando informazioni nuove (testo) su una canzone vuota...
-        if (newHasLyrics && !oldHasLyrics) {
-            
-            // CASO A: ADMIN -> Aggiorna direttamente la canzone esistente
-            if (isAdmin) {
-                if(confirm(`Attenzione: "${existingSong.title}" esiste già nel database ma è senza testo.\n\nVuoi sovrascriverla inserendo il testo e gli accordi che hai appena scritto?`)) {
-                    
-                    document.getElementById("loadingOverlay").style.display = "flex";
-                    try {
-                        // Aggiorniamo il documento esistente
-                        await updateDoc(doc(db, "songs", existingSong.id), {
-                            lyrics: l,
-                            chords: window.extractChords(l),
-                            author: a || existingSong.author, // Se non metti autore, mantieni il vecchio
-                            year: y || existingSong.year,
-                            description: d || existingSong.description,
-                            category: c // Aggiorna la categoria se necessario
-                        });
-
-                        // Aggiorna l'array locale (per vedere subito le modifiche senza ricaricare)
-                        const localS = allSongs.find(x => x.id === existingSong.id);
-                        if(localS) {
-                            localS.lyrics = l;
-                            localS.chords = window.extractChords(l);
-                            localS.author = a || localS.author;
-                            localS.year = y || localS.year;
-                            localS.category = c;
-                        }
-
-                        showToast("Canzone esistente integrata con successo!", 'success');
-                        
-                        // Chiudi modali e apri editor
-                        mAddSong.hide();
-                        window.openEditor(existingSong.id);
-                        
-                    } catch(e) {
-                        showToast("Errore aggiornamento: " + e.message, 'danger');
-                    } finally {
-                        document.getElementById("loadingOverlay").style.display = "none";
-                    }
-                    return; // STOP: Non creare una nuova canzone
-                } else {
-                    return; // Utente ha annullato l'operazione
-                }
-            } 
-            // CASO B: GUEST -> Lascia passare la proposta (Bypass del blocco duplicati)
-            // Il codice continuerà sotto e creerà una proposta nella collezione "proposals"
-            // L'admin vedrà la proposta e potrà approvarla.
-            
-        } else {
-            // Caso Classico: La canzone esiste già E ha già il testo (o noi non ne stiamo aggiungendo).
-            // Blocchiamo per evitare doppioni inutili.
-            return showToast(`Esiste già una canzone chiamata "${t}"!`, 'danger');
+        if (dbHasLyrics) {
+            // CASO 1: Esiste ed è già completa -> BLOCCO TOTALE
+            return showToast(`La canzone "${existingSong.title}" esiste già ed è completa!`, 'danger');
+        } 
+        
+        if (!inputHasLyrics) {
+            // CASO 2: Esiste (vuota o piena) e l'utente NON sta mettendo testo nuovo -> BLOCCO
+            return showToast(`"${existingSong.title}" esiste già e non stai aggiungendo il testo!`, 'warning');
         }
+
+        // CASO 3: Esiste MA è vuota, e l'utente sta mettendo il testo -> LASCIA PASSARE
+        // (Il codice prosegue sotto e crea la proposta o aggiorna se admin)
     }
 
-    // --- 4. CREAZIONE NUOVA CANZONE (O PROPOSTA) ---
-    // Se siamo arrivati qui, o la canzone non esiste, o è una proposta di integrazione (Guest)
-
+    // --- 3. PREPARAZIONE DATI ---
     const songData = { 
-        title: t, 
-        author: a, 
-        category: c, 
-        lyrics: l, 
-        description: d, 
-        year: y, 
-        chords: window.extractChords(l),
-        createdAt: Date.now()
+        title: t, author: a, category: c, lyrics: l, description: d, year: y, 
+        chords: window.extractChords(l), createdAt: Date.now()
     };
 
     document.getElementById("loadingOverlay").style.display = "flex"; 
 
     try {
-        if(isAdmin){ 
-            // Admin crea nuova canzone (se non esisteva)
-            const r = await addDoc(collection(db,"songs"), {...songData, added:true}); 
-            allSongs.push({ id: r.id, ...songData, added: true });
-            showToast("Canzone Creata!", 'success'); 
-            mAddSong.hide();
-            window.openEditor(r.id); 
+        if (isAdmin) {
+            // SE SEI ADMIN:
+            if (existingSong) {
+                // Se esiste (ed era vuota), chiedi conferma per sovrascrivere subito
+                if(confirm(`"${t}" esiste già ma è vuota. Vuoi aggiornarla con questo testo?`)) {
+                    await updateDoc(doc(db, "songs", existingSong.id), {
+                        lyrics: l, chords: window.extractChords(l),
+                        author: a || existingSong.author,
+                        year: y || existingSong.year,
+                        description: d || existingSong.description,
+                        category: c
+                    });
+                    
+                    // Aggiorna locale
+                    const loc = allSongs.find(x => x.id === existingSong.id);
+                    if(loc) { loc.lyrics = l; loc.chords = window.extractChords(l); loc.category = c; }
+                    
+                    showToast("Canzone aggiornata!", 'success');
+                    mAddSong.hide();
+                    window.openEditor(existingSong.id);
+                }
+            } else {
+                // Se non esiste, crea nuova
+                const r = await addDoc(collection(db,"songs"), {...songData, added:true}); 
+                allSongs.push({ id: r.id, ...songData, added: true });
+                showToast("Canzone Creata!", 'success'); 
+                mAddSong.hide();
+                window.openEditor(r.id); 
+            }
         } else { 
-            // Guest crea proposta (anche se titolo esisteva ma era vuoto, ora viene permessa)
+            // SE SEI GUEST: Crea sempre una proposta (anche se esiste la canzone vuota)
             await addDoc(collection(db,"proposals"), {...songData, proposer: p}); 
-            showToast("Proposta inviata con successo!", 'success'); 
+            showToast("Proposta inviata! Sarà revisionata dai capi.", 'success'); 
             mAddSong.hide();
             window.goHome();
         }
@@ -482,7 +452,7 @@ window.handleSongSubmission = async () => {
         showToast("Errore: " + e.message, 'danger');
     } finally { 
         document.getElementById("loadingOverlay").style.display = "none"; 
-        loadData(); // Ricarica per sicurezza
+        loadData(); 
     }
 };
 
@@ -2427,6 +2397,7 @@ window.updateExportPreview = async (type, inputOrUrl, labelText) => {
         }
     }
 };
+
 
 
 
