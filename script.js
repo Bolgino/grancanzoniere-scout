@@ -534,22 +534,47 @@ window.generateFullPDF = async () => {
 
         // LOGICA INTESTAZIONE SEZIONE
         if (sectionCoverImg) {
+            // CASO A: Immagine presente (Custom o Default)
             if (doc.internal.getCurrentPageInfo().pageNumber > 1) {
                 doc.addPage(); 
             }
             try {
+                // Stampa l'immagine a tutta pagina
                 doc.addImage(sectionCoverImg, 'JPEG', 0, 0, PAGE_WIDTH, PAGE_HEIGHT);
+                
+                // Pagina nuova pulita per le canzoni
                 doc.addPage();
                 currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
             } catch(e) { console.error("Errore img sezione", e); }
         } else {
-            if (currentY > MARGIN_TOP + 20) {
-                 doc.addPage();
-                 currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
-            } else if (currentCol === 2) {
-                 doc.addPage();
-                 currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
+            // CASO B: Nessuna immagine -> Genera Copertina Placeholder
+            // (Richiesta utente: "copertina con il nome in sostituzione")
+
+            // 1. Forza sempre una nuova pagina per la copertina
+            if (doc.internal.getCurrentPageInfo().pageNumber > 1) {
+                doc.addPage();
             }
+
+            // 2. Crea uno sfondo colorato (es. Blu Scuro istituzionale) per simulare la copertina
+            doc.setFillColor(0, 51, 102); 
+            doc.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, 'F'); // Rettangolo pieno a tutta pagina
+
+            // 3. Scrive il nome della sezione al centro in BIANCO
+            doc.setTextColor(255, 255, 255); 
+            doc.setFont("helvetica", "bold"); 
+            doc.setFontSize(36); // Font grande per il titolo
+            
+            // Calcoli per centrare il testo orizzontalmente e verticalmente
+            const splitTitle = doc.splitTextToSize(sec.name.toUpperCase(), PAGE_WIDTH - 40);
+            const textHeight = splitTitle.length * 15; // Stima altezza blocco testo
+            // Posiziona a metà pagina (148.5mm) meno metà altezza testo
+            doc.text(splitTitle, PAGE_WIDTH/2, (PAGE_HEIGHT/2) - (textHeight/4), {align: 'center'});
+
+            // 4. Pagina nuova pulita per iniziare le canzoni (Reset colori)
+            doc.addPage();
+            doc.setTextColor(0, 0, 0); // Reset nero per il testo successivo
+            currentCol = 1; currentX = COL_1_X; currentY = MARGIN_TOP;
+        }
 
             doc.setTextColor(0, 51, 102); 
             doc.setFont("helvetica", "bold"); 
@@ -1928,6 +1953,7 @@ window.generateExcelList = () => {
     document.body.removeChild(a);
     window.showToast("File Excel scaricato!", "success");
 };
+
 
 
 
