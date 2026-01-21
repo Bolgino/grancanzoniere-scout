@@ -104,19 +104,24 @@ input::placeholder, textarea::placeholder { color: #888 !important; }
     color: #000 !important;
 }
 /* --- AREA TESTO E ACCORDI (FONDAMENTALE: NON MODIFICARE) --- */
+/* --- AREA TESTO E ACCORDI (AGGIORNATA PER AUTOSCROLL) --- */
 .preview-area {
     background: #121212 !important; 
     color: #e0e0e0 !important;
     padding: 20px; 
     border-radius: 8px; 
-    min-height: 500px;
+    
+    /* MODIFICA QUI: Altezza fissa relativa allo schermo per permettere lo scroll interno */
+    height: 65vh; 
+    overflow-y: auto; /* Abilita la barra di scorrimento verticale */
+    
     border: 1px solid #333;
     font-size: 16px; 
     
     /* PARAMETRI CRITICI PER ALLINEAMENTO */
-    line-height: 2.8 !important; /* Spazio per l'accordo */
+    line-height: 2.8 !important; 
     white-space: pre-wrap !important; 
-    font-family: monospace !important; /* Obbligatorio per allineare */
+    font-family: monospace !important; 
     overflow-x: auto;
 }
 
@@ -531,3 +536,4 @@ body.user-admin .setlist-item-controls {
     border: 2px solid #ffc107 !important; /* Bordo giallo esterno */
     box-shadow: 0 0 20px rgba(255, 193, 7, 0.2); /* Alone giallo */
 }
+
