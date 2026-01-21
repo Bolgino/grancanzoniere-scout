@@ -1476,7 +1476,8 @@ window.toggleAutoScroll = () => {
     const setInteractingTrue = () => { isUserInteracting = true; };
     const setInteractingFalse = () => { isUserInteracting = false; };
 
-    if (autoScrollInterval) { // Usa la variabile globale definita a inizio file
+    if (autoScrollInterval) { 
+        // --- STOP SCROLL ---
         clearInterval(autoScrollInterval);
         autoScrollInterval = null;
         isUserInteracting = false;
@@ -1486,13 +1487,18 @@ window.toggleAutoScroll = () => {
             btn.innerHTML = '<i class="bi bi-mouse3"></i>';
         }
 
+        // Rimuovi listener per pulizia
         area.removeEventListener('mousedown', setInteractingTrue);
         area.removeEventListener('mouseup', setInteractingFalse);
         area.removeEventListener('touchstart', setInteractingTrue);
         area.removeEventListener('touchend', setInteractingFalse);
     } else {
-        if (area.scrollHeight <= area.clientHeight) {
-            window.showToast("Testo troppo breve", "warning");
+        // --- START SCROLL ---
+        
+        // Controllo tolleranza: se il contenuto è più alto del contenitore (+1px per sicurezza arrotondamenti)
+        // Se hai applicato il CSS nuovo, scrollHeight sarà es. 2000 e clientHeight sarà es. 600.
+        if (area.scrollHeight <= area.clientHeight + 1) {
+            window.showToast("Il testo è tutto visibile, non serve scorrere!", "warning");
             return;
         }
 
@@ -1501,19 +1507,22 @@ window.toggleAutoScroll = () => {
             btn.innerHTML = '<i class="bi bi-pause-fill"></i>';
         }
 
+        // Listener per fermare lo scroll se l'utente tocca lo schermo
         area.addEventListener('mousedown', setInteractingTrue);
         area.addEventListener('mouseup', setInteractingFalse);
         area.addEventListener('touchstart', setInteractingTrue, {passive: true});
         area.addEventListener('touchend', setInteractingFalse);
 
         autoScrollInterval = setInterval(() => {
-            if (isUserInteracting) return;
+            if (isUserInteracting) return; // Pausa se l'utente tocca
+            
+            // Logica fine pagina
             if (Math.ceil(area.scrollTop + area.clientHeight) >= area.scrollHeight - 1) {
-                window.toggleAutoScroll(); 
+                window.toggleAutoScroll(); // Ferma tutto
                 return;
             }
             area.scrollTop += 1; 
-        }, 50); 
+        }, 50); // Velocità (più basso = più veloce, ma 50 è standard leggibile)
     }
 };
 window.handleSetlistBack = () => { const detail = document.getElementById('activeSetlistDetail'); if (detail.style.display === 'block') { detail.style.display = 'none'; currentSetlistId = null; window.renderSetlistsList(); } else { window.goHome(); } };
@@ -2485,6 +2494,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
