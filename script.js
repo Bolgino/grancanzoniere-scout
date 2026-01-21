@@ -861,13 +861,57 @@ window.openSetlistDetail = (id) => {
     window.renderActiveSetlistSongs();
 };
 window.renderActiveSetlistSongs = () => {
-    const sl = allSetlists.find(s => s.id === currentSetlistId); if(!sl) return; const c = document.getElementById("setlistSongsContainer"); c.innerHTML = "";
-    if(sl.songs.length === 0) { document.getElementById('emptySetlistMsg').style.display = 'block'; return; }
+    const sl = allSetlists.find(s => s.id === currentSetlistId); 
+    if(!sl) return; 
+    const c = document.getElementById("setlistSongsContainer"); 
+    c.innerHTML = "";
+    
+    if(sl.songs.length === 0) { 
+        document.getElementById('emptySetlistMsg').style.display = 'block'; 
+        return; 
+    }
     document.getElementById('emptySetlistMsg').style.display = 'none';
+
     sl.songs.forEach((item, idx) => {
-        const sId = typeof item === 'string' ? item : item.id; const savedTrans = typeof item === 'object' ? (item.trans || 0) : 0; const song = allSongs.find(s => s.id === sId); if(!song) return; 
+        const sId = typeof item === 'string' ? item : item.id; 
+        const savedTrans = typeof item === 'object' ? (item.trans || 0) : 0; 
+        const song = allSongs.find(s => s.id === sId); 
+        if(!song) return; 
+        
         let snippetHtml = generateSnippetHtml(song.lyrics, savedTrans);
-        c.innerHTML += `<div class="list-group-item p-3" id="setlist-item-${idx}"><div class="d-flex justify-content-between align-items-start"><div class="text-truncate" style="cursor:pointer; flex-grow: 1;" onclick="document.getElementById('preview-box-${idx}').classList.toggle('d-none')"><strong class="text-primary">${idx + 1}. ${song.title}</strong><div class="small text-muted">${song.author || ''} <span class="badge bg-light text-dark border ms-2" id="badge-trans-${idx}" data-val="${savedTrans}">Tono: ${savedTrans > 0 ? '+'+savedTrans : savedTrans}</span></div></div><div class="btn-group btn-group-sm ms-2"><button class="btn btn-outline-secondary" onclick="window.moveSetlistSong(${idx}, -1)">⬆</button><button class="btn btn-outline-secondary" onclick="window.moveSetlistSong(${idx}, 1)">⬇</button><button class="btn btn-outline-danger" onclick="window.removeFromSetlist(${idx})"><i class="bi bi-trash"></i></button></div></div><div id="preview-box-${idx}" class="mt-2 p-3 bg-white rounded d-none border shadow-sm"><div id="snippet-content-${idx}" class="mb-3" style="font-family: monospace; line-height: 1.8; white-space: pre-wrap; font-size: 0.95rem;">${snippetHtml}</div><div class="d-flex align-items-center justify-content-between bg-light p-2 rounded"><div class="d-flex align-items-center gap-2"><span class="small fw-bold text-uppercase">Cambia:</span><button class="btn btn-sm btn-outline-primary fw-bold" style="width:30px" onclick="window.changeSetlistPreviewTone(${idx}, '${sId}', -1)">-</button><button class="btn btn-sm btn-outline-primary fw-bold" style="width:30px" onclick="window.changeSetlistPreviewTone(${idx}, '${sId}', 1)">+</button><button class="btn btn-sm btn-success ms-2" onclick="window.saveSetlistSongTone(${idx})"><i class="bi bi-check-lg"></i> Salva</button></div><button class="btn btn-sm btn-outline-dark" onclick="window.openEditor('${sId}')">Canzone Completa</button></div></div></div>`;
+        
+        // NOTA: Aggiunta classe 'setlist-item-controls' al div dei bottoni
+        c.innerHTML += `
+        <div class="list-group-item p-3" id="setlist-item-${idx}">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="text-truncate" style="cursor:pointer; flex-grow: 1;" onclick="document.getElementById('preview-box-${idx}').classList.toggle('d-none')">
+                    <strong class="text-primary">${idx + 1}. ${song.title}</strong>
+                    <div class="small text-muted">${song.author || ''} 
+                        <span class="badge bg-light text-dark border ms-2" id="badge-trans-${idx}" data-val="${savedTrans}">Tono: ${savedTrans > 0 ? '+'+savedTrans : savedTrans}</span>
+                    </div>
+                </div>
+                
+                <div class="btn-group btn-group-sm ms-2 setlist-item-controls">
+                    <button class="btn btn-outline-secondary" onclick="window.moveSetlistSong(${idx}, -1)">⬆</button>
+                    <button class="btn btn-outline-secondary" onclick="window.moveSetlistSong(${idx}, 1)">⬇</button>
+                    <button class="btn btn-outline-danger" onclick="window.removeFromSetlist(${idx})"><i class="bi bi-trash"></i></button>
+                </div>
+            </div>
+            
+            <div id="preview-box-${idx}" class="mt-2 p-3 bg-white rounded d-none border shadow-sm">
+                <div id="snippet-content-${idx}" class="mb-3" style="font-family: monospace; line-height: 1.8; white-space: pre-wrap; font-size: 0.95rem;">${snippetHtml}</div>
+                
+                <div class="d-flex align-items-center justify-content-between bg-light p-2 rounded">
+                    <div class="d-flex align-items-center gap-2 setlist-item-controls">
+                        <span class="small fw-bold text-uppercase">Cambia:</span>
+                        <button class="btn btn-sm btn-outline-primary fw-bold" style="width:30px" onclick="window.changeSetlistPreviewTone(${idx}, '${sId}', -1)">-</button>
+                        <button class="btn btn-sm btn-outline-primary fw-bold" style="width:30px" onclick="window.changeSetlistPreviewTone(${idx}, '${sId}', 1)">+</button>
+                        <button class="btn btn-sm btn-success ms-2" onclick="window.saveSetlistSongTone(${idx})"><i class="bi bi-check-lg"></i> Salva</button>
+                    </div>
+                    <button class="btn btn-sm btn-outline-dark ms-auto" onclick="window.openEditor('${sId}')">Canzone Completa</button>
+                </div>
+            </div>
+        </div>`;
     });
 };
 window.changeSetlistPreviewTone = (idx, songId, delta) => { const badge = document.getElementById(`badge-trans-${idx}`); const snippetDiv = document.getElementById(`snippet-content-${idx}`); let currentVal = parseInt(badge.getAttribute('data-val')); let newVal = currentVal + delta; badge.setAttribute('data-val', newVal); badge.innerText = `Tono: ${newVal > 0 ? '+' + newVal : newVal}`; badge.classList.remove('bg-light', 'text-dark'); badge.classList.add('bg-warning', 'text-dark'); const song = allSongs.find(s => s.id === songId); if (song) snippetDiv.innerHTML = generateSnippetHtml(song.lyrics, newVal); };
@@ -1391,6 +1435,7 @@ window.openExportView = () => {
         });
     }
 };
+
 
 
 
