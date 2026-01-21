@@ -1533,7 +1533,7 @@ window.moveSection = async (sectionId, direction) => {
     // 7. AGGIORNA L'INTERFACCIA UTENTE (UI) IMMEDIATAMENTE
     // Capisce in quale schermata sei e aggiorna solo quella
     if (document.getElementById('view-export').classList.contains('active')) {
-        (); // Ridisegna lista export
+        window.openExportView();
     } else {
         window.renderManageSections(); // Ridisegna lista gestione
     }
@@ -1897,6 +1897,7 @@ window.hoverSectionPreview = (secId, secName) => {
         }
     }
 };
+
 
 
 
