@@ -94,7 +94,6 @@ function startLoaderAnimation() {
 
     // Inizia sempre con "Inizializzazione..." al primo avvio per coerenza
     let phraseIndex = isFirstLoad ? -1 : Math.floor(Math.random() * loaderPhrases.length);
-    // Se index è -1, usiamo una stringa fissa, altrimenti prendiamo dall'array
     let currentPhrase = phraseIndex === -1 ? "Inizializzazione..." : loaderPhrases[phraseIndex];
     
     let charIndex = 0;
@@ -110,30 +109,28 @@ function startLoaderAnimation() {
             charIndex++;
         }
 
-        // --- CONFIGURAZIONE VELOCITÀ ---
-        let typeSpeed = 20; // BASE: Scrittura super veloce (20ms)
+        // --- CONFIGURAZIONE VELOCITÀ (MODIFICATA) ---
+        let typeSpeed = 10; // BASE: Scrittura ISTANTANEA (era 20)
 
         if (isDeleting) {
-            typeSpeed = 10; // Cancellazione istantanea
+            typeSpeed = 5; // Cancellazione fulminea
         }
 
         // Logica di pausa e cambio frase
         if (!isDeleting && charIndex === currentPhrase.length) {
             // FRASE COMPLETATA
-            typeSpeed = 2000; // Pausa di 2 secondi per leggere (bello lungo)
+            typeSpeed = 2000; 
             isDeleting = true; 
         } else if (isDeleting && charIndex === 0) {
-            // CANCELLAZIONE COMPLETATA
             isDeleting = false;
-            // Passa alla prossima frase casuale
             phraseIndex = Math.floor(Math.random() * loaderPhrases.length);
             currentPhrase = loaderPhrases[phraseIndex];
-            typeSpeed = 500; 
+            typeSpeed = 300; 
         }
 
-        // Variazione casuale minima per sembrare digitazione umana ma veloce
+        // Variazione casuale ridotta
         if (!isDeleting && charIndex !== currentPhrase.length) {
-            typeSpeed += Math.random() * 15; 
+            typeSpeed += Math.random() * 10; 
         }
 
         loaderInterval = setTimeout(typeEffect, typeSpeed);
@@ -203,15 +200,9 @@ async function loadData() {
         if(countEl) countEl.innerText = allSongs.length;
 
         allSections.sort((a, b) => {
-            // Se order non esiste, mettilo in fondo (9999)
             const orderA = (a.order !== undefined && a.order !== null) ? a.order : 9999;
             const orderB = (b.order !== undefined && b.order !== null) ? b.order : 9999;
-        
-            // Se l'ordine è diverso, usa quello
-            if (orderA !== orderB) {
-                return orderA - orderB;
-            }
-            // Altrimenti (se hanno lo stesso ordine o nessuno dei due lo ha), usa l'alfabetico
+            if (orderA !== orderB) return orderA - orderB;
             return a.name.localeCompare(b.name);
         });
         sectionOrder = allSections.map(s => s.name); 
@@ -224,7 +215,6 @@ async function loadData() {
             if(currentSetlistId) window.renderActiveSetlistSongs();
         } 
         else if (viewManage && viewManage.classList.contains('active')) {
-            // SEI IN GESTIONE SEZIONI: NON FARE NULLA (Resta qui)
             window.renderManageSections();
         } 
         else if (!currentCategory) {
@@ -238,26 +228,26 @@ async function loadData() {
         console.error("Errore caricamento:", e);
         window.showToast("Errore caricamento: " + e.message, 'danger');
     } finally {
-        // --- MODIFICA QUI PER IL RITARDO INTELLIGENTE ---
+        // --- MODIFICA QUI PER IL TEMPO DI LETTURA ---
         const loader = document.getElementById("loadingOverlay");
         
         if (loader) {
             if (isFirstLoad) {
-                // PRIMO AVVIO: 2.5 secondi (per leggere "Inizializzazione...")
+                // PRIMO AVVIO: 2.5 secondi
                 setTimeout(() => {
                     loader.style.display = "none";
                     if(loaderInterval) clearTimeout(loaderInterval);
                     isFirstLoad = false; 
                 }, 2500); 
             } else {
-                // CARICAMENTI SUCCESSIVI: 
-                // Aumentato a 850ms (0.85 secondi).
-                // Questo tempo è calcolato sulla frase più lunga ("Scaldo le corde vocali...")
-                // affinché venga scritta interamente prima che il loader sparisca.
+                // CARICAMENTI SUCCESSIVI:
+                // Aumentato a 1.5 secondi (1500ms).
+                // È il tempo minimo necessario per vedere l'animazione completa
+                // prima che la schermata sparisca.
                 setTimeout(() => {
                     loader.style.display = "none";
                     if(loaderInterval) clearTimeout(loaderInterval);
-                }, 850); 
+                }, 1500); 
             }
         }
     }
@@ -2589,6 +2579,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
