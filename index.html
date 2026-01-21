@@ -141,7 +141,7 @@
                     </button>
         
                     <button class="btn btn-link text-white-50 text-decoration-none text-start p-2 d-flex align-items-center" 
-                            onclick="document.getElementById('txtImporter').click(); document.querySelector('.btn-close').click()">
+                            onclick="new bootstrap.Modal(document.getElementById('infoImportModal')).show(); document.querySelector('.btn-close').click()">
                         <i class="bi bi-upload me-3 fs-5"></i> Importa TXT
                     </button>
                     <input type="file" id="txtImporter" style="display:none" accept=".txt" onchange="window.processTxtImport()">
@@ -952,6 +952,7 @@
     </script>
 </body>
 </html>
+
 
 
 
