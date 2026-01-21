@@ -217,27 +217,36 @@ async function loadProposals() {
 }
 
 window.renderDashboard = () => {
-    switchView('view-dashboard');
-    document.getElementById('globalSearch').value="";
-    
-    const favC=document.getElementById("favoritesContainer");
-    const favS=document.getElementById("favoritesSection");
-    const favs=allSongs.filter(s=>favorites.includes(s.id));
-    if(favs.length>0){
-        favS.style.display='block';
-        favC.innerHTML=favs.map(s=>`<button class="list-group-item list-group-item-action border-0 d-flex justify-content-between align-items-center" onclick="window.openEditor('${s.id}')"><div><i class="bi bi-star-fill text-warning me-2"></i> <strong>${s.title}</strong></div><small class="text-muted">${s.author}</small></button>`).join('');
-    } else favS.style.display='none';
+    // 1. Mostra il Loader
+    document.getElementById("loadingOverlay").style.display = "flex";
 
-    const c=document.getElementById("categoriesContainer"); c.innerHTML="";
-    if(allSections.length===0) c.innerHTML=`<div class="text-center text-muted">Nessuna sezione presente.</div>`;
-    
-    allSections.forEach(sec => {
-        const count=allSongs.filter(s=>s.category===sec.name).length;
-        const bg=sec.coverUrl ? `background-image:url('${sec.coverUrl}')` : "";
-        const ico=sec.coverUrl ? "" : `<i class="bi bi-music-note-beamed cat-icon"></i>`;
+    // 2. Piccola pausa per permettere al loader di apparire prima che il browser "disegni" la pagina
+    setTimeout(() => {
+        switchView('view-dashboard');
+        document.getElementById('globalSearch').value="";
         
-        c.innerHTML+=`<div class="col-md-4 col-sm-6"><div class="category-card shadow-sm"><div class="cat-cover" style="${bg}" onclick="window.openList('${sec.name}')">${ico}</div><div class="p-3 text-center" onclick="window.openList('${sec.name}')"><h5 class="fw-bold mb-1 text-truncate">${sec.name}</h5><small class="text-muted">${count} canzoni</small></div></div></div>`;
-    });
+        const favC=document.getElementById("favoritesContainer");
+        const favS=document.getElementById("favoritesSection");
+        const favs=allSongs.filter(s=>favorites.includes(s.id));
+        if(favs.length>0){
+            favS.style.display='block';
+            favC.innerHTML=favs.map(s=>`<button class="list-group-item list-group-item-action border-0 d-flex justify-content-between align-items-center" onclick="window.openEditor('${s.id}')"><div><i class="bi bi-star-fill text-warning me-2"></i> <strong>${s.title}</strong></div><small class="text-muted">${s.author}</small></button>`).join('');
+        } else favS.style.display='none';
+
+        const c=document.getElementById("categoriesContainer"); c.innerHTML="";
+        if(allSections.length===0) c.innerHTML=`<div class="text-center text-muted">Nessuna sezione presente.</div>`;
+        
+        allSections.forEach(sec => {
+            const count=allSongs.filter(s=>s.category===sec.name).length;
+            const bg=sec.coverUrl ? `background-image:url('${sec.coverUrl}')` : "";
+            const ico=sec.coverUrl ? "" : `<i class="bi bi-music-note-beamed cat-icon"></i>`;
+            
+            c.innerHTML+=`<div class="col-md-4 col-sm-6"><div class="category-card shadow-sm"><div class="cat-cover" style="${bg}" onclick="window.openList('${sec.name}')">${ico}</div><div class="p-3 text-center" onclick="window.openList('${sec.name}')"><h5 class="fw-bold mb-1 text-truncate">${sec.name}</h5><small class="text-muted">${count} canzoni</small></div></div></div>`;
+        });
+
+        // 3. Nascondi il Loader
+        document.getElementById("loadingOverlay").style.display = "none";
+    }, 300); // Ritardo di 300ms per fluidità
 };
 
 window.performGlobalSearch = () => {
@@ -284,9 +293,18 @@ window.performGlobalSearch = () => {
     }).join('') : `<div class="text-center mt-4">Nessun risultato.</div>`;
 };
 window.openList = (cat) => {
-    currentSetlistId = null;
-    currentCategory=cat; switchView('view-list'); document.getElementById("listTitle").innerText=cat; document.getElementById("sectionSearchBox").value=""; 
-    window.renderList(allSongs.filter(s=>s.category===cat)); 
+    document.getElementById("loadingOverlay").style.display = "flex";
+    
+    setTimeout(() => {
+        currentSetlistId = null;
+        currentCategory=cat; 
+        switchView('view-list'); 
+        document.getElementById("listTitle").innerText=cat; 
+        document.getElementById("sectionSearchBox").value=""; 
+        window.renderList(allSongs.filter(s=>s.category===cat)); 
+        
+        document.getElementById("loadingOverlay").style.display = "none";
+    }, 300);
 };
 
 window.filterSectionList = () => {
@@ -329,30 +347,35 @@ window.renderList = (songs) => {
     });
 };
 window.openEditor = (id) => {
-    currentSongId=id; 
-    const s=allSongs.find(x=>x.id===id);
-    switchView('view-editor');
-    document.getElementById("editorTitle").innerText=s.title;
-    document.getElementById("editorAuthor").innerText=s.author;
-    
-    let metaText = [];
-    if(s.description) metaText.push(s.description);
-    if(s.year) metaText.push(`(${s.year})`);
-    document.getElementById("editorMeta").innerText = metaText.join(" - ");
+    document.getElementById("loadingOverlay").style.display = "flex";
 
-    const editor = document.getElementById("lyricsEditor");
-    editor.value = s.lyrics || "";
-    hasUnsavedChanges = false; 
-    editor.oninput = () => { hasUnsavedChanges = true; window.renderPreview(); };
+    setTimeout(() => {
+        currentSongId=id; 
+        const s=allSongs.find(x=>x.id===id);
+        switchView('view-editor');
+        document.getElementById("editorTitle").innerText=s.title;
+        document.getElementById("editorAuthor").innerText=s.author;
+        
+        let metaText = [];
+        if(s.description) metaText.push(s.description);
+        if(s.year) metaText.push(`(${s.year})`);
+        document.getElementById("editorMeta").innerText = metaText.join(" - ");
 
-    // MODIFICA: Carica la tonalità salvata o metti 0 se non esiste
-    currentTranspose = s.savedTranspose || 0; 
-    const sign = currentTranspose > 0 ? "+" : "";
-    document.getElementById("toneDisplay").innerText = currentTranspose === 0 ? "0" : sign + currentTranspose;
+        const editor = document.getElementById("lyricsEditor");
+        editor.value = s.lyrics || "";
+        hasUnsavedChanges = false; 
+        editor.oninput = () => { hasUnsavedChanges = true; window.renderPreview(); };
 
-    updateFavIcon(); 
-    window.renderPreview(); // Renderizzerà con la tonalità caricata
-    if (autoScrollInterval) window.toggleAutoScroll();
+        currentTranspose = s.savedTranspose || 0; 
+        const sign = currentTranspose > 0 ? "+" : "";
+        document.getElementById("toneDisplay").innerText = currentTranspose === 0 ? "0" : sign + currentTranspose;
+
+        updateFavIcon(); 
+        window.renderPreview();
+        if (autoScrollInterval) window.toggleAutoScroll();
+
+        document.getElementById("loadingOverlay").style.display = "none";
+    }, 300);
 };
 
 window.renderPreview = () => {
@@ -1009,34 +1032,38 @@ window.saveSongMetadata = async () => {
     } catch (e) { showToast("Errore salvataggio: " + e.message, "danger"); } finally { document.getElementById("loadingOverlay").style.display = "none"; }
 };
 window.openProposalsView = () => {
-    window.switchView('view-proposals');
-    const c = document.getElementById("proposalsContainer");
-    c.innerHTML = "";
-    if (allProposals.length === 0) c.innerHTML = "<div class='text-center mt-5 text-muted'>Nessuna proposta in attesa.</div>";
+    document.getElementById("loadingOverlay").style.display = "flex";
     
-    allProposals.forEach(p => {
-        // NOTA: Ho cambiato l'onclick del tasto verde da window.acceptProposal a window.openProposalEditor
-        c.innerHTML += `
-        <div class="card mb-3 shadow-sm border-secondary" style="background: #222;">
-            <div class="card-body d-flex justify-content-between align-items-center">
-                <div class="overflow-hidden">
-                    <h5 class="fw-bold mb-1 text-white">${p.title}</h5>
-                    <small class="text-muted d-block text-truncate">
-                        ${p.author || 'Sconosciuto'} &bull; ${p.category}
-                    </small>
-                    <small class="text-secondary fst-italic">Proposto da: ${p.proposer || 'Anonimo'}</small>
+    setTimeout(() => {
+        window.switchView('view-proposals');
+        const c = document.getElementById("proposalsContainer");
+        c.innerHTML = "";
+        if (allProposals.length === 0) c.innerHTML = "<div class='text-center mt-5 text-muted'>Nessuna proposta in attesa.</div>";
+        
+        allProposals.forEach(p => {
+            c.innerHTML += `
+            <div class="card mb-3 shadow-sm border-secondary" style="background: #222;">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div class="overflow-hidden">
+                        <h5 class="fw-bold mb-1 text-white">${p.title}</h5>
+                        <small class="text-muted d-block text-truncate">
+                            ${p.author || 'Sconosciuto'} &bull; ${p.category}
+                        </small>
+                        <small class="text-secondary fst-italic">Proposto da: ${p.proposer || 'Anonimo'}</small>
+                    </div>
+                    <div class="d-flex gap-2 flex-shrink-0">
+                        <button class="btn btn-warning btn-sm fw-bold" onclick="window.openProposalEditor('${p.id}')" title="Revisiona">
+                            <i class="bi bi-pencil-square"></i> Revisiona
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" onclick="window.rejectProposal('${p.id}')" title="Rifiuta">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
                 </div>
-                <div class="d-flex gap-2 flex-shrink-0">
-                    <button class="btn btn-warning btn-sm fw-bold" onclick="window.openProposalEditor('${p.id}')" title="Revisiona">
-                        <i class="bi bi-pencil-square"></i> Revisiona
-                    </button>
-                    <button class="btn btn-outline-danger btn-sm" onclick="window.rejectProposal('${p.id}')" title="Rifiuta">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            </div>
-        </div>`;
-    });
+            </div>`;
+        });
+        document.getElementById("loadingOverlay").style.display = "none";
+    }, 300);
 };
 window.acceptProposal=(id)=>window.confirmModal("Approvare?",async()=>{const p=allProposals.find(x=>x.id===id);await addDoc(collection(db,"songs"),{title:p.title,author:p.author,category:p.category,lyrics:p.lyrics,chords:window.extractChords(p.lyrics)});await deleteDoc(doc(db,"proposals",id));showToast("Approvata!",'success');await loadProposals();loadData();window.openProposalsView();});
 window.rejectProposal=(id)=>window.confirmModal("Rifiutare?",async()=>{await deleteDoc(doc(db,"proposals",id));await loadProposals();window.openProposalsView();});
@@ -1080,7 +1107,16 @@ window.processTxtImport = () => {
 };
 const normalizeStr = (str) => str ? str.trim().toLowerCase() : "";
 function checkTitleDuplicate(title, excludeId = null) { const cleanTitle = normalizeStr(title); return allSongs.some(s => { if (excludeId && s.id === excludeId) return false; return normalizeStr(s.title) === cleanTitle; }); }
-window.openSetlistsView = () => { switchView('view-setlists'); window.renderSetlistsList(); document.getElementById('activeSetlistDetail').style.display = 'none'; currentSetlistId = null; };
+window.openSetlistsView = () => { 
+    document.getElementById("loadingOverlay").style.display = "flex";
+    setTimeout(() => {
+        switchView('view-setlists'); 
+        window.renderSetlistsList(); 
+        document.getElementById('activeSetlistDetail').style.display = 'none'; 
+        currentSetlistId = null; 
+        document.getElementById("loadingOverlay").style.display = "none";
+    }, 300);
+};
 window.renderSetlistsList = () => {
     const c = document.getElementById("setlistsContainer"); c.innerHTML = "";
     if (allSetlists.length === 0) { c.innerHTML = `<div class="text-center text-muted p-3">Nessuna scaletta pubblica presente. Creane una!</div>`; return; }
@@ -1115,30 +1151,28 @@ window.confirmCreateSetlist = async () => {
         document.getElementById("loadingOverlay").style.display = "none"; 
     }
 };
-
-
 window.openSetlistDetail = (id) => {
-    currentSetlistId = id;
-    const sl = allSetlists.find(s => s.id === id);
-    if (!sl) return;
+    document.getElementById("loadingOverlay").style.display = "flex";
+    
+    setTimeout(() => {
+        currentSetlistId = id;
+        const sl = allSetlists.find(s => s.id === id);
+        if (!sl) { document.getElementById("loadingOverlay").style.display = "none"; return; }
 
-    // --- CONTROLLO: CHI SEI? ---
-    const mySetlists = JSON.parse(localStorage.getItem('mySetlists')) || [];
-    const isOwner = mySetlists.includes(id);
-    
-    // Aggiungi classe al body: il CSS farà mostrare/nascondere i tasti
-    if (isOwner) {
-        document.body.classList.add('is-owner');
-    } else {
-        document.body.classList.remove('is-owner');
-    }
-    
-    switchView('view-setlists'); 
-    document.getElementById('setlistsContainer').innerHTML = "";
-    document.getElementById('activeSetlistDetail').style.display = 'block';
-    document.getElementById('activeSetlistTitle').innerText = sl.name;
-    
-    window.renderActiveSetlistSongs();
+        const mySetlists = JSON.parse(localStorage.getItem('mySetlists')) || [];
+        const isOwner = mySetlists.includes(id);
+        
+        if (isOwner) { document.body.classList.add('is-owner'); } 
+        else { document.body.classList.remove('is-owner'); }
+        
+        switchView('view-setlists'); 
+        document.getElementById('setlistsContainer').innerHTML = "";
+        document.getElementById('activeSetlistDetail').style.display = 'block';
+        document.getElementById('activeSetlistTitle').innerText = sl.name;
+        
+        window.renderActiveSetlistSongs();
+        document.getElementById("loadingOverlay").style.display = "none";
+    }, 300);
 };
 window.renderActiveSetlistSongs = () => {
     const sl = allSetlists.find(s => s.id === currentSetlistId); 
@@ -1851,23 +1885,26 @@ window.createNewSection = async () => {
     }
 };
 window.openExportView = () => {
-    switchView('view-export');
-    
-    // Reset variabili temporanee
-    exportSectionCovers = {}; 
-    document.getElementById("globalCoverInput").value = "";
-    document.getElementById("exportPreviewImg").style.display = "none";
-    document.getElementById("exportPreviewPlaceholder").style.display = "block";
+    document.getElementById("loadingOverlay").style.display = "flex";
 
-    // Copia locale ordine sezioni + AGGIUNTA PROPRIETÀ included
-    exportSectionOrder = [...allSections].map(s => ({...s, included: true})).sort((a, b) => {
-        const orderA = (a.order !== undefined && a.order !== null) ? a.order : 9999;
-        const orderB = (b.order !== undefined && b.order !== null) ? b.order : 9999;
-        if (orderA !== orderB) return orderA - orderB;
-        return a.name.localeCompare(b.name);
-    });
+    setTimeout(() => {
+        switchView('view-export');
+        
+        exportSectionCovers = {}; 
+        document.getElementById("globalCoverInput").value = "";
+        document.getElementById("exportPreviewImg").style.display = "none";
+        document.getElementById("exportPreviewPlaceholder").style.display = "block";
 
-    window.renderExportList();
+        exportSectionOrder = [...allSections].map(s => ({...s, included: true})).sort((a, b) => {
+            const orderA = (a.order !== undefined && a.order !== null) ? a.order : 9999;
+            const orderB = (b.order !== undefined && b.order !== null) ? b.order : 9999;
+            if (orderA !== orderB) return orderA - orderB;
+            return a.name.localeCompare(b.name);
+        });
+
+        window.renderExportList();
+        document.getElementById("loadingOverlay").style.display = "none";
+    }, 300);
 };
 window.createNewSetlistPrompt = () => {
     // Pulisce l'input
@@ -2487,6 +2524,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
