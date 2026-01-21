@@ -583,6 +583,11 @@ window.generateFullPDF = async () => {
         // --- LOOP CANZONI ---
         // (Nota: questo ciclo deve essere DENTRO il ciclo delle sezioni)
         for (const s of songs) {
+            
+            // *** RIGA AGGIUNTA QUI SOTTO ***
+            const songTrans = s.savedTranspose || 0; 
+            // *******************************
+
             if (includeToc) {
                 tocData.push({ type: 'song', text: s.title, subtext: s.author, page: doc.internal.getCurrentPageInfo().pageNumber });
             }
@@ -2350,6 +2355,7 @@ window.updateExportPreview = async (type, inputOrUrl, labelText) => {
         }
     }
 };
+
 
 
 
