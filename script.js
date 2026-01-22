@@ -218,7 +218,7 @@ async function loadData() {
             // isFirstLoad ? 3500 : 1200 
             // Abbiamo impostato 3500ms (3.5 secondi) per il primo avvio 
             // per assicurarci che l'utente veda l'animazione come richiesto.
-            let displayDuration = isFirstLoad ? 3500 : 1200; 
+            let displayDuration = isFirstLoad ? 3500000 : 1200; 
 
             setTimeout(() => {
                 loader.style.display = "none";
@@ -2564,6 +2564,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
