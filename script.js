@@ -90,61 +90,51 @@ function startLoaderAnimation() {
     const textEl = document.getElementById('loaderText');
     if(!textEl) return;
     
-    // Il cursore | lampeggiante c'è sempre (tramite CSS)
     textEl.classList.add('typing-cursor');
 
-    // Ferma eventuali animazioni vecchie
     if(loaderInterval) clearTimeout(loaderInterval);
 
     if (isFirstLoad) {
-        // --- PRIMO AVVIO: SEQUENZA COMPLETA (Scrive -> Cancella -> Scrive) ---
-        
+        // --- SEQUENZA SOLO PER IL PRIMO ACCESSO ---
         const phrase1 = "Inizializzazione...";
         const phrase2 = loaderPhrases[Math.floor(Math.random() * loaderPhrases.length)];
         
-        let step = 1; // 1: scrive Init, 2: cancella, 3: scrive Frase
+        let step = 1; // 1: scrive Init, 2: cancella, 3: scrive Frase finale
         let charIndex = 0;
         
         const typeEffect = () => {
-            let speed = 30; // Velocità scrittura base
+            let speed = 50; // Velocità di scrittura
 
             if (step === 1) {
-                // Scrive "Inizializzazione..."
                 textEl.innerText = phrase1.substring(0, charIndex + 1);
                 charIndex++;
                 if (charIndex === phrase1.length) {
                     step = 2; 
-                    speed = 1000; // Pausa lunga dopo aver scritto Inizializzazione
+                    speed = 1200; // Resta su "Inizializzazione..." per un po'
                 }
             } 
             else if (step === 2) {
-                // Cancella "Inizializzazione..."
                 textEl.innerText = phrase1.substring(0, charIndex - 1);
                 charIndex--;
-                speed = 15; // Cancella veloce
+                speed = 20; // Cancella molto velocemente
                 if (charIndex === 0) {
                     step = 3;
-                    speed = 300; // Pausa prima della nuova frase
+                    speed = 400; // Pausa prima di scrivere la frase scout
                 }
             } 
             else if (step === 3) {
-                // Scrive la frase casuale
                 textEl.innerText = phrase2.substring(0, charIndex + 1);
                 charIndex++;
                 if (charIndex === phrase2.length) {
-                    return; // FINE: Resta scritta fissa col cursore
+                    return; // Fine: la frase resta scritta
                 }
             }
-
             loaderInterval = setTimeout(typeEffect, speed);
         };
-
         typeEffect();
 
     } else {
         // --- CARICAMENTI SUCCESSIVI: TESTO FISSO IMMEDIATO ---
-        // Prende una frase a caso e la stampa subito. Nessuna animazione di scrittura.
-        // Il cursore | lampeggia comunque grazie al CSS, ma il testo è subito leggibile.
         const r = Math.floor(Math.random() * loaderPhrases.length);
         textEl.innerText = loaderPhrases[r];
     }
@@ -235,25 +225,22 @@ async function loadData() {
             window.openList(currentCategory); 
         }
 
-    } finally {
+     } finally {
         const loader = document.getElementById("loadingOverlay");
         
         if (loader) {
             if (isFirstLoad) {
-                // PRIMO AVVIO: Aumentato a 4200ms (4.2 secondi)
-                // Questo tempo permette di:
-                // 1. Scrivere "Inizializzazione..."
-                // 2. Cancellarlo
-                // 3. Scrivere la nuova frase
-                // 4. Leggerla con calma
+                // Aspettiamo 5.5 secondi per permettere all'animazione completa di finire
                 setTimeout(() => {
-                    loader.style.display = "none";
-                    if(loaderInterval) clearTimeout(loaderInterval);
-                    isFirstLoad = false; 
-                }, 4200); // <--- MODIFICA QUESTO NUMERO
+                    loader.style.opacity = "0"; // Sfumatura fluida
+                    setTimeout(() => {
+                        loader.style.display = "none";
+                        if(loaderInterval) clearTimeout(loaderInterval);
+                        isFirstLoad = false; // Da qui in poi i caricamenti saranno istantanei
+                    }, 500);
+                }, 5500); 
             } else {
-                // CARICAMENTI SUCCESSIVI: 0.5 secondi
-                // Rapido, frase già fissa
+                // Caricamenti successivi: solo mezzo secondo di attesa
                 setTimeout(() => {
                     loader.style.display = "none";
                     if(loaderInterval) clearTimeout(loaderInterval);
@@ -2589,6 +2576,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
