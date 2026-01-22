@@ -89,13 +89,13 @@ function startLoaderAnimation() {
     const textEl = document.getElementById('loaderText');
     if(!textEl) return;
     
-    // Pulizia: ferma eventuali cicli precedenti
+    // Reset totale
     if(loaderInterval) clearTimeout(loaderInterval);
     textEl.innerText = ""; 
-    textEl.classList.add('typing-cursor'); // Assicura che la barretta lampeggi
+    textEl.classList.add('typing-cursor'); 
 
     if (isFirstLoad) {
-        // --- LOGICA PRIMO AVVIO: Scrive "Inizializzazione..." ---
+        // --- PRIMO AVVIO: Scrittura lenta (3 secondi totali) ---
         let phrase = "Inizializzazione...";
         let charIndex = 0;
 
@@ -103,15 +103,17 @@ function startLoaderAnimation() {
             if (charIndex < phrase.length) {
                 textEl.innerText += phrase[charIndex];
                 charIndex++;
-                loaderInterval = setTimeout(typeEffect, 100); // Velocità scrittura
+                // 166ms * 18 caratteri = ~3000ms (3 secondi)
+                loaderInterval = setTimeout(typeEffect, 166); 
             }
         };
         typeEffect();
     } else {
-        // --- LOGICA SUCCESSIVA: Scritta fissa casuale ---
+        // --- CARICAMENTI SUCCESSIVI: Frasi random immediate ---
         const randomPhrase = loaderPhrases[Math.floor(Math.random() * loaderPhrases.length)];
         textEl.innerText = randomPhrase;
-        // Non impostiamo loaderInterval perché la scritta è fissa
+        // Rimuoviamo il cursore se non vogliamo l'effetto digitazione qui
+        // textEl.classList.remove('typing-cursor'); 
     }
 }
 // AVVIO PERSISTENZA E DATI
@@ -214,20 +216,19 @@ async function loadData() {
     } finally {
         const loader = document.getElementById("loadingOverlay");
         if(loader) {
-            // IMPOSTAZIONE DURATA:
-            // isFirstLoad ? 3500 : 1200 
-            // Abbiamo impostato 3500ms (3.5 secondi) per il primo avvio 
-            // per assicurarci che l'utente veda l'animazione come richiesto.
-            let displayDuration = isFirstLoad ? 3500000 : 1200; 
+            // DURATA TOTALE: 
+            // Primo avvio = 4000ms (4 secondi)
+            // Caricamenti successivi = 1200ms (veloce)
+            let displayDuration = isFirstLoad ? 4000 : 1200; 
 
             setTimeout(() => {
                 loader.style.display = "none";
                 if(loaderInterval) clearTimeout(loaderInterval);
-                isFirstLoad = false; 
+                isFirstLoad = false; // Da qui in poi userà le frasi random
             }, displayDuration);
         }
     }
-}
+}    
 
 async function loadProposals() {
     if(!isAdmin) return;
@@ -2564,6 +2565,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
