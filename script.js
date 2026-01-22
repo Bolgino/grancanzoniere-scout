@@ -219,9 +219,6 @@ async function loadData() {
         } finally {
             const loader = document.getElementById("loadingOverlay");
             if(loader) {
-                // DURATA TOTALE: 
-                // isFirstLoad ? 3000 (3 secondi esatti) 
-                // : 1500 (1.5 secondi per leggere la frase random tipo "Accordo la chitarra")
                 let displayDuration = isFirstLoad ? 3000 : 1500; 
     
                 setTimeout(() => {
@@ -248,8 +245,6 @@ window.renderDashboard = () => {
     // 1. Mostra il Loader e GENERA LA FRASE RANDOM
     document.getElementById("loadingOverlay").style.display = "flex";
     startLoaderAnimation(); // <--- FONDAMENTALE: Cambia il testo in una frase random
-
-    // 2. Imposta durata 1.5 secondi (1500ms) per leggere la frase
     setTimeout(() => {
         switchView('view-dashboard');
         document.getElementById('globalSearch').value="";
@@ -275,7 +270,7 @@ window.renderDashboard = () => {
 
         // 3. Nascondi il Loader
         document.getElementById("loadingOverlay").style.display = "none";
-    }, 1500); // Durata aumentata a 1.5 secondi
+    }, 1000); // Durata aumentata a 1.5 secondi
 };
 window.performGlobalSearch = () => {
     const q = document.getElementById('globalSearch').value.toLowerCase();
@@ -344,7 +339,7 @@ window.openList = (cat) => {
         window.renderList(sectionSongs); 
         
         document.getElementById("loadingOverlay").style.display = "none";
-    }, 1500); // Durata aumentata a 1.5 secondi
+    }, 1000); // Durata aumentata a 1.5 secondi
 };
 
 window.filterSectionList = () => {
@@ -1216,7 +1211,7 @@ window.openSetlistDetail = (id) => {
         
         window.renderActiveSetlistSongs();
         document.getElementById("loadingOverlay").style.display = "none";
-    }, 1500); // Durata aumentata a 1.5 secondi
+    }, 1000); // Durata aumentata a 1.5 secondi
 };
 window.renderActiveSetlistSongs = () => {
     const sl = allSetlists.find(s => s.id === currentSetlistId); 
@@ -2574,6 +2569,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
