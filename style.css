@@ -554,12 +554,6 @@ body.user-admin .setlist-item-controls {
     box-shadow: 0 0 20px rgba(255, 193, 7, 0.2); /* Alone giallo */
 }
 
-/* --- AGGIUNGI AL TUO style.css --- */
-#loadingOverlay {
-    /* ... mantieni le regole esistenti ... */
-    transition: opacity 0.5s ease; /* Permette la sfumatura programmata in script.js */
-}
-
 
 
 
