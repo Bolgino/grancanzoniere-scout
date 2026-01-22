@@ -103,8 +103,7 @@ function startLoaderAnimation() {
             if (charIndex < phrase.length) {
                 textEl.innerText += phrase[charIndex];
                 charIndex++;
-                // 166ms * 18 caratteri = ~3000ms (3 secondi)
-                loaderInterval = setTimeout(typeEffect, 166); 
+                loaderInterval = setTimeout(typeEffect, 2000); 
             }
         };
         typeEffect();
@@ -2565,6 +2564,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
