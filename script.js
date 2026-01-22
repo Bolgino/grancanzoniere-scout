@@ -227,7 +227,7 @@ async function loadData() {
         } finally {
             const loader = document.getElementById("loadingOverlay");
             if(loader) {
-                let displayDuration = isFirstLoad ? 3000 : 1000; 
+                let displayDuration = isFirstLoad ? 2000 : 1000; 
     
                 setTimeout(() => {
                     loader.style.display = "none";
@@ -2594,6 +2594,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
