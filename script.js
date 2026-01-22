@@ -212,20 +212,22 @@ async function loadData() {
         console.error("Errore caricamento:", e);
         window.showToast("Errore caricamento: " + e.message, 'danger');
     } finally {
-            const loader = document.getElementById("loadingOverlay");
-            if(loader) {
-                // Decidi la durata in base al tipo di caricamento
-                // 4000ms = 4 secondi per il primo avvio, 1200ms per i successivi
-                let displayDuration = isFirstLoad ? 4000 : 1200; 
-    
-                setTimeout(() => {
-                    loader.style.display = "none";
-                    if(loaderInterval) clearTimeout(loaderInterval);
-                    isFirstLoad = false; // Da questo momento in poi i caricamenti saranno "veloci"
-                }, displayDuration);
-            }
+        const loader = document.getElementById("loadingOverlay");
+        if(loader) {
+            // IMPOSTAZIONE DURATA:
+            // isFirstLoad ? 3500 : 1200 
+            // Abbiamo impostato 3500ms (3.5 secondi) per il primo avvio 
+            // per assicurarci che l'utente veda l'animazione come richiesto.
+            let displayDuration = isFirstLoad ? 3500 : 1200; 
+
+            setTimeout(() => {
+                loader.style.display = "none";
+                if(loaderInterval) clearTimeout(loaderInterval);
+                isFirstLoad = false; 
+            }, displayDuration);
         }
     }
+}
 
 async function loadProposals() {
     if(!isAdmin) return;
@@ -319,11 +321,20 @@ window.openList = (cat) => {
     
     setTimeout(() => {
         currentSetlistId = null;
-        currentCategory=cat; 
+        currentCategory = cat; 
         switchView('view-list'); 
-        document.getElementById("listTitle").innerText=cat; 
-        document.getElementById("sectionSearchBox").value=""; 
-        window.renderList(allSongs.filter(s=>s.category===cat)); 
+        
+        // Recuperiamo le canzoni della sezione per contarle
+        const sectionSongs = allSongs.filter(s => s.category === cat);
+        
+        // Aggiorna il titolo aggiungendo un badge con il numero di canzoni
+        document.getElementById("listTitle").innerHTML = `
+            ${cat} <span class="badge bg-primary rounded-pill ms-2" style="font-size: 0.5em; vertical-align: middle; opacity: 0.8;">
+                ${sectionSongs.length}
+            </span>`; 
+            
+        document.getElementById("sectionSearchBox").value = ""; 
+        window.renderList(sectionSongs); 
         
         document.getElementById("loadingOverlay").style.display = "none";
     }, 300);
@@ -2553,6 +2564,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
