@@ -258,7 +258,7 @@ window.renderDashboard = () => {
 
     // Se è il primo avvio, renderizziamo subito (tempo 0) sotto lo schermo nero.
     // Se sono click successivi, aspettiamo 1.5 secondi per leggere la frase.
-    const waitTime = isFirstLoad ? 0 : 1500;
+    const waitTime = isFirstLoad ? 0 : 1000;
 
     setTimeout(() => {
         switchView('view-dashboard');
@@ -339,7 +339,7 @@ window.openList = (cat) => {
         startLoaderAnimation();
     }
     
-    const waitTime = isFirstLoad ? 0 : 1500;
+    const waitTime = isFirstLoad ? 0 : 1000;
 
     setTimeout(() => {
         currentSetlistId = null;
@@ -1212,7 +1212,7 @@ window.openSetlistDetail = (id) => {
         startLoaderAnimation();
     }
     
-    const waitTime = isFirstLoad ? 0 : 1500;
+    const waitTime = isFirstLoad ? 0 : 1000;
 
     setTimeout(() => {
         currentSetlistId = id;
@@ -2594,6 +2594,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
