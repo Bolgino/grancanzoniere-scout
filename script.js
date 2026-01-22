@@ -105,7 +105,7 @@ function startLoaderAnimation() {
                 charIndex++;
                 // 120ms * 19 caratteri = ~2.3 secondi di scrittura
                 // Lascia circa 0.7 secondi di testo fisso prima della chiusura (Totale 3s)
-                loaderInterval = setTimeout(typeEffect, 25); 
+                loaderInterval = setTimeout(typeEffect, 100); 
             }
         };
         typeEffect();
@@ -2569,6 +2569,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
