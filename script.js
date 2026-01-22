@@ -85,17 +85,25 @@ window.addEventListener('load', () => {
     if(createSetlistEl) mCreateSetlist = new bootstrap.Modal(createSetlistEl);
 });
 
+// Variabile per evitare che l'inizializzazione riparta se richiamata più volte
+let hasInitAnimStarted = false;
+
 function startLoaderAnimation() {
     const textEl = document.getElementById('loaderText');
     if(!textEl) return;
     
-    // Reset totale
-    if(loaderInterval) clearTimeout(loaderInterval);
-    textEl.innerText = ""; 
-    textEl.classList.add('typing-cursor'); 
-
     if (isFirstLoad) {
-        // --- PRIMO AVVIO: Scrittura "Inizializzazione..." ---
+        // --- PRIMO AVVIO ---
+        // SE l'animazione è già partita, FERMATI QUI. Non resettare il testo.
+        if (hasInitAnimStarted) return;
+        
+        hasInitAnimStarted = true; // Segna che è partita
+        
+        // Reset e avvio scrittura
+        if(loaderInterval) clearTimeout(loaderInterval);
+        textEl.innerText = ""; 
+        textEl.classList.add('typing-cursor'); 
+
         let phrase = "Inizializzazione...";
         let charIndex = 0;
 
@@ -103,19 +111,19 @@ function startLoaderAnimation() {
             if (charIndex < phrase.length) {
                 textEl.innerText += phrase[charIndex];
                 charIndex++;
-                // 120ms * 19 caratteri = ~2.3 secondi di scrittura
-                // Lascia circa 0.7 secondi di testo fisso prima della chiusura (Totale 3s)
-                loaderInterval = setTimeout(typeEffect, 100); 
+                // Velocità scrittura (circa 2.3s totali + pausa finale)
+                loaderInterval = setTimeout(typeEffect, 120); 
             }
         };
         typeEffect();
+
     } else {
-        // --- CARICAMENTI SUCCESSIVI: Frasi Random ---
-        // Prende una frase a caso dall'array loaderPhrases definito all'inizio
+        // --- CARICAMENTI SUCCESSIVI ---
+        // Qui resettiamo sempre per mostrare una nuova frase random
+        if(loaderInterval) clearTimeout(loaderInterval);
+        
         const randomPhrase = loaderPhrases[Math.floor(Math.random() * loaderPhrases.length)];
         textEl.innerText = randomPhrase;
-        
-        // Rimuoviamo il cursore lampeggiante per le frasi random (più pulito)
         textEl.classList.remove('typing-cursor'); 
     }
 }
@@ -219,7 +227,7 @@ async function loadData() {
         } finally {
             const loader = document.getElementById("loadingOverlay");
             if(loader) {
-                let displayDuration = isFirstLoad ? 3000 : 1500; 
+                let displayDuration = isFirstLoad ? 3000 : 1000; 
     
                 setTimeout(() => {
                     loader.style.display = "none";
@@ -242,9 +250,16 @@ async function loadProposals() {
 }
 
 window.renderDashboard = () => {
-    // 1. Mostra il Loader e GENERA LA FRASE RANDOM
-    document.getElementById("loadingOverlay").style.display = "flex";
-    startLoaderAnimation(); // <--- FONDAMENTALE: Cambia il testo in una frase random
+    // SE NON È IL PRIMO AVVIO: Mostra overlay e frase random
+    if (!isFirstLoad) {
+        document.getElementById("loadingOverlay").style.display = "flex";
+        startLoaderAnimation(); 
+    }
+
+    // Se è il primo avvio, renderizziamo subito (tempo 0) sotto lo schermo nero.
+    // Se sono click successivi, aspettiamo 1.5 secondi per leggere la frase.
+    const waitTime = isFirstLoad ? 0 : 1500;
+
     setTimeout(() => {
         switchView('view-dashboard');
         document.getElementById('globalSearch').value="";
@@ -268,9 +283,12 @@ window.renderDashboard = () => {
             c.innerHTML+=`<div class="col-md-4 col-sm-6"><div class="category-card shadow-sm"><div class="cat-cover" style="${bg}" onclick="window.openList('${sec.name}')">${ico}</div><div class="p-3 text-center" onclick="window.openList('${sec.name}')"><h5 class="fw-bold mb-1 text-truncate">${sec.name}</h5><small class="text-muted">${count} canzoni</small></div></div></div>`;
         });
 
-        // 3. Nascondi il Loader
-        document.getElementById("loadingOverlay").style.display = "none";
-    }, 1000); // Durata aumentata a 1.5 secondi
+        // NASCONDI OVERLAY SOLO SE NON E' IL PRIMO AVVIO
+        // (Al primo avvio ci pensa la funzione loadData dopo 3 secondi)
+        if (!isFirstLoad) {
+            document.getElementById("loadingOverlay").style.display = "none";
+        }
+    }, waitTime);
 };
 window.performGlobalSearch = () => {
     const q = document.getElementById('globalSearch').value.toLowerCase();
@@ -316,20 +334,20 @@ window.performGlobalSearch = () => {
     }).join('') : `<div class="text-center mt-4">Nessun risultato.</div>`;
 };
 window.openList = (cat) => {
-    // 1. Mostra Loader e frase random
-    document.getElementById("loadingOverlay").style.display = "flex";
-    startLoaderAnimation(); // <--- Genera nuova frase
+    if (!isFirstLoad) {
+        document.getElementById("loadingOverlay").style.display = "flex";
+        startLoaderAnimation();
+    }
+    
+    const waitTime = isFirstLoad ? 0 : 1500;
 
-    // 2. Durata 1.5 secondi
     setTimeout(() => {
         currentSetlistId = null;
         currentCategory = cat; 
         switchView('view-list'); 
         
-        // Recuperiamo le canzoni della sezione per contarle
         const sectionSongs = allSongs.filter(s => s.category === cat);
         
-        // Aggiorna il titolo aggiungendo un badge con il numero di canzoni
         document.getElementById("listTitle").innerHTML = `
             ${cat} <span class="badge bg-primary rounded-pill ms-2" style="font-size: 0.5em; vertical-align: middle; opacity: 0.8;">
                 ${sectionSongs.length}
@@ -338,10 +356,11 @@ window.openList = (cat) => {
         document.getElementById("sectionSearchBox").value = ""; 
         window.renderList(sectionSongs); 
         
-        document.getElementById("loadingOverlay").style.display = "none";
-    }, 1000); // Durata aumentata a 1.5 secondi
+        if (!isFirstLoad) {
+            document.getElementById("loadingOverlay").style.display = "none";
+        }
+    }, waitTime);
 };
-
 window.filterSectionList = () => {
     const q=document.getElementById("sectionSearchBox").value.toLowerCase();
     window.renderList(allSongs.filter(s=>s.category===currentCategory && (s.title.toLowerCase().includes(q) || (s.author&&s.author.toLowerCase().includes(q)))));
@@ -1188,14 +1207,17 @@ window.confirmCreateSetlist = async () => {
     }
 };
 window.openSetlistDetail = (id) => {
-    // 1. Mostra Loader e frase random
-    document.getElementById("loadingOverlay").style.display = "flex";
-    startLoaderAnimation(); // <--- Genera nuova frase
+    if (!isFirstLoad) {
+        document.getElementById("loadingOverlay").style.display = "flex";
+        startLoaderAnimation();
+    }
     
-    // 2. Durata 1.5 secondi
+    const waitTime = isFirstLoad ? 0 : 1500;
+
     setTimeout(() => {
         currentSetlistId = id;
         const sl = allSetlists.find(s => s.id === id);
+        // Nota: se non trova la scaletta, nascondiamo comunque il loader per evitare blocchi
         if (!sl) { document.getElementById("loadingOverlay").style.display = "none"; return; }
 
         const mySetlists = JSON.parse(localStorage.getItem('mySetlists')) || [];
@@ -1210,8 +1232,11 @@ window.openSetlistDetail = (id) => {
         document.getElementById('activeSetlistTitle').innerText = sl.name;
         
         window.renderActiveSetlistSongs();
-        document.getElementById("loadingOverlay").style.display = "none";
-    }, 1000); // Durata aumentata a 1.5 secondi
+        
+        if (!isFirstLoad) {
+            document.getElementById("loadingOverlay").style.display = "none";
+        }
+    }, waitTime);
 };
 window.renderActiveSetlistSongs = () => {
     const sl = allSetlists.find(s => s.id === currentSetlistId); 
@@ -2569,6 +2594,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
