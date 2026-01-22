@@ -50,9 +50,7 @@ let isUserInteracting = false;
 let exportSectionCovers = {};
 let targetMergeSongId = null;
 let mDuplicateWarning; // Variabile per il modale
-let pendingMergeData = null;
-let isFirstLoad = true;
-
+let pendingMergeData = null; // Dove salviamo i dati in attesa di conferma
 // Loader phrases
 const loaderPhrases = [
     "Osservo gli astri...", "Accordo la chitarra...", "Scaldo le corde vocali...",
@@ -90,54 +88,61 @@ function startLoaderAnimation() {
     const textEl = document.getElementById('loaderText');
     if(!textEl) return;
     
+    // Assicura che la classe CSS per il cursore sia attiva
     textEl.classList.add('typing-cursor');
 
-    if(loaderInterval) clearTimeout(loaderInterval);
+    // Inizia da una frase casuale
+    let phraseIndex = Math.floor(Math.random() * loaderPhrases.length);
+    let charIndex = 0;
+    let isDeleting = false;
 
-    if (isFirstLoad) {
-        // --- SEQUENZA SOLO PER IL PRIMO ACCESSO ---
-        const phrase1 = "Inizializzazione...";
-        const phrase2 = loaderPhrases[Math.floor(Math.random() * loaderPhrases.length)];
-        
-        let step = 1; // 1: scrive Init, 2: cancella, 3: scrive Frase finale
-        let charIndex = 0;
-        
-        const typeEffect = () => {
-            let speed = 50; // Velocità di scrittura
+    const typeEffect = () => {
+        const currentPhrase = loaderPhrases[phraseIndex];
 
-            if (step === 1) {
-                textEl.innerText = phrase1.substring(0, charIndex + 1);
-                charIndex++;
-                if (charIndex === phrase1.length) {
-                    step = 2; 
-                    speed = 1200; // Resta su "Inizializzazione..." per un po'
-                }
-            } 
-            else if (step === 2) {
-                textEl.innerText = phrase1.substring(0, charIndex - 1);
-                charIndex--;
-                speed = 20; // Cancella molto velocemente
-                if (charIndex === 0) {
-                    step = 3;
-                    speed = 400; // Pausa prima di scrivere la frase scout
-                }
-            } 
-            else if (step === 3) {
-                textEl.innerText = phrase2.substring(0, charIndex + 1);
-                charIndex++;
-                if (charIndex === phrase2.length) {
-                    return; // Fine: la frase resta scritta
-                }
-            }
-            loaderInterval = setTimeout(typeEffect, speed);
-        };
-        typeEffect();
+        // Gestione testo visualizzato
+        if (isDeleting) {
+            // Cancella: prende una sottostringa sempre più corta
+            textEl.innerText = currentPhrase.substring(0, charIndex - 1);
+            charIndex--;
+        } else {
+            // Scrive: prende una sottostringa sempre più lunga
+            textEl.innerText = currentPhrase.substring(0, charIndex + 1);
+            charIndex++;
+        }
 
-    } else {
-        // --- CARICAMENTI SUCCESSIVI: TESTO FISSO IMMEDIATO ---
-        const r = Math.floor(Math.random() * loaderPhrases.length);
-        textEl.innerText = loaderPhrases[r];
-    }
+        // Velocità di digitazione (varia leggermente per realismo)
+        let typeSpeed = 50 + Math.random() * 40; 
+
+        if (!isDeleting && charIndex === currentPhrase.length) {
+            // FRASE COMPLETATA: Pausa lunga per leggerla
+            typeSpeed = 2000; 
+            isDeleting = true; // Al prossimo ciclo inizia a cancellare
+        } else if (isDeleting && charIndex === 0) {
+            // CANCELLAZIONE COMPLETATA: Cambia frase
+            isDeleting = false;
+            // Sceglie una nuova frase diversa dalla precedente
+            let nextIndex;
+            do {
+                nextIndex = Math.floor(Math.random() * loaderPhrases.length);
+            } while (nextIndex === phraseIndex && loaderPhrases.length > 1);
+            phraseIndex = nextIndex;
+            
+            typeSpeed = 500; // Pausa breve prima di iniziare a scrivere la nuova
+        } else if (isDeleting) {
+            // Durante la cancellazione va molto più veloce
+            typeSpeed = 30; 
+        }
+
+        // Salva il riferimento al timeout per poterlo fermare quando la pagina è caricata
+        // Nota: nel codice originale usavi setInterval, qui usiamo setTimeout ricorsivo
+        // Assicurati che nella funzione loadData() che chiama clearInterval, 
+        // tu usi clearTimeout(loaderInterval) invece se usi questo approccio, 
+        // oppure assegna questo timeout alla variabile loaderInterval esistente.
+        loaderInterval = setTimeout(typeEffect, typeSpeed);
+    };
+
+    // Avvia l'effetto
+    typeEffect();
 }
 // AVVIO PERSISTENZA E DATI
 enableIndexedDbPersistence(db)
@@ -201,13 +206,20 @@ async function loadData() {
         if(countEl) countEl.innerText = allSongs.length;
 
         allSections.sort((a, b) => {
+            // Se order non esiste, mettilo in fondo (9999)
             const orderA = (a.order !== undefined && a.order !== null) ? a.order : 9999;
             const orderB = (b.order !== undefined && b.order !== null) ? b.order : 9999;
-            if (orderA !== orderB) return orderA - orderB;
+        
+            // Se l'ordine è diverso, usa quello
+            if (orderA !== orderB) {
+                return orderA - orderB;
+            }
+            // Altrimenti (se hanno lo stesso ordine o nessuno dei due lo ha), usa l'alfabetico
             return a.name.localeCompare(b.name);
         });
         sectionOrder = allSections.map(s => s.name); 
 
+        // --- INIZIO MODIFICA: BLOCCO IF AGGIORNATO ---
         const viewSetlists = document.getElementById('view-setlists');
         const viewManage = document.getElementById('view-manage-sections');
 
@@ -216,6 +228,7 @@ async function loadData() {
             if(currentSetlistId) window.renderActiveSetlistSongs();
         } 
         else if (viewManage && viewManage.classList.contains('active')) {
+            // SEI IN GESTIONE SEZIONI: NON FARE NULLA (Resta qui)
             window.renderManageSections();
         } 
         else if (!currentCategory) {
@@ -225,28 +238,13 @@ async function loadData() {
             window.openList(currentCategory); 
         }
 
-     } finally {
+    } catch(e) { 
+        console.error("Errore caricamento:", e);
+        window.showToast("Errore caricamento: " + e.message, 'danger');
+    } finally {
         const loader = document.getElementById("loadingOverlay");
-        
-        if (loader) {
-            if (isFirstLoad) {
-                // Aspettiamo 5.5 secondi per permettere all'animazione completa di finire
-                setTimeout(() => {
-                    loader.style.opacity = "0"; // Sfumatura fluida
-                    setTimeout(() => {
-                        loader.style.display = "none";
-                        if(loaderInterval) clearTimeout(loaderInterval);
-                        isFirstLoad = false; // Da qui in poi i caricamenti saranno istantanei
-                    }, 500);
-                }, 5500); 
-            } else {
-                // Caricamenti successivi: solo mezzo secondo di attesa
-                setTimeout(() => {
-                    loader.style.display = "none";
-                    if(loaderInterval) clearTimeout(loaderInterval);
-                }, 500); 
-            }
-        }
+        if(loader) loader.style.display = "none";
+        if(loaderInterval) clearTimeout(loaderInterval);
     }
 }
 
@@ -2576,14 +2574,6 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
-
-
-
-
-
-
-
-
 
 
 
