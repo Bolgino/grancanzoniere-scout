@@ -245,10 +245,11 @@ async function loadProposals() {
 }
 
 window.renderDashboard = () => {
-    // 1. Mostra il Loader
+    // 1. Mostra il Loader e GENERA LA FRASE RANDOM
     document.getElementById("loadingOverlay").style.display = "flex";
+    startLoaderAnimation(); // <--- FONDAMENTALE: Cambia il testo in una frase random
 
-    // 2. Piccola pausa per permettere al loader di apparire prima che il browser "disegni" la pagina
+    // 2. Imposta durata 1.5 secondi (1500ms) per leggere la frase
     setTimeout(() => {
         switchView('view-dashboard');
         document.getElementById('globalSearch').value="";
@@ -274,9 +275,8 @@ window.renderDashboard = () => {
 
         // 3. Nascondi il Loader
         document.getElementById("loadingOverlay").style.display = "none";
-    }, 300); // Ritardo di 300ms per fluidità
+    }, 1500); // Durata aumentata a 1.5 secondi
 };
-
 window.performGlobalSearch = () => {
     const q = document.getElementById('globalSearch').value.toLowerCase();
     if (!q) { window.renderDashboard(); return; }
@@ -321,8 +321,11 @@ window.performGlobalSearch = () => {
     }).join('') : `<div class="text-center mt-4">Nessun risultato.</div>`;
 };
 window.openList = (cat) => {
+    // 1. Mostra Loader e frase random
     document.getElementById("loadingOverlay").style.display = "flex";
-    
+    startLoaderAnimation(); // <--- Genera nuova frase
+
+    // 2. Durata 1.5 secondi
     setTimeout(() => {
         currentSetlistId = null;
         currentCategory = cat; 
@@ -341,7 +344,7 @@ window.openList = (cat) => {
         window.renderList(sectionSongs); 
         
         document.getElementById("loadingOverlay").style.display = "none";
-    }, 300);
+    }, 1500); // Durata aumentata a 1.5 secondi
 };
 
 window.filterSectionList = () => {
@@ -1190,8 +1193,11 @@ window.confirmCreateSetlist = async () => {
     }
 };
 window.openSetlistDetail = (id) => {
+    // 1. Mostra Loader e frase random
     document.getElementById("loadingOverlay").style.display = "flex";
+    startLoaderAnimation(); // <--- Genera nuova frase
     
+    // 2. Durata 1.5 secondi
     setTimeout(() => {
         currentSetlistId = id;
         const sl = allSetlists.find(s => s.id === id);
@@ -1210,7 +1216,7 @@ window.openSetlistDetail = (id) => {
         
         window.renderActiveSetlistSongs();
         document.getElementById("loadingOverlay").style.display = "none";
-    }, 300);
+    }, 1500); // Durata aumentata a 1.5 secondi
 };
 window.renderActiveSetlistSongs = () => {
     const sl = allSetlists.find(s => s.id === currentSetlistId); 
@@ -2568,6 +2574,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
