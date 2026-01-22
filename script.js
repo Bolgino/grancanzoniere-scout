@@ -95,7 +95,7 @@ function startLoaderAnimation() {
     textEl.classList.add('typing-cursor'); 
 
     if (isFirstLoad) {
-        // --- PRIMO AVVIO: Scrittura lenta (3 secondi totali) ---
+        // --- PRIMO AVVIO: Scrittura "Inizializzazione..." ---
         let phrase = "Inizializzazione...";
         let charIndex = 0;
 
@@ -103,16 +103,20 @@ function startLoaderAnimation() {
             if (charIndex < phrase.length) {
                 textEl.innerText += phrase[charIndex];
                 charIndex++;
-                loaderInterval = setTimeout(typeEffect, 50); 
+                // 120ms * 19 caratteri = ~2.3 secondi di scrittura
+                // Lascia circa 0.7 secondi di testo fisso prima della chiusura (Totale 3s)
+                loaderInterval = setTimeout(typeEffect, 25); 
             }
         };
         typeEffect();
     } else {
-        // --- CARICAMENTI SUCCESSIVI: Frasi random immediate ---
+        // --- CARICAMENTI SUCCESSIVI: Frasi Random ---
+        // Prende una frase a caso dall'array loaderPhrases definito all'inizio
         const randomPhrase = loaderPhrases[Math.floor(Math.random() * loaderPhrases.length)];
         textEl.innerText = randomPhrase;
-        // Rimuoviamo il cursore se non vogliamo l'effetto digitazione qui
-        // textEl.classList.remove('typing-cursor'); 
+        
+        // Rimuoviamo il cursore lampeggiante per le frasi random (più pulito)
+        textEl.classList.remove('typing-cursor'); 
     }
 }
 // AVVIO PERSISTENZA E DATI
@@ -210,24 +214,24 @@ async function loadData() {
         }
 
     } catch(e) { 
-        console.error("Errore caricamento:", e);
-        window.showToast("Errore caricamento: " + e.message, 'danger');
-    } finally {
-        const loader = document.getElementById("loadingOverlay");
-        if(loader) {
-            // DURATA TOTALE: 
-            // Primo avvio = 4000ms (4 secondi)
-            // Caricamenti successivi = 1200ms (veloce)
-            let displayDuration = isFirstLoad ? 4000 : 1200; 
-
-            setTimeout(() => {
-                loader.style.display = "none";
-                if(loaderInterval) clearTimeout(loaderInterval);
-                isFirstLoad = false; // Da qui in poi userà le frasi random
-            }, displayDuration);
+            console.error("Errore caricamento:", e);
+            window.showToast("Errore caricamento: " + e.message, 'danger');
+        } finally {
+            const loader = document.getElementById("loadingOverlay");
+            if(loader) {
+                // DURATA TOTALE: 
+                // isFirstLoad ? 3000 (3 secondi esatti) 
+                // : 1500 (1.5 secondi per leggere la frase random tipo "Accordo la chitarra")
+                let displayDuration = isFirstLoad ? 3000 : 1500; 
+    
+                setTimeout(() => {
+                    loader.style.display = "none";
+                    if(loaderInterval) clearTimeout(loaderInterval);
+                    isFirstLoad = false; // Importante: ora i prossimi caricamenti useranno le frasi random
+                }, displayDuration);
+            }
         }
     }
-}    
 
 async function loadProposals() {
     if(!isAdmin) return;
