@@ -103,7 +103,7 @@ function startLoaderAnimation() {
             if (charIndex < phrase.length) {
                 textEl.innerText += phrase[charIndex];
                 charIndex++;
-                loaderInterval = setTimeout(typeEffect, 2000); 
+                loaderInterval = setTimeout(typeEffect, 50); 
             }
         };
         typeEffect();
@@ -2564,6 +2564,7 @@ const robustNormalize = (str) => {
               .replace(/\s+/g, " ") // Riduce spazi multipli a uno solo
               .trim();
 };
+
 
 
 
