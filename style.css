@@ -7,6 +7,7 @@
     --border-color: #333;
 }
 
+
 body {
     background-color: var(--bg-color) !important;
     color: var(--text-color) !important;
@@ -553,6 +554,7 @@ body.user-admin .setlist-item-controls {
     border: 2px solid #ffc107 !important; /* Bordo giallo esterno */
     box-shadow: 0 0 20px rgba(255, 193, 7, 0.2); /* Alone giallo */
 }
+
 
 
 
