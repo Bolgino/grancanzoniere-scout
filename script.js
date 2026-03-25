@@ -522,9 +522,12 @@ window.handleSongSubmission = async () => {
             window.openEditor(r.id); 
         } else { 
             await addDoc(collection(db,"proposals"), {...songData, proposer: p}); 
-            // 2. NUOVO CODICE: Invia i dati al tuo Google Script per farti arrivare l'email
-            fetch("https://script.google.com/macros/s/AKfycbzqPlew8cyiGKxW3u6c8eEE040oKcEiKIFb9BCC7cS_1LTVNt90yhrjf0j61ys-U0Ms/exec", {
+            // 2. INVIA LA MAIL TRAMITE GOOGLE SCRIPT
+            fetch("https://script.google.com/macros/s/AKfycbwW9pUYWHmbztTCdmlIVQB0IUJUNP4NZffp16ebjErdnNQklubxe94nbRPM8jeNV7Np/exec", {
                 method: "POST",
+                headers: {
+                    "Content-Type": "text/plain;charset=utf-8",
+                },
                 body: JSON.stringify({
                     titolo: t,
                     autore: p,
