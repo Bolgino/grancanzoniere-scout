@@ -522,6 +522,15 @@ window.handleSongSubmission = async () => {
             window.openEditor(r.id); 
         } else { 
             await addDoc(collection(db,"proposals"), {...songData, proposer: p}); 
+            // 2. NUOVO CODICE: Invia i dati al tuo Google Script per farti arrivare l'email
+            fetch("https://script.google.com/macros/s/AKfycbzqPlew8cyiGKxW3u6c8eEE040oKcEiKIFb9BCC7cS_1LTVNt90yhrjf0j61ys-U0Ms/exec", {
+                method: "POST",
+                body: JSON.stringify({
+                    titolo: t,
+                    autore: p,
+                    categoria: c
+                })
+            }).catch(err => console.error("Errore invio notifica:", err));
             showToast("Proposta inviata!", 'success'); 
             mAddSong.hide();
             window.goHome();
