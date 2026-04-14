@@ -58,7 +58,11 @@ const loaderPhrases = [
     "Cerco il Nord...", "Preparo il fuoco...", "Consulto la mappa..." , "Raccolgo la legna...", "Cerco il capotasto..."
 ];
 let loaderInterval;
-
+// --- FUNZIONE PER AGGIORNARE IL CONTATORE ---
+window.updateTotalSongsCounter = () => {
+    const countEl = document.getElementById("totalSongsCount");
+    if (countEl) countEl.innerText = allSongs.length;
+};
 // Modals
 let mLogin, mAddSong, mAddSection, mEditSection, mEditSongMeta, mConfirm, mExport, mSearchSetlist, mExportSetlist, mAddToSetlist, mCreateSetlist, mReviewProposal;
 
@@ -185,8 +189,7 @@ async function loadData() {
         setlistSnap.forEach(d => allSetlists.push({id: d.id, ...d.data()}));
         allSetlists.sort((a,b) => a.name.localeCompare(b.name));
 
-        const countEl = document.getElementById("totalSongsCount");
-        if(countEl) countEl.innerText = allSongs.length;
+        window.updateTotalSongsCounter();
 
         allSections.sort((a, b) => {
             // Se order non esiste, mettilo in fondo (9999)
@@ -517,6 +520,7 @@ window.handleSongSubmission = async () => {
         if (isAdmin) {
             const r = await addDoc(collection(db,"songs"), {...songData, added:true}); 
             allSongs.push({ id: r.id, ...songData, added: true });
+            window.updateTotalSongsCounter();
             showToast("Canzone Creata!", 'success'); 
             mAddSong.hide();
             window.openEditor(r.id); 
@@ -1071,6 +1075,9 @@ window.deleteCurrentSong = () => window.confirmModal('Eliminare definitivamente?
     try {
         await deleteDoc(doc(db,"songs",currentSongId));
         allSongs = allSongs.filter(s => s.id !== currentSongId);
+        
+        window.updateTotalSongsCounter(); // <-- AGGIUNTO QUI
+
         if(favorites.includes(currentSongId)) { favorites = favorites.filter(id => id !== currentSongId); localStorage.setItem('scoutFavorites', JSON.stringify(favorites)); }
         showToast("Canzone eliminata"); window.goBackToList();
     } catch(e) { showToast("Errore eliminazione: " + e.message, 'danger'); }
@@ -2186,6 +2193,7 @@ window.saveAndApproveProposal = async () => {
             // SE NON C'ERA DUPLICATO: CREA NUOVA
             const r = await addDoc(collection(db, "songs"), finalData);
             allSongs.push({ id: r.id, ...finalData });
+            window.updateTotalSongsCounter();
             showToast("Nuova canzone creata!", "success");
         }
 
