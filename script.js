@@ -279,11 +279,54 @@ window.renderDashboard = () => {
         if(allSections.length===0) c.innerHTML=`<div class="text-center text-muted">Nessuna sezione presente.</div>`;
         
         allSections.forEach(sec => {
-            const count=allSongs.filter(s=>s.category===sec.name).length;
-            const bg=sec.coverUrl ? `background-image:url('${sec.coverUrl}')` : "";
-            const ico=sec.coverUrl ? "" : `<i class="bi bi-music-note-beamed cat-icon"></i>`;
+            const sectionSongs = allSongs.filter(s => s.category === sec.name);
+            const count = sectionSongs.length;
+            const bg = sec.coverUrl ? `background-image:url('${sec.coverUrl}')` : "";
+            const ico = sec.coverUrl ? "" : `<i class="bi bi-music-note-beamed cat-icon"></i>`;
             
-            c.innerHTML+=`<div class="col-md-4 col-sm-6"><div class="category-card shadow-sm"><div class="cat-cover" style="${bg}" onclick="window.openList('${sec.name}')">${ico}</div><div class="p-3 text-center" onclick="window.openList('${sec.name}')"><h5 class="fw-bold mb-1 text-truncate">${sec.name}</h5><small class="text-muted">${count} canzoni</small></div></div></div>`;
+            let adminStatsHtml = "";
+            
+            // Se l'utente è un Capo (Admin), calcoliamo i conteggi e creiamo i bollini
+            if (isAdmin) {
+                let countGreen = 0;  // Canzoni complete
+                let countOrange = 0; // Solo testo (senza accordi)
+                let countRed = 0;    // Canzoni vuote
+                
+                sectionSongs.forEach(s => {
+                    const hasLyrics = s.lyrics && s.lyrics.trim().length > 5;
+                    const hasChords = s.lyrics && s.lyrics.includes("[");
+                    
+                    if (hasLyrics && hasChords) countGreen++;
+                    else if (hasLyrics) countOrange++;
+                    else countRed++;
+                });
+                
+                adminStatsHtml = `
+                    <div class="mt-2 d-flex justify-content-center gap-3 small border-top border-secondary pt-2">
+                        <span title="Complete" class="text-white-50 d-flex align-items-center">
+                            <span class="status-dot status-green m-0 me-1"></span>${countGreen}
+                        </span>
+                        <span title="Solo Testo (Mancano accordi)" class="text-white-50 d-flex align-items-center">
+                            <span class="status-dot status-orange m-0 me-1"></span>${countOrange}
+                        </span>
+                        <span title="Vuote (Da compilare)" class="text-white-50 d-flex align-items-center">
+                            <span class="status-dot status-red m-0 me-1"></span>${countRed}
+                        </span>
+                    </div>
+                `;
+            }
+            
+            c.innerHTML += `
+            <div class="col-md-4 col-sm-6">
+                <div class="category-card shadow-sm">
+                    <div class="cat-cover" style="${bg}" onclick="window.openList('${sec.name}')">${ico}</div>
+                    <div class="p-3 text-center" onclick="window.openList('${sec.name}')">
+                        <h5 class="fw-bold mb-1 text-truncate">${sec.name}</h5>
+                        <small class="text-muted">${count} canzoni</small>
+                        ${adminStatsHtml}
+                    </div>
+                </div>
+            </div>`;
         });
 
         // NASCONDI OVERLAY SOLO SE NON E' IL PRIMO AVVIO
