@@ -275,59 +275,66 @@ window.renderDashboard = () => {
             favC.innerHTML=favs.map(s=>`<button class="list-group-item list-group-item-action border-0 d-flex justify-content-between align-items-center" onclick="window.openEditor('${s.id}')"><div><i class="bi bi-star-fill text-warning me-2"></i> <strong>${s.title}</strong></div><small class="text-muted">${s.author}</small></button>`).join('');
         } else favS.style.display='none';
 
-        const c=document.getElementById("categoriesContainer"); c.innerHTML="";
-        if(allSections.length===0) c.innerHTML=`<div class="text-center text-muted">Nessuna sezione presente.</div>`;
+        const c = document.getElementById("categoriesContainer"); 
         
-        allSections.forEach(sec => {
-            const sectionSongs = allSongs.filter(s => s.category === sec.name);
-            const count = sectionSongs.length;
-            const bg = sec.coverUrl ? `background-image:url('${sec.coverUrl}')` : "";
-            const ico = sec.coverUrl ? "" : `<i class="bi bi-music-note-beamed cat-icon"></i>`;
+        if(allSections.length===0) {
+            c.innerHTML=`<div class="text-center text-muted">Nessuna sezione presente.</div>`;
+        } else {
+            let htmlContent = ""; // <-- Prepariamo il testo
             
-            let adminStatsHtml = "";
-            
-            // Se l'utente è un Capo (Admin), calcoliamo i conteggi e creiamo i bollini
-            if (isAdmin) {
-                let countGreen = 0;  // Canzoni complete
-                let countOrange = 0; // Solo testo (senza accordi)
-                let countRed = 0;    // Canzoni vuote
+            allSections.forEach(sec => {
+                const sectionSongs = allSongs.filter(s => s.category === sec.name);
+                const count = sectionSongs.length;
+                const bg = sec.coverUrl ? `background-image:url('${sec.coverUrl}')` : "";
+                const ico = sec.coverUrl ? "" : `<i class="bi bi-music-note-beamed cat-icon"></i>`;
                 
-                sectionSongs.forEach(s => {
-                    const hasLyrics = s.lyrics && s.lyrics.trim().length > 5;
-                    const hasChords = s.lyrics && s.lyrics.includes("[");
+                let adminStatsHtml = "";
+                
+                if (isAdmin) {
+                    let countGreen = 0;  
+                    let countOrange = 0; 
+                    let countRed = 0;    
                     
-                    if (hasLyrics && hasChords) countGreen++;
-                    else if (hasLyrics) countOrange++;
-                    else countRed++;
-                });
+                    sectionSongs.forEach(s => {
+                        const hasLyrics = s.lyrics && s.lyrics.trim().length > 5;
+                        const hasChords = s.lyrics && s.lyrics.includes("[");
+                        
+                        if (hasLyrics && hasChords) countGreen++;
+                        else if (hasLyrics) countOrange++;
+                        else countRed++;
+                    });
+                    
+                    adminStatsHtml = `
+                        <div class="mt-2 d-flex justify-content-center gap-3 small border-top border-secondary pt-2">
+                            <span title="Complete" class="text-white-50 d-flex align-items-center">
+                                <span class="status-dot status-green m-0 me-1"></span>${countGreen}
+                            </span>
+                            <span title="Solo Testo (Mancano accordi)" class="text-white-50 d-flex align-items-center">
+                                <span class="status-dot status-orange m-0 me-1"></span>${countOrange}
+                            </span>
+                            <span title="Vuote (Da compilare)" class="text-white-50 d-flex align-items-center">
+                                <span class="status-dot status-red m-0 me-1"></span>${countRed}
+                            </span>
+                        </div>
+                    `;
+                }
                 
-                adminStatsHtml = `
-                    <div class="mt-2 d-flex justify-content-center gap-3 small border-top border-secondary pt-2">
-                        <span title="Complete" class="text-white-50 d-flex align-items-center">
-                            <span class="status-dot status-green m-0 me-1"></span>${countGreen}
-                        </span>
-                        <span title="Solo Testo (Mancano accordi)" class="text-white-50 d-flex align-items-center">
-                            <span class="status-dot status-orange m-0 me-1"></span>${countOrange}
-                        </span>
-                        <span title="Vuote (Da compilare)" class="text-white-50 d-flex align-items-center">
-                            <span class="status-dot status-red m-0 me-1"></span>${countRed}
-                        </span>
+                htmlContent += `
+                <div class="col-md-4 col-sm-6">
+                    <div class="category-card shadow-sm">
+                        <div class="cat-cover" style="${bg}" onclick="window.openList('${sec.name}')">${ico}</div>
+                        <div class="p-3 text-center" onclick="window.openList('${sec.name}')">
+                            <h5 class="fw-bold mb-1 text-truncate">${sec.name}</h5>
+                            <small class="text-muted">${count} canzoni</small>
+                            ${adminStatsHtml}
+                        </div>
                     </div>
-                `;
-            }
+                </div>`;
+            });
             
-            c.innerHTML += `
-            <div class="col-md-4 col-sm-6">
-                <div class="category-card shadow-sm">
-                    <div class="cat-cover" style="${bg}" onclick="window.openList('${sec.name}')">${ico}</div>
-                    <div class="p-3 text-center" onclick="window.openList('${sec.name}')">
-                        <h5 class="fw-bold mb-1 text-truncate">${sec.name}</h5>
-                        <small class="text-muted">${count} canzoni</small>
-                        ${adminStatsHtml}
-                    </div>
-                </div>
-            </div>`;
-        });
+            // Stampa a schermo tutto assieme
+            c.innerHTML = htmlContent;
+        }
 
         // NASCONDI OVERLAY SOLO SE NON E' IL PRIMO AVVIO
         // (Al primo avvio ci pensa la funzione loadData dopo 3 secondi)
@@ -414,13 +421,16 @@ window.filterSectionList = () => {
 
 window.renderList = (songs) => {
     const c = document.getElementById("songListContainer"); 
-    c.innerHTML = "";
+    
+    // Ordina le canzoni
     songs.sort((a, b) => a.title.localeCompare(b.title));
+    
+    // CREIAMO UNA VARIABILE DI TESTO PER LA MEMORIA
+    let htmlContent = ""; 
     
     songs.forEach(s => {
         let badgeHtml = "";
         
-        // --- LOGICA BOLLINI ESISTENTE ---
         if (isAdmin) {
             const hasLyrics = s.lyrics && s.lyrics.trim().length > 5;
             const hasChords = s.lyrics && s.lyrics.includes("[");
@@ -429,15 +439,14 @@ window.renderList = (songs) => {
             else badgeHtml = `<span class="status-dot status-red" title="Vuoto"></span>`;
         }
 
-        // --- NUOVO: BADGE TONALITÀ SALVATA ---
         let transBadge = "";
         if (s.savedTranspose && s.savedTranspose !== 0) {
             const sign = s.savedTranspose > 0 ? "+" : "";
-            // Mostra un piccolo badge grigio chiaro con la tonalità
             transBadge = `<span class="badge bg-secondary bg-opacity-25 text-white border border-secondary ms-2" style="font-size: 0.75rem;">${sign}${s.savedTranspose}</span>`;
         }
 
-        c.innerHTML += `
+        // AGGIUNGIAMO ALLA STRINGA (NON AL BROWSER DIRETTAMENTE)
+        htmlContent += `
             <button class="list-group-item list-group-item-action p-3 border-0 mb-1 rounded shadow-sm" onclick="window.openEditor('${s.id}')">
                 <div class="d-flex w-100 justify-content-between align-items-center">
                     <div><h6 class="mb-1 fw-bold">${s.title} ${badgeHtml} ${transBadge}</h6></div>
@@ -445,6 +454,9 @@ window.renderList = (songs) => {
                 </div>
             </button>`;
     });
+
+    // STAMPIAMO A SCHERMO UNA SOLA VOLTA!
+    c.innerHTML = htmlContent;
 };
 window.openEditor = (id) => {
     document.getElementById("loadingOverlay").style.display = "flex";
