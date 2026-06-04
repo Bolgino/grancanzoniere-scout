@@ -116,7 +116,7 @@ function startLoaderAnimation() {
                 textEl.innerText += phrase[charIndex];
                 charIndex++;
                 // Velocità scrittura + pausa finale
-                loaderInterval = setTimeout(typeEffect, 4); 
+                loaderInterval = setTimeout(typeEffect, 70); 
             }
         };
         typeEffect();
@@ -230,8 +230,10 @@ async function loadData() {
         } finally {
             const loader = document.getElementById("loadingOverlay");
             if(loader) {
-                let displayDuration = isFirstLoad ? 800 : 1000;
-    
+                // Il tempo torna a 2000ms per dare il tempo alla scritta di finire
+                // Scompare appena l'animazione ha finito di scrivere
+                let displayDuration = isFirstLoad ? 1500 : 50;
+                
                 setTimeout(() => {
                     loader.style.display = "none";
                     if(loaderInterval) clearTimeout(loaderInterval);
@@ -261,7 +263,7 @@ window.renderDashboard = () => {
 
     // Se è il primo avvio, renderizziamo subito (tempo 0) sotto lo schermo nero.
     // Se sono click successivi, aspettiamo 1.5 secondi per leggere la frase.
-    const waitTime = isFirstLoad ? 0 : 100;
+    const waitTime = isFirstLoad ? 0 : 300;
 
     setTimeout(() => {
         switchView('view-dashboard');
@@ -392,7 +394,7 @@ window.openList = (cat) => {
         startLoaderAnimation();
     }
     
-    const waitTime = isFirstLoad ? 0 : 100;
+    const waitTime = isFirstLoad ? 0 : 300;
 
     setTimeout(() => {
         currentSetlistId = null;
@@ -1286,7 +1288,7 @@ window.openSetlistDetail = (id) => {
         startLoaderAnimation();
     }
     
-    const waitTime = isFirstLoad ? 0 : 100;
+    const waitTime = isFirstLoad ? 0 : 300;
 
     setTimeout(() => {
         currentSetlistId = id;
