@@ -261,7 +261,7 @@ window.renderDashboard = () => {
 
     // Se è il primo avvio, renderizziamo subito (tempo 0) sotto lo schermo nero.
     // Se sono click successivi, aspettiamo 1.5 secondi per leggere la frase.
-    const waitTime = isFirstLoad ? 0 : 1000;
+    const waitTime = isFirstLoad ? 0 : 500;
 
     setTimeout(() => {
         switchView('view-dashboard');
@@ -392,7 +392,7 @@ window.openList = (cat) => {
         startLoaderAnimation();
     }
     
-    const waitTime = isFirstLoad ? 0 : 1000;
+    const waitTime = isFirstLoad ? 0 : 500;
 
     setTimeout(() => {
         currentSetlistId = null;
@@ -1286,7 +1286,7 @@ window.openSetlistDetail = (id) => {
         startLoaderAnimation();
     }
     
-    const waitTime = isFirstLoad ? 0 : 1000;
+    const waitTime = isFirstLoad ? 0 : 500;
 
     setTimeout(() => {
         currentSetlistId = id;
