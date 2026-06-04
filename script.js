@@ -115,8 +115,8 @@ function startLoaderAnimation() {
             if (charIndex < phrase.length) {
                 textEl.innerText += phrase[charIndex];
                 charIndex++;
-                // Velocità scrittura (circa 2.3s totali + pausa finale)
-                loaderInterval = setTimeout(typeEffect, 120); 
+                // Velocità scrittura + pausa finale
+                loaderInterval = setTimeout(typeEffect, 4); 
             }
         };
         typeEffect();
@@ -230,7 +230,7 @@ async function loadData() {
         } finally {
             const loader = document.getElementById("loadingOverlay");
             if(loader) {
-                let displayDuration = isFirstLoad ? 2000 : 1000; 
+                let displayDuration = isFirstLoad ? 800 : 1000;
     
                 setTimeout(() => {
                     loader.style.display = "none";
@@ -261,7 +261,7 @@ window.renderDashboard = () => {
 
     // Se è il primo avvio, renderizziamo subito (tempo 0) sotto lo schermo nero.
     // Se sono click successivi, aspettiamo 1.5 secondi per leggere la frase.
-    const waitTime = isFirstLoad ? 0 : 500;
+    const waitTime = isFirstLoad ? 0 : 100;
 
     setTimeout(() => {
         switchView('view-dashboard');
@@ -392,7 +392,7 @@ window.openList = (cat) => {
         startLoaderAnimation();
     }
     
-    const waitTime = isFirstLoad ? 0 : 500;
+    const waitTime = isFirstLoad ? 0 : 100;
 
     setTimeout(() => {
         currentSetlistId = null;
@@ -1286,7 +1286,7 @@ window.openSetlistDetail = (id) => {
         startLoaderAnimation();
     }
     
-    const waitTime = isFirstLoad ? 0 : 500;
+    const waitTime = isFirstLoad ? 0 : 100;
 
     setTimeout(() => {
         currentSetlistId = id;
