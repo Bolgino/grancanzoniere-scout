@@ -38,6 +38,7 @@ const auth = getAuth(app);
 
 // --- VARIABILI GLOBALI ---
 let isAdmin = false;
+let isSuperAdmin = false;
 let hasUnsavedChanges = false;
 let allSongs=[], allSections=[], allProposals=[], allSetlists = [];
 let currentCategory=null, currentSongId=null, currentTranspose=0, currentFontSize=16;
@@ -143,10 +144,18 @@ enableIndexedDbPersistence(db)
 
       onAuthStateChanged(auth, (user) => {
           isAdmin = !!user;
+          
+          // --- NUOVA LOGICA SUPER ADMIN ---
+          // Inserisci qui la TUA email esatta usata per il login
+          const superAdminEmails = ["marcobolge@email.com"]; 
+          isSuperAdmin = user && superAdminEmails.includes(user.email);
+          
           document.body.classList.toggle('user-admin', isAdmin);
+          document.body.classList.toggle('super-admin', isSuperAdmin); // Aggiunge la classe se sei tu
+          // ---------------------------------
           
           const btnLogin = document.getElementById('btnLoginBtn');
-          if(btnLogin) btnLogin.style.display = isAdmin ? 'none' : 'block'; // Block per riempire larghezza menu
+          if(btnLogin) btnLogin.style.display = isAdmin ? 'none' : 'block';
           
           const btnAddTxt = document.getElementById('btnAddText');
           const btnSubmit = document.getElementById('btnSubmitSong');
