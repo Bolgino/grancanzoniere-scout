@@ -143,16 +143,18 @@ enableIndexedDbPersistence(db)
         .catch((error) => console.error("Errore auth:", error));
 
       onAuthStateChanged(auth, (user) => {
-          isAdmin = !!user;
           
-          // --- NUOVA LOGICA SUPER ADMIN ---
-          // Inserisci qui la TUA email esatta usata per il login
-          const superAdminEmails = ["marcobolge@email.com"]; 
+          // Definisci le liste di chi può fare cosa
+          const adminEmails = ["marcobolge@gmail.com", "admin@gmail.com"];
+          const superAdminEmails = ["marcobolge@gmail.com"]; 
+          
+          // Verifica i permessi
+          isAdmin = user && adminEmails.includes(user.email);
           isSuperAdmin = user && superAdminEmails.includes(user.email);
           
+          // Applica le classi al body per mostrare/nascondere i bottoni
           document.body.classList.toggle('user-admin', isAdmin);
-          document.body.classList.toggle('super-admin', isSuperAdmin); // Aggiunge la classe se sei tu
-          // ---------------------------------
+          document.body.classList.toggle('super-admin', isSuperAdmin);
           
           const btnLogin = document.getElementById('btnLoginBtn');
           if(btnLogin) btnLogin.style.display = isAdmin ? 'none' : 'block';
