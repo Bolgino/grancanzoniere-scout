@@ -1066,8 +1066,10 @@ window.previewCoverFile = () => {
 };
 window.saveSectionSettings=async()=>{const n=document.getElementById("editSectionNameInput").value;const f=document.getElementById("coverFileInput").files[0];document.getElementById("loadingOverlay").style.display="flex";try{let u=currentCoverUrl;if(f)u=await fileToBase64(f);if(n!==currentCategory){const b=writeBatch(db);b.update(doc(db,"sections",editingSectionId),{name:n,coverUrl:u});allSongs.filter(s=>s.category===currentCategory).forEach(s=>b.update(doc(db,"songs",s.id),{category:n}));await b.commit();}else{await updateDoc(doc(db,"sections",editingSectionId),{coverUrl:u});}mEditSection.hide();showToast("Salvato");loadData();}catch(e){showToast(e.message,'danger');}finally{document.getElementById("loadingOverlay").style.display="none";}};
 window.triggerDeleteSection = (id, name) => {
+    if (!isSuperAdmin) return window.showToast("Non hai i permessi per eliminare.", "danger"); // NUOVA RIGA
     // 1. Controllo di sicurezza
     if (!id) return window.showToast("Errore: ID Sezione non valido", "danger");
+    // ... resto del codice invariato
 
     // 2. Imposta le variabili
     editingSectionId = id;
@@ -1137,7 +1139,9 @@ window.saveSong = async () => {
         showToast("Errore salvataggio: " + e.message, 'danger'); 
     }
 };
-window.deleteCurrentSong = () => window.confirmModal('Eliminare definitivamente?', async () => {
+window.deleteCurrentSong = () => {
+    if (!isSuperAdmin) return window.showToast("Non hai i permessi per eliminare.", "danger"); // NUOVA RIGA
+    window.confirmModal('Eliminare definitivamente?', async () => {
     try {
         await deleteDoc(doc(db,"songs",currentSongId));
         allSongs = allSongs.filter(s => s.id !== currentSongId);
@@ -1938,9 +1942,10 @@ window.renderManageSections = () => {
                     <button class="btn btn-outline-light btn-sm" title="Modifica" onclick="window.openSectionSettings('${sec.id}','${safeName}','${sec.coverUrl||''}', event)">
                         <i class="bi bi-pencil"></i>
                     </button>
+                    ${isSuperAdmin ? `
                     <button class="btn btn-outline-danger btn-sm" title="Elimina" onclick="window.triggerDeleteSection('${sec.id}', '${safeName}')">
                         <i class="bi bi-trash"></i>
-                    </button>
+                    </button>` : ''}
                 </div>
             </div>
         </div>`;
