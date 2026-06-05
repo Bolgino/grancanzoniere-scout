@@ -1142,18 +1142,26 @@ window.saveSong = async () => {
     }
 };
 window.deleteCurrentSong = () => {
-    if (!isSuperAdmin) return window.showToast("Non hai i permessi per eliminare.", "danger"); // NUOVA RIGA
+    if (!isSuperAdmin) return window.showToast("Non hai i permessi per eliminare.", "danger");
     window.confirmModal('Eliminare definitivamente?', async () => {
-    try {
-        await deleteDoc(doc(db,"songs",currentSongId));
-        allSongs = allSongs.filter(s => s.id !== currentSongId);
-        
-        window.updateTotalSongsCounter(); // <-- AGGIUNTO QUI
+        try {
+            await deleteDoc(doc(db,"songs",currentSongId));
+            allSongs = allSongs.filter(s => s.id !== currentSongId);
+            
+            window.updateTotalSongsCounter(); 
 
-        if(favorites.includes(currentSongId)) { favorites = favorites.filter(id => id !== currentSongId); localStorage.setItem('scoutFavorites', JSON.stringify(favorites)); }
-        showToast("Canzone eliminata"); window.goBackToList();
-    } catch(e) { showToast("Errore eliminazione: " + e.message, 'danger'); }
-});
+            if(favorites.includes(currentSongId)) { 
+                favorites = favorites.filter(id => id !== currentSongId); 
+                localStorage.setItem('scoutFavorites', JSON.stringify(favorites)); 
+            }
+            showToast("Canzone eliminata"); 
+            window.goBackToList();
+        } catch(e) { 
+            showToast("Errore eliminazione: " + e.message, 'danger'); 
+        }
+    });
+};
+
 window.openSongMetadataModal = () => {
     const s = allSongs.find(x => x.id === currentSongId); if (!s) return;
     document.getElementById("editSongTitleInput").value = s.title; document.getElementById("editSongAuthorInput").value = s.author;
