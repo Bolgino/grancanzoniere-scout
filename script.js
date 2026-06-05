@@ -144,21 +144,21 @@ enableIndexedDbPersistence(db)
 
       onAuthStateChanged(auth, (user) => {
           
-          // Definisci le liste di chi può fare cosa
+          // --- 1. NUOVA LOGICA PER I PERMESSI ---
           const adminEmails = ["marcobolge@gmail.com", "admin@gmail.com"];
           const superAdminEmails = ["marcobolge@gmail.com"]; 
           
-          // Verifica i permessi
           isAdmin = user && adminEmails.includes(user.email);
           isSuperAdmin = user && superAdminEmails.includes(user.email);
           
-          // Applica le classi al body per mostrare/nascondere i bottoni
           document.body.classList.toggle('user-admin', isAdmin);
           document.body.classList.toggle('super-admin', isSuperAdmin);
+          // --------------------------------------
           
           const btnLogin = document.getElementById('btnLoginBtn');
-          if(btnLogin) btnLogin.style.display = isAdmin ? 'none' : 'block';
+          if(btnLogin) btnLogin.style.display = isAdmin ? 'none' : 'block'; 
           
+          // --- 2. RESTO DELLA FUNZIONE ORIGINALE ---
           const btnAddTxt = document.getElementById('btnAddText');
           const btnSubmit = document.getElementById('btnSubmitSong');
           const infoProp = document.getElementById('proposalInfo');
