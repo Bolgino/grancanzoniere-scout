@@ -1036,9 +1036,66 @@ window.openLoginModal=()=>mLogin.show();
 
 function manageDynamicBackgrounds() {
     const bg = document.getElementById('dynamic-background');
-    if(bg) bg.style.display = 'block';
-}
+    if (!bg) return;
+    bg.style.display = 'block';
 
+    const starsContainer = document.getElementById('night-stars-container');
+    
+    // Controlla la connessione internet all'avvio
+    const isOnline = navigator.onLine; 
+
+    // Applica le animazioni alle costellazioni principali SOLO se online
+    if (isOnline) {
+        document.querySelectorAll('.constellation-path, .c-star, .constellation-name').forEach(el => {
+            el.classList.add('animated');
+        });
+    } else {
+        // Se offline, mostra subito costellazioni senza animazioni CSS pesanti
+        document.querySelectorAll('.constellation-path').forEach(el => {
+            el.style.strokeDashoffset = '0';
+        });
+        document.querySelectorAll('.c-star, .constellation-name').forEach(el => {
+            el.style.opacity = '1';
+        });
+    }
+
+    // Genera centinaia di stelle realistiche (Via Lattea) solo se non sono già state create
+    if (starsContainer && starsContainer.children.length === 0) {
+        const numStars = 350; // Quantità di stelle per un cielo d'agosto realistico
+        
+        for (let i = 0; i < numStars; i++) {
+            const star = document.createElement('div');
+            star.classList.add('real-star');
+            
+            // Se c'è internet, abilita il luccichio (twinkle)
+            if (isOnline) {
+                star.classList.add('real-star-animated');
+                // Assegna una durata random per rendere il luccichio asincrono e naturale
+                star.style.setProperty('--duration', (Math.random() * 3 + 2) + 's');
+                star.style.animationDelay = (Math.random() * 5) + 's';
+            }
+
+            // Posizione casuale su tutto lo schermo
+            star.style.left = Math.random() * 100 + 'vw';
+            star.style.top = Math.random() * 100 + 'vh';
+
+            // Dimensione casuale (le stelle reali variano molto in magnitudine)
+            // Crea più stelle minuscole e poche stelle grandi
+            const size = Math.random() > 0.9 ? (Math.random() * 1.5 + 1.5) : (Math.random() * 1 + 0.5);
+            star.style.width = size + 'px';
+            star.style.height = size + 'px';
+
+            // Opacità casuale di base
+            star.style.opacity = Math.random() * 0.8 + 0.2;
+            
+            // Leggera variazione di colore (azzurrognolo, bianco, giallino tenue)
+            const colors = ['#ffffff', '#e6f0ff', '#fff4e6'];
+            star.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+
+            starsContainer.appendChild(star);
+        }
+    }
+}
 window.performLogin = async () => {
     if (document.activeElement) document.activeElement.blur();
     const emailField = document.getElementById('loginEmail');
