@@ -560,8 +560,44 @@ body.user-admin .setlist-item-controls {
     box-shadow: 0 0 20px rgba(255, 193, 7, 0.2); /* Alone giallo */
 }
 
+/* --- EFFETTI CIELO STELLATO REALISTICO --- */
+.milky-way {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 150vw; height: 40vh;
+    background: radial-gradient(ellipse at center, rgba(30, 45, 80, 0.3) 0%, transparent 70%);
+    transform: translate(-50%, -50%) rotate(-45deg);
+    filter: blur(30px);
+    pointer-events: none;
+}
 
+.real-star {
+    position: absolute;
+    background-color: #ffffff;
+    border-radius: 50%;
+    pointer-events: none;
+}
 
+/* Questa classe viene aggiunta da JS solo se c'è internet */
+.real-star-animated {
+    animation: twinkleRealStar var(--duration) infinite alternate ease-in-out;
+}
+
+@keyframes twinkleRealStar {
+    0% { opacity: 0.1; transform: scale(0.8); }
+    100% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 4px rgba(255,255,255,0.8); }
+}
+
+/* Modifichiamo leggermente l'animazione delle costellazioni per essere offline-friendly */
+.constellation-path.animated {
+    animation: drawLines 4s ease-out forwards 0.5s;
+}
+.c-star.animated {
+    animation: fadeIn 1s forwards;
+}
+.constellation-name.animated {
+    animation: fadeIn 2s forwards 2s;
+}
 
 
 
