@@ -164,7 +164,7 @@ enableIndexedDbPersistence(db)
           const infoProp = document.getElementById('proposalInfo');
           const propField = document.getElementById('proposerField');
           const prevCol = document.getElementById('previewContainerCol');
-          const btnImportTxt = document.getElementById('btnImportTxt'); // <--- Recuperiamo il tasto import
+          const btnImportTxt = document.getElementById('importTxtBtn'); 
 
           if (isAdmin) {
               if(btnAddTxt) btnAddTxt.innerText = 'Aggiungi Canzone';
@@ -184,11 +184,11 @@ enableIndexedDbPersistence(db)
           // --- CONTROLLO VISIBILITÀ IMPORT TXT PER SUPERADMIN ---
           if (btnImportTxt) {
               if (isSuperAdmin) {
-                  // Se è super admin e fa parte dell'area capi loggata, forziamo il display flex di Bootstrap
-                  btnImportTxt.style.setProperty('display', 'flex', 'important');
+                  btnImportTxt.classList.remove('d-none');
+                  btnImportTxt.classList.add('d-flex');
               } else {
-                  // Se è admin normale o guest, scompare del tutto
-                  btnImportTxt.style.setProperty('display', 'none', 'important');
+                  btnImportTxt.classList.remove('d-flex');
+                  btnImportTxt.classList.add('d-none');
               }
           }
 
