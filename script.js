@@ -257,7 +257,15 @@ async function loadData() {
 async function loadProposals() {
     if(!isAdmin) return;
     const snap = await getDocs(collection(db, "proposals"));
-    allProposals=[]; snap.forEach(d=>allProposals.push({id:d.id,...d.data()}));
+    allProposals=[]; 
+    snap.forEach(d=>allProposals.push({id:d.id, _isProposal: true, ...d.data()}));
+    
+    // Se è Superadmin, includi anche le canzoni già nel canzoniere che aspettano conferma
+    if (isSuperAdmin) {
+        const songsToReview = allSongs.filter(s => s.needsSuperAdminReview === true);
+        songsToReview.forEach(s => allProposals.push({...s, _isSongReview: true}));
+    }
+
     const b = document.querySelectorAll('#proposalsBadge');
     b.forEach(el => {
         if(allProposals.length>0){ el.innerText=allProposals.length; el.style.display='inline-block';}
@@ -540,7 +548,8 @@ window.handleSongSubmission = async () => {
     // Preparazione oggetto dati
     const songData = { 
         title: t, author: a, category: c, lyrics: l, description: d, year: y, 
-        chords: window.extractChords(l), createdAt: Date.now()
+        chords: window.extractChords(l), createdAt: Date.now(),
+        needsSuperAdminReview: !isSuperAdmin
     };
 
     if (existingSong) {
@@ -566,7 +575,8 @@ window.handleSongSubmission = async () => {
                     author: a || existingSong.author,
                     year: y || existingSong.year,
                     description: d || existingSong.description,
-                    category: c
+                    category: c,
+                    needsSuperAdminReview: !isSuperAdmin
                 }
             };
 
@@ -1252,23 +1262,45 @@ window.openProposalsView = () => {
         if (allProposals.length === 0) c.innerHTML = "<div class='text-center mt-5 text-muted'>Nessuna proposta in attesa.</div>";
         
         allProposals.forEach(p => {
+            let badge = "";
+            let actions = "";
+            let authorText = p.author || 'Sconosciuto';
+            
+            if (p._isSongReview) {
+                // Layout per canzoni approvate dagli Admin (visto solo dal Superadmin)
+                badge = `<span class="badge bg-info text-dark ms-2">Da confermare (Admin)</span>`;
+                actions = `
+                    <button class="btn btn-success btn-sm fw-bold" onclick="window.confirmAdminSong('${p.id}')" title="Conferma in via definitiva">
+                        <i class="bi bi-check-lg"></i>
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="window.rejectAdminSong('${p.id}')" title="Rifiuta ed Elimina">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                `;
+            } else {
+                // Layout normale per proposte dei Guest
+                actions = `
+                    <button class="btn btn-warning btn-sm fw-bold" onclick="window.openProposalEditor('${p.id}')" title="Revisiona">
+                        <i class="bi bi-pencil-square"></i> Revisiona
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="window.rejectProposal('${p.id}')" title="Rifiuta">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                `;
+            }
+
             c.innerHTML += `
             <div class="card mb-3 shadow-sm border-secondary" style="background: #222;">
                 <div class="card-body d-flex justify-content-between align-items-center">
                     <div class="overflow-hidden">
-                        <h5 class="fw-bold mb-1 text-white">${p.title}</h5>
+                        <h5 class="fw-bold mb-1 text-white">${p.title} ${badge}</h5>
                         <small class="text-muted d-block text-truncate">
-                            ${p.author || 'Sconosciuto'} &bull; ${p.category}
+                            ${authorText} &bull; ${p.category}
                         </small>
-                        <small class="text-secondary fst-italic">Proposto da: ${p.proposer || 'Anonimo'}</small>
+                        <small class="text-secondary fst-italic">Proposto da: ${p.proposer || (p._isSongReview ? 'Admin' : 'Anonimo')}</small>
                     </div>
                     <div class="d-flex gap-2 flex-shrink-0">
-                        <button class="btn btn-warning btn-sm fw-bold" onclick="window.openProposalEditor('${p.id}')" title="Revisiona">
-                            <i class="bi bi-pencil-square"></i> Revisiona
-                        </button>
-                        <button class="btn btn-outline-danger btn-sm" onclick="window.rejectProposal('${p.id}')" title="Rifiuta">
-                            <i class="bi bi-trash"></i>
-                        </button>
+                        ${actions}
                     </div>
                 </div>
             </div>`;
@@ -1278,6 +1310,42 @@ window.openProposalsView = () => {
 };
 window.acceptProposal=(id)=>window.confirmModal("Approvare?",async()=>{const p=allProposals.find(x=>x.id===id);await addDoc(collection(db,"songs"),{title:p.title,author:p.author,category:p.category,lyrics:p.lyrics,chords:window.extractChords(p.lyrics)});await deleteDoc(doc(db,"proposals",id));showToast("Approvata!",'success');await loadProposals();loadData();window.openProposalsView();});
 window.rejectProposal=(id)=>window.confirmModal("Rifiutare?",async()=>{await deleteDoc(doc(db,"proposals",id));await loadProposals();window.openProposalsView();});
+window.confirmAdminSong = async (id) => {
+    document.getElementById("loadingOverlay").style.display = "flex";
+    try {
+        await updateDoc(doc(db, "songs", id), { needsSuperAdminReview: false });
+        const s = allSongs.find(x => x.id === id);
+        if (s) s.needsSuperAdminReview = false; // Aggiorna in memoria locale
+        
+        showToast("Canzone confermata definitivamente!", "success");
+        await loadProposals();
+        window.openProposalsView();
+    } catch(e) {
+        showToast("Errore: " + e.message, "danger");
+    } finally {
+        document.getElementById("loadingOverlay").style.display = "none";
+    }
+};
+
+window.rejectAdminSong = (id) => {
+    window.confirmModal("Vuoi eliminare questa canzone aggiunta da un admin?", async () => {
+        document.getElementById("loadingOverlay").style.display = "flex";
+        try {
+            await deleteDoc(doc(db, "songs", id));
+            allSongs = allSongs.filter(s => s.id !== id);
+            window.updateTotalSongsCounter();
+            
+            showToast("Canzone eliminata!", "success");
+            await loadProposals();
+            window.openProposalsView();
+        } catch(e) {
+            showToast("Errore: " + e.message, "danger");
+        } finally {
+            document.getElementById("loadingOverlay").style.display = "none";
+        }
+    });
+};
+
 window.showToast=(m,t='info')=>{const el=document.createElement('div');el.className=`toast align-items-center text-white bg-${t} border-0`;el.innerHTML=`<div class="d-flex"><div class="toast-body">${m}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;document.getElementById('toastContainer').appendChild(el);new bootstrap.Toast(el).show();};
 window.confirmModal=(m,c)=>{document.getElementById('confirmMessage').innerText=m;document.getElementById('confirmBtnAction').onclick=()=>{c();mConfirm.hide();};mConfirm.show();};
 window.switchView=(id)=>{document.querySelectorAll('.view-screen').forEach(el=>el.classList.remove('active'));document.getElementById(id).classList.add('active');window.scrollTo(0,0);};
@@ -2310,7 +2378,8 @@ window.saveAndApproveProposal = async () => {
         lyrics: document.getElementById("reviewLyrics").value,
         chords: window.extractChords(document.getElementById("reviewLyrics").value),
         added: true,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        needsSuperAdminReview: !isSuperAdmin
     };
 
     document.getElementById("loadingOverlay").style.display = "flex";
