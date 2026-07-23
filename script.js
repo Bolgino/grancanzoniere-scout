@@ -53,10 +53,37 @@ let targetMergeSongId = null;
 let mDuplicateWarning; // Variabile per il modale
 let pendingMergeData = null;
 let isFirstLoad = true;// Dove salviamo i dati in attesa di conferma
+let currentRenderLimit = 30;
+let currentRenderList = [];
 // Loader phrases
 const loaderPhrases = [
     "Osservo gli astri...", "Accordo la chitarra...", "Scaldo le corde vocali...",
-    "Cerco il Nord...", "Preparo il fuoco...", "Consulto la mappa..." , "Raccolgo la legna...", "Cerco il capotasto..."
+    "Cerco il Nord...", "Preparo il fuoco...", "Consulto la mappa..." , "Raccolgo la legna...", "Cerco il capotasto...",
+    "Monto la tenda...",
+    "Allaccio gli scarponi...",
+    "Ripasso gli accordi...",
+    "Cerco il plettro...",
+    "Srotolo il sacco a pelo...",
+    "Preparo i marshmallow...",
+    "Ascolto il vento...",
+    "Accendo la torcia...",
+    "Scelgo la prossima canzone...",
+    "Preparo il caffè sul fuoco...",
+    "Esploro il sentiero...",
+    "Pulisco il binocolo...",
+    "Sistemo l'amaca...",
+    "Aspetto l'alba...",
+    "Ascolto i grilli...",
+    "Aggiusto la bussola...",
+    "Alimento la fiamma...",
+    "Riempio la borraccia...",
+    "Allineo i picchetti...",
+    "Guardo il tramonto...",
+    "Intaglio un legnetto...",
+    "Annuso il profumo dei pini...",
+    "Scrivo sul taccuino...",
+    "Preparo la griglia...",
+    "Inseguo le lucciole..."
 ];
 let loaderInterval;
 // --- FUNZIONE PER AGGIORNARE IL CONTATORE ---
@@ -381,13 +408,17 @@ window.performGlobalSearch = () => {
     const q = document.getElementById('globalSearch').value.toLowerCase();
     if (!q) { window.renderDashboard(); return; }
     
-    const res = allSongs.filter(s => s.title.toLowerCase().includes(q) || (s.author && s.author.toLowerCase().includes(q)));
+    // Trova TUTTI i risultati
+    const allRes = allSongs.filter(s => s.title.toLowerCase().includes(q) || (s.author && s.author.toLowerCase().includes(q)));
     document.getElementById("favoritesSection").style.display = 'none';
     
-    document.getElementById("categoriesContainer").innerHTML = res.length ? res.map(s => {
+    // Taglia l'array per mostrare solo i primi 30 risultati
+    const res = allRes.slice(0, 30);
+    
+    let htmlContent = res.length ? res.map(s => {
         let badgeHtml = "";
         
-        // LOGICA BOLLINI ADMIN (Esistente)
+        // LOGICA BOLLINI ADMIN
         if (isAdmin) {
             const hasLyrics = s.lyrics && s.lyrics.trim().length > 5;
             const hasChords = s.lyrics && s.lyrics.includes("[");
@@ -401,13 +432,12 @@ window.performGlobalSearch = () => {
             }
         }
 
-        // --- NUOVO: LOGICA BOLLINO TONALITÀ ---
+        // LOGICA BOLLINO TONALITÀ
         let transBadge = "";
         if (s.savedTranspose && s.savedTranspose !== 0) {
             const sign = s.savedTranspose > 0 ? "+" : "";
             transBadge = `<span class="badge bg-secondary bg-opacity-25 text-white border border-secondary ms-2" style="font-size: 0.75rem;">${sign}${s.savedTranspose}</span>`;
         }
-        // --------------------------------------
 
         return `<div class="col-12"><div class="card shadow-sm border-0" onclick="window.openEditor('${s.id}')" style="cursor:pointer">
             <div class="card-body d-flex justify-content-between align-items-center">
@@ -419,6 +449,16 @@ window.performGlobalSearch = () => {
             </div>
         </div></div>`;
     }).join('') : `<div class="text-center mt-4">Nessun risultato.</div>`;
+
+    // Se ci sono più di 30 risultati, aggiungi un avviso alla fine della lista
+    if (allRes.length > 30) {
+        htmlContent += `
+        <div class="col-12 text-center text-muted mt-3 mb-4 small">
+            <i class="bi bi-info-circle me-1"></i> Trovate altre ${allRes.length - 30} canzoni. Continua a digitare per affinare la ricerca.
+        </div>`;
+    }
+
+    document.getElementById("categoriesContainer").innerHTML = htmlContent;
 };
 window.openList = (cat) => {
     if (!isFirstLoad) {
@@ -453,16 +493,26 @@ window.filterSectionList = () => {
     window.renderList(allSongs.filter(s=>s.category===currentCategory && (s.title.toLowerCase().includes(q) || (s.author&&s.author.toLowerCase().includes(q)))));
 };
 
-window.renderList = (songs) => {
+window.renderList = (songs, isAppending = false) => {
     const c = document.getElementById("songListContainer"); 
     
-    // Ordina le canzoni
-    songs.sort((a, b) => a.title.localeCompare(b.title));
+    // Se è il primo caricamento della lista (non stiamo premendo "Mostra altre")
+    if (!isAppending) {
+        currentRenderLimit = 30; // Resetta il limite a 30
+        // Salva la lista ordinata nella variabile globale
+        currentRenderList = [...songs].sort((a, b) => a.title.localeCompare(b.title));
+        c.innerHTML = ""; // Svuota il contenitore
+    }
     
-    // CREIAMO UNA VARIABILE DI TESTO PER LA MEMORIA
     let htmlContent = ""; 
     
-    songs.forEach(s => {
+    // Prendiamo solo il blocco di canzoni da mostrare (es. da 0 a 30, o da 30 a 60)
+    const songsToShow = currentRenderList.slice(
+        isAppending ? currentRenderLimit - 30 : 0, 
+        currentRenderLimit
+    );
+    
+    songsToShow.forEach(s => {
         let badgeHtml = "";
         
         if (isAdmin) {
@@ -479,7 +529,6 @@ window.renderList = (songs) => {
             transBadge = `<span class="badge bg-secondary bg-opacity-25 text-white border border-secondary ms-2" style="font-size: 0.75rem;">${sign}${s.savedTranspose}</span>`;
         }
 
-        // AGGIUNGIAMO ALLA STRINGA (NON AL BROWSER DIRETTAMENTE)
         htmlContent += `
             <button class="list-group-item list-group-item-action p-3 border-0 mb-1 rounded shadow-sm" onclick="window.openEditor('${s.id}')">
                 <div class="d-flex w-100 justify-content-between align-items-center">
@@ -489,8 +538,31 @@ window.renderList = (songs) => {
             </button>`;
     });
 
-    // STAMPIAMO A SCHERMO UNA SOLA VOLTA!
-    c.innerHTML = htmlContent;
+    // Inseriamo l'HTML generato
+    if (!isAppending) {
+        c.innerHTML = htmlContent;
+    } else {
+        // Se stiamo aggiungendo, rimuoviamo il vecchio bottone e accodiamo le nuove canzoni
+        const oldBtn = document.getElementById("loadMoreBtn");
+        if (oldBtn) oldBtn.remove();
+        c.insertAdjacentHTML('beforeend', htmlContent);
+    }
+
+    // Se ci sono ancora canzoni nascoste, creiamo il pulsante per caricare le successive
+    if (currentRenderLimit < currentRenderList.length) {
+        const remaining = currentRenderList.length - currentRenderLimit;
+        c.insertAdjacentHTML('beforeend', `
+            <button id="loadMoreBtn" class="btn btn-outline-secondary w-100 my-3 fw-bold rounded shadow-sm" onclick="window.loadMoreSongs()">
+                <i class="bi bi-chevron-down me-2"></i> Mostra altre ${remaining > 30 ? 30 : remaining} canzoni...
+            </button>
+        `);
+    }
+};
+
+// Nuova funzione richiamata dal bottone "Mostra altre"
+window.loadMoreSongs = () => {
+    currentRenderLimit += 30;
+    window.renderList(currentRenderList, true);
 };
 window.openEditor = (id) => {
     document.getElementById("loadingOverlay").style.display = "flex";
@@ -931,44 +1003,64 @@ window.generateFullPDF = async () => {
                             let c = p.replace(/[\[\]]/g,'');
                             c = transposeChord(normalizeChord(c), songTrans);
                             doc.setFont(undefined, 'bold'); doc.setFontSize(chordSize); doc.setTextColor(220, 53, 69);
-                            doc.text(c, lineX, currentY);
+                            
                             const chordWidth = doc.getTextWidth(c);
+                            // Se l'accordo sfora il margine destro, va a capo
+                            if (lineX + chordWidth > currentX + COL_WIDTH && lineX > currentX) {
+                                currentY += (lineHeight + 4);
+                                checkLimit(lineHeight + 4);
+                                lineX = currentX;
+                                lastChordEnd = 0;
+                            }
+                            
+                            doc.text(c, lineX, currentY);
                             lastChordEnd = lineX + chordWidth + 1; 
                         } else {
                             doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
                             
-                            // FIX: Controllo per evitare che il testo esca dalla colonna
-                            const textWidth = doc.getTextWidth(p);
-                            if (lineX + textWidth > currentX + COL_WIDTH) {
-                                // Calcola quanto spazio rimane nella riga attuale
-                                const spaceLeft = currentX + COL_WIDTH - lineX;
-                                // Spezza il testo per farlo rientrare
-                                const splitText = doc.splitTextToSize(p, spaceLeft > 10 ? spaceLeft : COL_WIDTH);
+                            // Splitta il testo parola per parola, mantenendo però gli spazi come elementi
+                            let words = p.split(/(\s+)/); 
+                            words.forEach(word => {
+                                if (!word) return;
+                                let wordWidth = doc.getTextWidth(word);
                                 
-                                doc.text(splitText, lineX, currentY + 4);
+                                // Se la singola parola sfora il limite destro della colonna
+                                if (lineX + wordWidth > currentX + COL_WIDTH && lineX > currentX) {
+                                    if (word.trim() === "") return; // Ignora lo spazio se capita esattamente a fine riga
+                                    
+                                    // Riporta tutto a capo e resetta la X all'inizio della colonna
+                                    currentY += (lineHeight + 4);
+                                    checkLimit(lineHeight + 4);
+                                    lineX = currentX;
+                                    lastChordEnd = 0;
+                                }
                                 
-                                // Aggiorna Y e X in base a quante righe ha generato
-                                currentY += (splitText.length - 1) * lineHeight;
-                                lineX = currentX + doc.getTextWidth(splitText[splitText.length - 1]);
-                            } else {
-                                doc.text(p, lineX, currentY + 4);
-                                lineX += textWidth;
-                            }
-                            
-                            if (lineX < lastChordEnd) lineX = lastChordEnd;
+                                doc.text(word, lineX, currentY + 4);
+                                lineX += wordWidth;
+                                if (lineX < lastChordEnd) lineX = lastChordEnd;
+                            });
                         }
                     });
                     currentY += (lineHeight + 4); 
                 } else {
-                    const cleanLine = l.replace(/\[.*?\]/g, ''); 
-                    doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
-                    const splitText = doc.splitTextToSize(cleanLine, COL_WIDTH);
-                    doc.text(splitText, lineX, currentY);
-                    currentY += (splitText.length * lineHeight);
+                    doc.text(p, lineX, currentY + 4);
+                    lineX += textWidth;
                 }
+                            
+                if (lineX < lastChordEnd) lineX = lastChordEnd;
             }
-            currentY += 6; // Spazio tra canzoni
+        });
+        currentY += (lineHeight + 4); 
+        } else {
+        const cleanLine = l.replace(/\[.*?\]/g, ''); 
+        doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
+        const splitText = doc.splitTextToSize(cleanLine, COL_WIDTH);
+        doc.text(splitText, lineX, currentY);
+        currentY += (splitText.length * lineHeight);
         }
+    }
+    currentY += 6; // Spazio tra canzoni
+    }
     } // <--- CHIUSURA CORRETTA DEL CICLO SEZIONI
 
     // --- 4. STAMPA INDICE (Solo se richiesto) ---
@@ -1745,42 +1837,49 @@ window.confirmSetlistPDF = async () => {
                 
                 let lineX = currentX;
 
-                if (hasChords && showChords) { 
-                    let lastChordEnd = 0; 
-                    parts.forEach(p => {
-                        if (p.startsWith("[")) {
-                            let c = p.replace(/[\[\]]/g,'');
-                            c = transposeChord(normalizeChord(c), sTrans); 
-                            doc.setFont(undefined, 'bold'); doc.setFontSize(chordSize); doc.setTextColor(220, 53, 69);
-                            doc.text(c, lineX, currentY);
-                            const chordWidth = doc.getTextWidth(c);
-                            lastChordEnd = lineX + chordWidth + 1;
-                        } else {
-                            doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
+               if (hasChords && showChords) { 
+                let lastChordEnd = 0; 
+                parts.forEach(p => {
+                    if (p.startsWith("[")) {
+                        let c = p.replace(/[\[\]]/g,'');
+                        c = transposeChord(normalizeChord(c), sTrans); // <-- Qui usiamo sTrans
+                        doc.setFont(undefined, 'bold'); doc.setFontSize(chordSize); doc.setTextColor(220, 53, 69);
+                        
+                        const chordWidth = doc.getTextWidth(c);
+                        if (lineX + chordWidth > currentX + COL_WIDTH && lineX > currentX) {
+                            currentY += (lineHeight + 4);
+                            checkLimit(lineHeight + 4);
+                            lineX = currentX;
+                            lastChordEnd = 0;
+                        }
+                        
+                        doc.text(c, lineX, currentY);
+                        lastChordEnd = lineX + chordWidth + 1; 
+                    } else {
+                        doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
+                        
+                        let words = p.split(/(\s+)/); 
+                        words.forEach(word => {
+                            if (!word) return;
+                            let wordWidth = doc.getTextWidth(word);
                             
-                            // FIX: Controllo per evitare che il testo esca dalla colonna
-                            const textWidth = doc.getTextWidth(p);
-                            if (lineX + textWidth > currentX + COL_WIDTH) {
-                                // Calcola quanto spazio rimane nella riga attuale
-                                const spaceLeft = currentX + COL_WIDTH - lineX;
-                                // Spezza il testo per farlo rientrare
-                                const splitText = doc.splitTextToSize(p, spaceLeft > 10 ? spaceLeft : COL_WIDTH);
+                            if (lineX + wordWidth > currentX + COL_WIDTH && lineX > currentX) {
+                                if (word.trim() === "") return; 
                                 
-                                doc.text(splitText, lineX, currentY + 4);
-                                
-                                // Aggiorna Y e X in base a quante righe ha generato
-                                currentY += (splitText.length - 1) * lineHeight;
-                                lineX = currentX + doc.getTextWidth(splitText[splitText.length - 1]);
-                            } else {
-                                doc.text(p, lineX, currentY + 4);
-                                lineX += textWidth;
+                                currentY += (lineHeight + 4);
+                                checkLimit(lineHeight + 4);
+                                lineX = currentX;
+                                lastChordEnd = 0;
                             }
                             
+                            doc.text(word, lineX, currentY + 4);
+                            lineX += wordWidth;
                             if (lineX < lastChordEnd) lineX = lastChordEnd;
-                        }
-                    });
-                    currentY += (lineHeight + 4); 
-                } else {
+                        });
+                    }
+                });
+                currentY += (lineHeight + 4); 
+            } else {
                     const cleanLine = l.replace(/\[.*?\]/g, ''); 
                     doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
                     const splitText = doc.splitTextToSize(cleanLine, COL_WIDTH);
