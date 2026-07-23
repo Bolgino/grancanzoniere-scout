@@ -57,14 +57,19 @@ let currentRenderLimit = 30;
 let currentRenderList = [];
 // Loader phrases
 const loaderPhrases = [
-    "Osservo gli astri...", "Accordo la chitarra...", "Scaldo le corde vocali...",
-    "Cerco il Nord...", "Preparo il fuoco...", "Consulto la mappa..." , "Raccolgo la legna...", "Cerco il capotasto...",
+    "Osservo gli astri...", 
+    "Accordo la chitarra...", 
+    "Scaldo le corde vocali...",
+    "Cerco il Nord...", 
+    "Preparo il fuoco...", 
+    "Consulto la mappa..." , 
+    "Raccolgo la legna...", 
+    "Cerco il capotasto...",
     "Monto la tenda...",
     "Allaccio gli scarponi...",
     "Ripasso gli accordi...",
     "Cerco il plettro...",
     "Srotolo il sacco a pelo...",
-    "Preparo i marshmallow...",
     "Ascolto il vento...",
     "Accendo la torcia...",
     "Scelgo la prossima canzone...",
@@ -1018,7 +1023,7 @@ window.generateFullPDF = async () => {
                         } else {
                             doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
                             
-                            // Splitta il testo parola per parola, mantenendo però gli spazi come elementi
+                            // Splitta il testo parola per parola
                             let words = p.split(/(\s+)/); 
                             words.forEach(word => {
                                 if (!word) return;
@@ -1026,9 +1031,8 @@ window.generateFullPDF = async () => {
                                 
                                 // Se la singola parola sfora il limite destro della colonna
                                 if (lineX + wordWidth > currentX + COL_WIDTH && lineX > currentX) {
-                                    if (word.trim() === "") return; // Ignora lo spazio se capita esattamente a fine riga
+                                    if (word.trim() === "") return; 
                                     
-                                    // Riporta tutto a capo e resetta la X all'inizio della colonna
                                     currentY += (lineHeight + 4);
                                     checkLimit(lineHeight + 4);
                                     lineX = currentX;
@@ -1043,24 +1047,15 @@ window.generateFullPDF = async () => {
                     });
                     currentY += (lineHeight + 4); 
                 } else {
-                    doc.text(p, lineX, currentY + 4);
-                    lineX += textWidth;
+                    const cleanLine = l.replace(/\[.*?\]/g, ''); 
+                    doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
+                    const splitText = doc.splitTextToSize(cleanLine, COL_WIDTH);
+                    doc.text(splitText, lineX, currentY);
+                    currentY += (splitText.length * lineHeight);
                 }
-                            
-                if (lineX < lastChordEnd) lineX = lastChordEnd;
             }
-        });
-        currentY += (lineHeight + 4); 
-        } else {
-        const cleanLine = l.replace(/\[.*?\]/g, ''); 
-        doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
-        const splitText = doc.splitTextToSize(cleanLine, COL_WIDTH);
-        doc.text(splitText, lineX, currentY);
-        currentY += (splitText.length * lineHeight);
+            currentY += 6; // Spazio tra canzoni
         }
-    }
-    currentY += 6; // Spazio tra canzoni
-    }
     } // <--- CHIUSURA CORRETTA DEL CICLO SEZIONI
 
     // --- 4. STAMPA INDICE (Solo se richiesto) ---
