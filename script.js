@@ -936,9 +936,25 @@ window.generateFullPDF = async () => {
                             lastChordEnd = lineX + chordWidth + 1; 
                         } else {
                             doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
-                            doc.text(p, lineX, currentY + 4);
+                            
+                            // FIX: Controllo per evitare che il testo esca dalla colonna
                             const textWidth = doc.getTextWidth(p);
-                            lineX += textWidth;
+                            if (lineX + textWidth > currentX + COL_WIDTH) {
+                                // Calcola quanto spazio rimane nella riga attuale
+                                const spaceLeft = currentX + COL_WIDTH - lineX;
+                                // Spezza il testo per farlo rientrare
+                                const splitText = doc.splitTextToSize(p, spaceLeft > 10 ? spaceLeft : COL_WIDTH);
+                                
+                                doc.text(splitText, lineX, currentY + 4);
+                                
+                                // Aggiorna Y e X in base a quante righe ha generato
+                                currentY += (splitText.length - 1) * lineHeight;
+                                lineX = currentX + doc.getTextWidth(splitText[splitText.length - 1]);
+                            } else {
+                                doc.text(p, lineX, currentY + 4);
+                                lineX += textWidth;
+                            }
+                            
                             if (lineX < lastChordEnd) lineX = lastChordEnd;
                         }
                     });
@@ -1639,8 +1655,12 @@ window.confirmSetlistPDF = async () => {
 
         let currentX = COL_1_X;
         let currentY = MARGIN_TOP;
-        // Se siamo a pagina 1 e non c'è copertina e non c'è indice, dobbiamo scendere sotto il titolo
-        if (!hasCover && !includeToc && doc.internal.getNumberOfPages() === 1) currentY = 35;
+        let pageOneStartY = MARGIN_TOP; // SALVIAMO LA Y INIZIALE DELLA PAGINA 1
+        
+        if (!hasCover && !includeToc && doc.internal.getNumberOfPages() === 1) {
+            currentY = 35;
+            pageOneStartY = 35; // Aggiorniamo se c'è il titolo
+        }
         
         let currentCol = 1;
         
@@ -1649,7 +1669,9 @@ window.confirmSetlistPDF = async () => {
                 if (isTwoColumns && currentCol === 1) {
                     currentCol = 2;
                     currentX = COL_2_X;
-                    currentY = MARGIN_TOP;
+                    // FIX: Controlliamo se siamo sulla pagina col titolo
+                    const isTitlePage = (!hasCover && !includeToc && doc.internal.getNumberOfPages() === 1);
+                    currentY = isTitlePage ? pageOneStartY : MARGIN_TOP;
                     // Fix: se siamo a pag 1 e c'è titolo, la colonna 2 deve partire dall'alto (MARGIN_TOP), non sotto il titolo
                 } else {
                     doc.addPage();
@@ -1735,9 +1757,25 @@ window.confirmSetlistPDF = async () => {
                             lastChordEnd = lineX + chordWidth + 1;
                         } else {
                             doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
-                            doc.text(p, lineX, currentY + 4);
+                            
+                            // FIX: Controllo per evitare che il testo esca dalla colonna
                             const textWidth = doc.getTextWidth(p);
-                            lineX += textWidth;
+                            if (lineX + textWidth > currentX + COL_WIDTH) {
+                                // Calcola quanto spazio rimane nella riga attuale
+                                const spaceLeft = currentX + COL_WIDTH - lineX;
+                                // Spezza il testo per farlo rientrare
+                                const splitText = doc.splitTextToSize(p, spaceLeft > 10 ? spaceLeft : COL_WIDTH);
+                                
+                                doc.text(splitText, lineX, currentY + 4);
+                                
+                                // Aggiorna Y e X in base a quante righe ha generato
+                                currentY += (splitText.length - 1) * lineHeight;
+                                lineX = currentX + doc.getTextWidth(splitText[splitText.length - 1]);
+                            } else {
+                                doc.text(p, lineX, currentY + 4);
+                                lineX += textWidth;
+                            }
+                            
                             if (lineX < lastChordEnd) lineX = lastChordEnd;
                         }
                     });
