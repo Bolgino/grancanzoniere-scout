@@ -1934,7 +1934,59 @@ window.confirmSetlistPDF = async () => {
     }
 };
 window.openSearchForSetlistModal = () => { document.getElementById("searchSetlistInput").value = ""; window.performSetlistSearch(); mSearchSetlist.show(); };
-window.performSetlistSearch = () => { const q = document.getElementById("searchSetlistInput").value.toLowerCase(); const c = document.getElementById("searchSetlistResults"); c.innerHTML = ""; let res; if (q.trim() === "") res = allSongs.sort((a,b) => a.title.localeCompare(b.title)); else res = allSongs.filter(s => s.title.toLowerCase().includes(q) || (s.author && s.author.toLowerCase().includes(q))); if(res.length === 0) { c.innerHTML = "<div class='text-center text-muted p-2'>Nessun risultato</div>"; return; } const sl = allSetlists.find(x => x.id === currentSetlistId); res.forEach(s => { const isPresent = sl && sl.songs.some(item => (typeof item === 'string' ? item : item.id) === s.id); const btnClass = isPresent ? "btn-secondary disabled" : "btn-outline-primary"; const icon = isPresent ? '<i class="bi bi-check2"></i>' : '<i class="bi bi-plus-lg"></i>'; const action = isPresent ? "" : `onclick="window.addSongFromSearch('${s.id}')"`; c.innerHTML += `<div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"><div class="text-truncate" style="max-width: 80%;"><div class="fw-bold text-truncate">${s.title}</div><small class="text-muted text-truncate">${s.author || ''}</small></div><button class="btn btn-sm ${btnClass} rounded-circle" ${action} style="width: 32px; height: 32px; padding: 0;">${icon}</button></div>`; }); };
+window.performSetlistSearch = () => {
+    const q = document.getElementById("searchSetlistInput").value.toLowerCase();
+    const c = document.getElementById("searchSetlistResults");
+    
+    let allRes;
+    
+    // Se è vuoto, prendi tutto ordinato. Altrimenti filtra per ricerca.
+    if (q.trim() === "") {
+        allRes = [...allSongs].sort((a,b) => a.title.localeCompare(b.title));
+    } else {
+        allRes = allSongs.filter(s => s.title.toLowerCase().includes(q) || (s.author && s.author.toLowerCase().includes(q)));
+    }
+    
+    if (allRes.length === 0) { 
+        c.innerHTML = "<div class='text-center text-muted p-2'>Nessun risultato</div>"; 
+        return; 
+    }
+    
+    // TAGLIAMO I RISULTATI A 30 (Mantiene il popup fluido e istantaneo)
+    const res = allRes.slice(0, 30);
+    
+    const sl = allSetlists.find(x => x.id === currentSetlistId);
+    
+    // COSTRUIAMO LA STRINGA IN MEMORIA, NIENTE innerHTML NEL CICLO
+    let htmlContent = "";
+    
+    res.forEach(s => {
+        const isPresent = sl && sl.songs.some(item => (typeof item === 'string' ? item : item.id) === s.id);
+        const btnClass = isPresent ? "btn-secondary disabled" : "btn-outline-primary";
+        const icon = isPresent ? '<i class="bi bi-check2"></i>' : '<i class="bi bi-plus-lg"></i>';
+        const action = isPresent ? "" : `onclick="window.addSongFromSearch('${s.id}')"`;
+        
+        htmlContent += `
+        <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+            <div class="text-truncate" style="max-width: 80%;">
+                <div class="fw-bold text-truncate">${s.title}</div>
+                <small class="text-muted text-truncate">${s.author || ''}</small>
+            </div>
+            <button class="btn btn-sm ${btnClass} rounded-circle" ${action} style="width: 32px; height: 32px; padding: 0;">${icon}</button>
+        </div>`;
+    });
+    
+    // Mostriamo un piccolo avviso alla fine della lista se ci sono canzoni tagliate fuori
+    if (allRes.length > 30) {
+        htmlContent += `
+        <div class="text-center text-muted mt-2 small p-2">
+            Altre ${allRes.length - 30} canzoni nascoste. Digita per cercare.
+        </div>`;
+    }
+    
+    // STAMPIAMO A SCHERMO UNA SOLA VOLTA!
+    c.innerHTML = htmlContent;
+};
 window.addSongFromSearch = (songId) => { const sl = allSetlists.find(s => s.id === currentSetlistId); if(sl) { const isPresent = sl.songs.some(item => (typeof item === 'string' ? item : item.id) === songId); if(isPresent) return showToast("Già in scaletta", "info"); const newSongs = [...sl.songs, { id: songId, trans: 0 }]; updateSetlistSongs(currentSetlistId, newSongs); showToast("Aggiunta!", "success"); window.performSetlistSearch(); } };
 window.insertFormatting = (tag) => { const textarea = document.getElementById("lyricsEditor"); const start = textarea.selectionStart; const end = textarea.selectionEnd; textarea.value = textarea.value.substring(0, start) + tag + textarea.value.substring(start, end) + tag + textarea.value.substring(end); textarea.selectionStart = start + tag.length; textarea.selectionEnd = end + tag.length; textarea.focus(); window.renderPreview(); };
 const setInteractingTrue = () => { isUserInteracting = true; };
