@@ -598,6 +598,20 @@ body.user-admin .setlist-item-controls {
 .constellation-name.animated {
     animation: fadeIn 2s forwards 2s;
 }
+/* --- OTTIMIZZAZIONI PRESTAZIONI MOBILE --- */
 
+/* Evita che il telefono debba renderizzare elementi fuori dallo schermo */
+.list-group-item, .category-card {
+    content-visibility: auto;
+    contain-intrinsic-size: 80px; /* Altezza stimata della riga della canzone */
+}
+
+/* Disabilita il luccichio continuo delle stelle su mobile (uccide le prestazioni durante lo scroll) */
+@media (max-width: 768px) {
+    .real-star-animated {
+        animation: none !important; 
+        opacity: 0.8 !important;    
+    }
+}
 
 
