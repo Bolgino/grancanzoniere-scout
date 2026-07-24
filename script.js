@@ -1187,7 +1187,9 @@ function manageDynamicBackgrounds() {
 
     // Genera centinaia di stelle realistiche (Via Lattea) solo se non sono già state create
     if (starsContainer && starsContainer.children.length === 0) {
-        const numStars = 350; // Quantità di stelle per un cielo d'agosto realistico
+        // Meno stelle se lo schermo è piccolo (telefono) per salvare la batteria e azzerare i lag
+        const isMobile = window.innerWidth <= 768;
+        const numStars = isMobile ? 60 : 350;
         
         for (let i = 0; i < numStars; i++) {
             const star = document.createElement('div');
@@ -1464,9 +1466,75 @@ window.rejectAdminSong = (id) => {
 
 window.showToast=(m,t='info')=>{const el=document.createElement('div');el.className=`toast align-items-center text-white bg-${t} border-0`;el.innerHTML=`<div class="d-flex"><div class="toast-body">${m}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;document.getElementById('toastContainer').appendChild(el);new bootstrap.Toast(el).show();};
 window.confirmModal=(m,c)=>{document.getElementById('confirmMessage').innerText=m;document.getElementById('confirmBtnAction').onclick=()=>{c();mConfirm.hide();};mConfirm.show();};
-window.switchView=(id)=>{document.querySelectorAll('.view-screen').forEach(el=>el.classList.remove('active'));document.getElementById(id).classList.add('active');window.scrollTo(0,0);};
-window.goHome = () => { currentCategory = null; currentSongId = null; const searchInput = document.getElementById('globalSearch'); if(searchInput) searchInput.value = ""; window.renderDashboard(); };
-window.goBackToList = () => { if (hasUnsavedChanges && !confirm("Modifiche non salvate. Uscire?")) return; if (currentSetlistId) { switchView('view-setlists'); document.getElementById('setlistsContainer').innerHTML = ""; document.getElementById('activeSetlistDetail').style.display = 'block'; window.renderActiveSetlistSongs(); } else if (currentCategory) { window.openList(currentCategory); } else { window.goHome(); } };
+// --- GESTIONE CRONOLOGIA E TASTO INDIETRO ---
+let isNavigatingBack = false;
+
+// Imposta lo stato iniziale appena si carica la pagina
+window.addEventListener('load', () => {
+    history.replaceState({ view: 'view-dashboard' }, '', '#home');
+});
+
+// Ascolta il tasto indietro fisico del telefono
+window.addEventListener('popstate', (event) => {
+    if (event.state && event.state.view) {
+        isNavigatingBack = true; 
+        
+        // Pulizia variabili in base a dove stiamo tornando
+        if (event.state.view === 'view-dashboard') {
+            currentCategory = null;
+            currentSongId = null;
+        } else if (event.state.view === 'view-list') {
+            currentSongId = null;
+        }
+
+        // Cambia la vista graficamente
+        window.switchView(event.state.view);
+        
+        // Ricarica i dati necessari per la vista
+        if (event.state.view === 'view-list' && currentCategory) {
+            window.renderList(allSongs.filter(s => s.category === currentCategory));
+        } else if (event.state.view === 'view-setlists') {
+            if (currentSetlistId) {
+                document.getElementById('activeSetlistDetail').style.display = 'block';
+                document.getElementById('setlistsContainer').innerHTML = "";
+                window.renderActiveSetlistSongs();
+            } else {
+                document.getElementById('activeSetlistDetail').style.display = 'none';
+                window.renderSetlistsList();
+            }
+        }
+    }
+});
+
+// Nuova funzione switchView che aggiorna la cronologia
+window.switchView = (id) => {
+    document.querySelectorAll('.view-screen').forEach(el => el.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    window.scrollTo(0, 0);
+    
+    // Se la chiamata non arriva dal tasto indietro, aggiungiamo una "pagina" alla cronologia
+    if (!isNavigatingBack) {
+        history.pushState({ view: id }, '', `#${id}`);
+    }
+    isNavigatingBack = false;
+};
+
+// Modifichiamo i tasti UI in modo che usino la cronologia del telefono
+window.goHome = () => { 
+    if (history.state && history.state.view !== 'view-dashboard') {
+        history.back(); // Simula la pressione del tasto indietro
+    } else {
+        currentCategory = null; currentSongId = null; 
+        const searchInput = document.getElementById('globalSearch'); 
+        if(searchInput) searchInput.value = ""; 
+        window.renderDashboard(); 
+    }
+};
+
+window.goBackToList = () => { 
+    if (hasUnsavedChanges && !confirm("Modifiche non salvate. Uscire?")) return; 
+    history.back(); // Simula la pressione del tasto indietro del telefono
+};
 window.changeTone=(d)=>{currentTranspose+=d;document.getElementById("toneDisplay").innerText=currentTranspose;window.renderPreview();};
 window.adjustFontSize=(d)=>{currentFontSize+=d;window.renderPreview();};
 window.toggleChords=()=>document.getElementById('previewArea').classList.toggle('hide-chords');
