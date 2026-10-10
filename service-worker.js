@@ -1,10 +1,11 @@
-const CACHE_NAME = "canzoniere-dynamic-v2"; // Cambiato nome per forzare l'aggiornamento un'ultima volta
+const CACHE_NAME = "canzoniere-dynamic-v3"; // Cambiato nome per forzare l'aggiornamento un'ultima volta
 const ASSETS_TO_CACHE = [
   "./",
   "./index.html",
   "./style.css",
   "./script.js",
   "./music-utils.js",
+  "./song-doctor.js",
   "./manifest.json",
   "./icona.ico",
   "https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css",

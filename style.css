@@ -69,10 +69,11 @@ body {
 
 /* Card e Liste */
 .card, .list-group-item, .category-card {
-    background-color: rgba(30, 30, 30, 0.7) !important; /* Scuro semitrasparente */
+    /* Niente backdrop-filter qui: con decine di righe sopra lo sfondo di stelle animate il telefono
+       doveva rifare la sfocatura di ogni riga a ogni fotogramma. Sfondo un po' più coprente al suo posto. */
+    background-color: rgba(30, 30, 30, 0.88) !important;
     border: 1px solid var(--border-color) !important;
     color: #fff !important;
-    backdrop-filter: blur(5px);
 }
 
 .list-group-item:hover, .category-card:hover {
