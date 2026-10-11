@@ -77,6 +77,10 @@ let mDuplicateWarning; // Variabile per il modale
 let pendingMergeData = null;
 let isFirstLoad = true;// Dove salviamo i dati in attesa di conferma
 const APP_START = performance.now();
+// Attesa con frase del loader quando si cambia schermata. Prima era 300 ms a ogni click.
+// 0 = schermate istantanee: le frasi compaiono comunque mentre si ricaricano i dati (loadData).
+// Rimetti 300 per riavere la frase anche a ogni click.
+const NAV_DELAY_MS = 0;
 let currentRenderLimit = 30;
 let currentRenderList = [];
 // Loader phrases
@@ -253,6 +257,12 @@ enableIndexedDbPersistence(db)
   });
 window.loadData = loadData;
 async function loadData() {
+    const reloadStart = performance.now();
+    // Ricaricamenti successivi (dopo un salvataggio, un login...): frase random mentre arrivano i dati
+    if (!isFirstLoad) {
+        const ov = document.getElementById("loadingOverlay");
+        if (ov) { ov.style.display = "flex"; startLoaderAnimation(); }
+    }
     try {
         // Le tre letture partono insieme invece che una dopo l'altra
         const [secSnap, songSnap, setlistSnap] = await Promise.all([
@@ -317,7 +327,8 @@ async function loadData() {
                 // Scompare appena l'animazione ha finito di scrivere
                 // Prima: +1,5 s DOPO l'arrivo dei dati. Ora: l'animazione dura al massimo 1,3 s dall'apertura,
                 // e se i dati arrivano più tardi non si aggiunge altra attesa
-                let displayDuration = isFirstLoad ? Math.max(0, 1300 - (performance.now() - APP_START)) : 0;
+                let displayDuration = isFirstLoad ? Math.max(0, 1300 - (performance.now() - APP_START))
+                                                  : Math.max(0, 300 - (performance.now() - reloadStart)); // la frase resta leggibile
                 
                 setTimeout(() => {
                     loader.style.display = "none";
@@ -348,8 +359,14 @@ async function loadProposals() {
 }
 
 window.renderDashboard = () => {
+    // SE NON È IL PRIMO AVVIO: Mostra overlay e frase random (solo se NAV_DELAY_MS > 0)
+    if (!isFirstLoad && NAV_DELAY_MS > 0) {
+        document.getElementById("loadingOverlay").style.display = "flex";
+        startLoaderAnimation(); 
+    }
 
-    const waitTime = 0; // prima c'era un'attesa artificiale di 300 ms a ogni click
+    // Se è il primo avvio, renderizziamo subito (tempo 0) sotto lo schermo nero.
+    const waitTime = isFirstLoad ? 0 : NAV_DELAY_MS;
 
     setTimeout(() => {
         switchView('view-dashboard');
@@ -489,8 +506,12 @@ window.performGlobalSearch = () => {
     document.getElementById("categoriesContainer").innerHTML = htmlContent;
 };
 window.openList = (cat) => {
+    if (!isFirstLoad && NAV_DELAY_MS > 0) {
+        document.getElementById("loadingOverlay").style.display = "flex";
+        startLoaderAnimation();
+    }
     
-    const waitTime = 0; // prima c'era un'attesa artificiale di 300 ms a ogni click
+    const waitTime = isFirstLoad ? 0 : NAV_DELAY_MS;
 
     setTimeout(() => {
         currentSetlistId = null;
@@ -589,9 +610,12 @@ window.loadMoreSongs = () => {
     window.renderList(currentRenderList, true);
 };
 window.openEditor = (id) => {
-        currentSongId=id;
+    if (NAV_DELAY_MS > 0) document.getElementById("loadingOverlay").style.display = "flex";
+
+    setTimeout(() => {
+        currentSongId=id; 
         const s=allSongs.find(x=>x.id===id);
-        if (!s) return showToast("Canzone non trovata", "warning");
+        if (!s) { document.getElementById("loadingOverlay").style.display = "none"; return showToast("Canzone non trovata", "warning"); }
         switchView('view-editor');
         window.scrollTo(0, 0);
         document.getElementById("editorTitle").innerText=s.title;
@@ -611,7 +635,7 @@ window.openEditor = (id) => {
         const sign = currentTranspose > 0 ? "+" : "";
         document.getElementById("toneDisplay").innerText = currentTranspose === 0 ? "0" : sign + currentTranspose;
 
-        updateFavIcon();
+        updateFavIcon(); 
         window.renderPreview();
         if (autoScrollInterval) window.toggleAutoScroll();
 
@@ -624,6 +648,7 @@ window.openEditor = (id) => {
         }
 
         document.getElementById("loadingOverlay").style.display = "none";
+    }, NAV_DELAY_MS);
 };
 
 window.renderPreview = () => {
@@ -1175,19 +1200,19 @@ window.generateFullLatex = () => {
 const fileToBase64 = file => new Promise((resolve, reject) => { const r = new FileReader(); r.readAsDataURL(file); r.onload = () => resolve(r.result); r.onerror = error => reject(error); });
 
 // Le copertine delle sezioni finiscono DENTRO il documento Firestore e vengono scaricate a ogni apertura
-// dell'app: le ridimensiono a max 800 px in JPEG (di solito 40-80 KB invece di 0,5-1 MB a foto).
-const compressImageToDataUrl = (fileOrDataUrl, maxSide = 800, quality = 0.75) => new Promise((resolve, reject) => {
+// dell'app (e un documento Firestore non può superare 1 MB: una foto del telefono non ci sta nemmeno).
+// Le ridimensiono a max 1200 px: per l'export PDF in A5 sono ancora ~200 dpi.
+// Le PNG restano PNG (trasparenza intatta), le foto diventano JPEG.
+const compressImageToDataUrl = (fileOrDataUrl, maxSide = 1200, quality = 0.82) => new Promise((resolve, reject) => {
+    const isPng = typeof fileOrDataUrl === "string" ? fileOrDataUrl.startsWith("data:image/png") : fileOrDataUrl.type === "image/png";
     const img = new Image();
     img.onload = () => {
         const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
         const c = document.createElement("canvas");
         c.width = Math.round(img.width * scale);
         c.height = Math.round(img.height * scale);
-        const ctx = c.getContext("2d");
-        ctx.fillStyle = "#1e1e1e"; // sfondo per le PNG trasparenti
-        ctx.fillRect(0, 0, c.width, c.height);
-        ctx.drawImage(img, 0, 0, c.width, c.height);
-        resolve(c.toDataURL("image/jpeg", quality));
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        resolve(isPng ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", quality));
     };
     img.onerror = reject;
     if (typeof fileOrDataUrl === "string") img.src = fileOrDataUrl;
@@ -1407,7 +1432,7 @@ window.saveSongMetadata = async () => {
     } catch (e) { showToast("Errore salvataggio: " + e.message, "danger"); } finally { document.getElementById("loadingOverlay").style.display = "none"; }
 };
 window.openProposalsView = () => {
-    
+    if (NAV_DELAY_MS > 0) document.getElementById("loadingOverlay").style.display = "flex";
     setTimeout(() => {
         window.switchView('view-proposals');
         const c = document.getElementById("proposalsContainer");
@@ -1459,7 +1484,7 @@ window.openProposalsView = () => {
             </div>`;
         });
         document.getElementById("loadingOverlay").style.display = "none";
-    }, 0);
+    }, NAV_DELAY_MS);
 };
 window.acceptProposal=(id)=>window.confirmModal("Approvare?",async()=>{const p=allProposals.find(x=>x.id===id);await addDoc(collection(db,"songs"),{title:p.title,author:p.author,category:p.category,lyrics:p.lyrics,chords:window.extractChords(p.lyrics)});await deleteDoc(doc(db,"proposals",id));showToast("Approvata!",'success');await loadProposals();loadData();window.openProposalsView();});
 window.rejectProposal=(id)=>window.confirmModal("Rifiutare?",async()=>{await deleteDoc(doc(db,"proposals",id));await loadProposals();window.openProposalsView();});
@@ -1608,13 +1633,14 @@ window.processTxtImport = () => {
 const normalizeStr = (str) => str ? str.trim().toLowerCase() : "";
 function checkTitleDuplicate(title, excludeId = null) { const cleanTitle = normalizeStr(title); return allSongs.some(s => { if (excludeId && s.id === excludeId) return false; return normalizeStr(s.title) === cleanTitle; }); }
 window.openSetlistsView = () => { 
+    if (NAV_DELAY_MS > 0) document.getElementById("loadingOverlay").style.display = "flex";
     setTimeout(() => {
         switchView('view-setlists'); 
         window.renderSetlistsList(); 
         document.getElementById('activeSetlistDetail').style.display = 'none'; 
         currentSetlistId = null; 
         document.getElementById("loadingOverlay").style.display = "none";
-    }, 0);
+    }, NAV_DELAY_MS);
 };
 window.renderSetlistsList = () => {
     const c = document.getElementById("setlistsContainer"); c.innerHTML = "";
@@ -1651,8 +1677,12 @@ window.confirmCreateSetlist = async () => {
     }
 };
 window.openSetlistDetail = (id) => {
+    if (!isFirstLoad && NAV_DELAY_MS > 0) {
+        document.getElementById("loadingOverlay").style.display = "flex";
+        startLoaderAnimation();
+    }
     
-    const waitTime = 0; // prima c'era un'attesa artificiale di 300 ms a ogni click
+    const waitTime = isFirstLoad ? 0 : NAV_DELAY_MS;
 
     setTimeout(() => {
         currentSetlistId = id;
@@ -2472,7 +2502,7 @@ window.createNewSection = async () => {
     }
 };
 window.openExportView = () => {
-
+    if (NAV_DELAY_MS > 0) document.getElementById("loadingOverlay").style.display = "flex";
     setTimeout(() => {
         switchView('view-export');
         
@@ -2490,7 +2520,7 @@ window.openExportView = () => {
 
         window.renderExportList();
         document.getElementById("loadingOverlay").style.display = "none";
-    }, 0);
+    }, NAV_DELAY_MS);
 };
 window.createNewSetlistPrompt = () => {
     // Pulisce l'input
@@ -3160,26 +3190,29 @@ function renderSongDoctor() {
 }
 
 // Peso delle copertine delle sezioni (scaricate a ogni apertura dell'app)
-const HEAVY_COVER = 150000; // caratteri base64, circa 110 KB
+const HEAVY_COVER = 400000; // caratteri base64, circa 300 KB
+const coversAlreadyCompressed = new Set(); // per non ricomprimere la stessa foto (perderebbe qualità a ogni giro)
+const heavyCovers = () => allSections.filter(s => (s.coverUrl || "").startsWith("data:") && s.coverUrl.length > HEAVY_COVER && !coversAlreadyCompressed.has(s.id));
 function renderDoctorCovers() {
     const box = document.getElementById("doctorCovers");
     if (!box) return;
     const total = allSections.reduce((t, s) => t + (s.coverUrl || "").length, 0);
-    const heavy = allSections.filter(s => (s.coverUrl || "").startsWith("data:") && s.coverUrl.length > HEAVY_COVER);
+    const heavy = heavyCovers();
     const kb = Math.round(total * 0.75 / 1024);
     box.innerHTML = `<i class="bi bi-image me-1"></i> Copertine sezioni: <strong>${kb} KB</strong> scaricati a ogni apertura` +
         (heavy.length ? ` <button class="btn btn-sm btn-outline-warning ms-2" onclick="window.compressSectionCovers()">Comprimi ${heavy.length === 1 ? "1 copertina pesante" : heavy.length + " copertine pesanti"}</button>` : ` <span class="text-success ms-1">ok</span>`);
 }
 
 window.compressSectionCovers = () => {
-    const heavy = allSections.filter(s => (s.coverUrl || "").startsWith("data:") && s.coverUrl.length > HEAVY_COVER);
+    const heavy = heavyCovers();
     if (!heavy.length) return;
-    window.confirmModal(`Ridimensionare ${heavy.length} copertine (max 800 px, JPEG)? Si vedranno uguali ma l'app si aprirà più in fretta.`, async () => {
+    window.confirmModal(`Ridimensionare ${heavy.length} copertine (max 1200 px)? Si vedranno uguali, anche nell'export PDF, ma l'app si aprirà più in fretta.`, async () => {
         document.getElementById("loadingOverlay").style.display = "flex";
         try {
             for (const sec of heavy) {
                 const small = await compressImageToDataUrl(sec.coverUrl);
-                if (small.length < sec.coverUrl.length) {
+                coversAlreadyCompressed.add(sec.id);
+                if (small.length < sec.coverUrl.length * 0.9) {
                     await updateDoc(doc(db, "sections", sec.id), { coverUrl: small });
                     sec.coverUrl = small;
                 }

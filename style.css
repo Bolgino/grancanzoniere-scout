@@ -69,11 +69,20 @@ body {
 
 /* Card e Liste */
 .card, .list-group-item, .category-card {
-    /* Niente backdrop-filter qui: con decine di righe sopra lo sfondo di stelle animate il telefono
-       doveva rifare la sfocatura di ogni riga a ogni fotogramma. Sfondo un po' più coprente al suo posto. */
-    background-color: rgba(30, 30, 30, 0.88) !important;
+    background-color: rgba(30, 30, 30, 0.7) !important; /* Scuro semitrasparente */
     border: 1px solid var(--border-color) !important;
     color: #fff !important;
+    backdrop-filter: blur(5px);
+}
+
+/* Telefono: niente sfocatura sotto le righe delle liste e i risultati della ricerca (sono decine e
+   scorrono sopra le stelle animate: il telefono rifaceva la sfocatura di ognuna a ogni fotogramma).
+   Sfondo un po' più coprente per compensare. Card delle sezioni e computer restano come prima. */
+@media (max-width: 768px) {
+    .list-group-item, #categoriesContainer .card {
+        backdrop-filter: none;
+        background-color: rgba(30, 30, 30, 0.88) !important;
+    }
 }
 
 .list-group-item:hover, .category-card:hover {
