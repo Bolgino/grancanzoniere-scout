@@ -75,6 +75,16 @@ body {
     backdrop-filter: blur(5px);
 }
 
+/* Telefono: niente sfocatura sotto le righe delle liste e i risultati della ricerca (sono decine e
+   scorrono sopra le stelle animate: il telefono rifaceva la sfocatura di ognuna a ogni fotogramma).
+   Sfondo un po' più coprente per compensare. Card delle sezioni e computer restano come prima. */
+@media (max-width: 768px) {
+    .list-group-item, #categoriesContainer .card {
+        backdrop-filter: none;
+        background-color: rgba(30, 30, 30, 0.88) !important;
+    }
+}
+
 .list-group-item:hover, .category-card:hover {
     background-color: rgba(50, 50, 50, 0.9) !important;
     transform: translateY(-2px);
@@ -145,6 +155,8 @@ input::placeholder, textarea::placeholder { color: #888 !important; }
     margin: 0;              
 }
 .hide-chords .chord-span { display: none; }
+/* Accordi fuori tonalità (Controllo Canzoni, solo admin) */
+.chord-suspect { color: #ff6b6b !important; text-decoration: underline wavy #ff6b6b; }
 
 /* Box note editor */
 #editorMeta {

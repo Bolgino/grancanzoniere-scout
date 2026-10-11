@@ -2,6 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebas
 import { getFirestore, collection, getDocs, doc, updateDoc, addDoc, deleteDoc, writeBatch, arrayUnion, arrayRemove, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, inMemoryPersistence } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 import { extractChords, normalizeChord, transposeChord } from "./music-utils.js";
+import { scanSongs, fixLyrics, describeChanges, isAutoFixable, ISSUES, suspiciousChords, tidyChord } from "./song-doctor.js";
 
 // --- 1. FUNZIONI DI UTILITÀ ---
 function debounce(func, wait) {
@@ -10,6 +11,28 @@ function debounce(func, wait) {
         clearTimeout(timeout);
         timeout = setTimeout(() => func.apply(this, args), wait);
     };
+}
+
+// Evita che un titolo o un testo con "<...>" venga eseguito come HTML (es. proposte degli ospiti)
+function escapeHtml(str) {
+    return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                            .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+window.escapeHtml = escapeHtml;
+
+// Unico renderer del testo con accordi (editor, proposta, revisione): costruisce la stringa e la scrive una volta sola
+// suspects: accordi fuori tonalità da sottolineare in rosso (solo per admin)
+function lyricsToHtml(txt, transpose = 0, chordStyle = "", suspects = null) {
+    return (txt || "").split("\n").map(l => {
+        let line = escapeHtml(l)
+            .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+            .replace(/__(.*?)__/g, '<i>$1</i>')
+            .replace(/\[(.*?)\]/g, (m, p1) => {
+                const bad = suspects && suspects.has(tidyChord(p1));
+                return `<span class="chord-span${bad ? ' chord-suspect' : ''}"${bad ? ' title="Fuori tonalità: controlla"' : chordStyle}>${transposeChord(normalizeChord(p1), transpose)}</span>`;
+            });
+        return `<div>${line || '&nbsp;'}</div>`;
+    }).join("");
 }
 
 // --- 2. DEFINIZIONE DELLA RICERCA ---
@@ -53,6 +76,11 @@ let targetMergeSongId = null;
 let mDuplicateWarning; // Variabile per il modale
 let pendingMergeData = null;
 let isFirstLoad = true;// Dove salviamo i dati in attesa di conferma
+const APP_START = performance.now();
+// Attesa con frase del loader quando si cambia schermata. Prima era 300 ms a ogni click.
+// 0 = schermate istantanee: le frasi compaiono comunque mentre si ricaricano i dati (loadData).
+// Rimetti 300 per riavere la frase anche a ogni click.
+const NAV_DELAY_MS = 0;
 let currentRenderLimit = 30;
 let currentRenderList = [];
 // Loader phrases
@@ -204,7 +232,6 @@ enableIndexedDbPersistence(db)
               if(infoProp) infoProp.style.display = 'none';
               if(propField) propField.style.display = 'none';
               if(prevCol) prevCol.className = "col-md-7";
-              loadProposals();
           } else {
               if(btnAddTxt) btnAddTxt.innerText = 'Proponi Canzone';
               if(btnSubmit) btnSubmit.innerText = 'Invia Proposta';
@@ -224,23 +251,33 @@ enableIndexedDbPersistence(db)
               }
           }
 
-          loadData();
+          // Le proposte dopo le canzoni: al superadmin servono le canzoni già caricate per il conteggio
+          loadData().then(() => { if (isAdmin) loadProposals(); });
       });
   });
 window.loadData = loadData;
 async function loadData() {
+    const reloadStart = performance.now();
+    // Ricaricamenti successivi (dopo un salvataggio, un login...): frase random mentre arrivano i dati
+    if (!isFirstLoad) {
+        const ov = document.getElementById("loadingOverlay");
+        if (ov) { ov.style.display = "flex"; startLoaderAnimation(); }
+    }
     try {
-        const secSnap = await getDocs(collection(db, "sections"));
+        // Le tre letture partono insieme invece che una dopo l'altra
+        const [secSnap, songSnap, setlistSnap] = await Promise.all([
+            getDocs(collection(db, "sections")),
+            getDocs(collection(db, "songs")),
+            getDocs(collection(db, "setlists"))
+        ]);
         allSections = [];
         secSnap.forEach(d => allSections.push({id: d.id, ...d.data()}));
-        
-        const songSnap = await getDocs(collection(db, "songs"));
+
         allSongs = [];
         songSnap.forEach(d => {
             if(!d.data().title.startsWith("Info")) allSongs.push({id: d.id, ...d.data()})
         });
         
-        const setlistSnap = await getDocs(collection(db, "setlists"));
         allSetlists = [];
         setlistSnap.forEach(d => allSetlists.push({id: d.id, ...d.data()}));
         allSetlists.sort((a,b) => a.name.localeCompare(b.name));
@@ -288,7 +325,10 @@ async function loadData() {
             if(loader) {
                 // Il tempo torna a 2000ms per dare il tempo alla scritta di finire
                 // Scompare appena l'animazione ha finito di scrivere
-                let displayDuration = isFirstLoad ? 1500 : 50;
+                // Prima: +1,5 s DOPO l'arrivo dei dati. Ora: l'animazione dura al massimo 1,3 s dall'apertura,
+                // e se i dati arrivano più tardi non si aggiunge altra attesa
+                let displayDuration = isFirstLoad ? Math.max(0, 1300 - (performance.now() - APP_START))
+                                                  : Math.max(0, 300 - (performance.now() - reloadStart)); // la frase resta leggibile
                 
                 setTimeout(() => {
                     loader.style.display = "none";
@@ -319,15 +359,14 @@ async function loadProposals() {
 }
 
 window.renderDashboard = () => {
-    // SE NON È IL PRIMO AVVIO: Mostra overlay e frase random
-    if (!isFirstLoad) {
+    // SE NON È IL PRIMO AVVIO: Mostra overlay e frase random (solo se NAV_DELAY_MS > 0)
+    if (!isFirstLoad && NAV_DELAY_MS > 0) {
         document.getElementById("loadingOverlay").style.display = "flex";
         startLoaderAnimation(); 
     }
 
     // Se è il primo avvio, renderizziamo subito (tempo 0) sotto lo schermo nero.
-    // Se sono click successivi, aspettiamo 1.5 secondi per leggere la frase.
-    const waitTime = isFirstLoad ? 0 : 300;
+    const waitTime = isFirstLoad ? 0 : NAV_DELAY_MS;
 
     setTimeout(() => {
         switchView('view-dashboard');
@@ -410,11 +449,12 @@ window.renderDashboard = () => {
     }, waitTime);
 };
 window.performGlobalSearch = () => {
-    const q = document.getElementById('globalSearch').value.toLowerCase();
+    // Ignora accenti e punteggiatura: "perche" trova "Perché"
+    const q = robustNormalize(document.getElementById('globalSearch').value);
     if (!q) { window.renderDashboard(); return; }
-    
+
     // Trova TUTTI i risultati
-    const allRes = allSongs.filter(s => s.title.toLowerCase().includes(q) || (s.author && s.author.toLowerCase().includes(q)));
+    const allRes = allSongs.filter(s => robustNormalize(s.title + " " + (s.author || "")).includes(q));
     document.getElementById("favoritesSection").style.display = 'none';
     
     // Taglia l'array per mostrare solo i primi 30 risultati
@@ -447,8 +487,8 @@ window.performGlobalSearch = () => {
         return `<div class="col-12"><div class="card shadow-sm border-0" onclick="window.openEditor('${s.id}')" style="cursor:pointer">
             <div class="card-body d-flex justify-content-between align-items-center">
                 <div>
-                    <h6 class="fw-bold mb-0">${s.title} ${badgeHtml} ${transBadge}</h6>
-                    <small>${s.author} <span class="badge bg-light text-dark ms-2">${s.category}</span></small>
+                    <h6 class="fw-bold mb-0">${escapeHtml(s.title)} ${badgeHtml} ${transBadge}</h6>
+                    <small>${escapeHtml(s.author || '')} <span class="badge bg-light text-dark ms-2">${escapeHtml(s.category)}</span></small>
                 </div>
                 <i class="bi bi-chevron-right text-muted"></i>
             </div>
@@ -466,12 +506,12 @@ window.performGlobalSearch = () => {
     document.getElementById("categoriesContainer").innerHTML = htmlContent;
 };
 window.openList = (cat) => {
-    if (!isFirstLoad) {
+    if (!isFirstLoad && NAV_DELAY_MS > 0) {
         document.getElementById("loadingOverlay").style.display = "flex";
         startLoaderAnimation();
     }
     
-    const waitTime = isFirstLoad ? 0 : 300;
+    const waitTime = isFirstLoad ? 0 : NAV_DELAY_MS;
 
     setTimeout(() => {
         currentSetlistId = null;
@@ -494,8 +534,8 @@ window.openList = (cat) => {
     }, waitTime);
 };
 window.filterSectionList = () => {
-    const q=document.getElementById("sectionSearchBox").value.toLowerCase();
-    window.renderList(allSongs.filter(s=>s.category===currentCategory && (s.title.toLowerCase().includes(q) || (s.author&&s.author.toLowerCase().includes(q)))));
+    const q = robustNormalize(document.getElementById("sectionSearchBox").value);
+    window.renderList(allSongs.filter(s => s.category === currentCategory && robustNormalize(s.title + " " + (s.author || "")).includes(q)));
 };
 
 window.renderList = (songs, isAppending = false) => {
@@ -537,8 +577,8 @@ window.renderList = (songs, isAppending = false) => {
         htmlContent += `
             <button class="list-group-item list-group-item-action p-3 border-0 mb-1 rounded shadow-sm" onclick="window.openEditor('${s.id}')">
                 <div class="d-flex w-100 justify-content-between align-items-center">
-                    <div><h6 class="mb-1 fw-bold">${s.title} ${badgeHtml} ${transBadge}</h6></div>
-                    <small class="text-muted">${s.author || ''}</small>
+                    <div><h6 class="mb-1 fw-bold">${escapeHtml(s.title)} ${badgeHtml} ${transBadge}</h6></div>
+                    <small class="text-muted">${escapeHtml(s.author || '')}</small>
                 </div>
             </button>`;
     });
@@ -570,11 +610,12 @@ window.loadMoreSongs = () => {
     window.renderList(currentRenderList, true);
 };
 window.openEditor = (id) => {
-    document.getElementById("loadingOverlay").style.display = "flex";
+    if (NAV_DELAY_MS > 0) document.getElementById("loadingOverlay").style.display = "flex";
 
     setTimeout(() => {
         currentSongId=id; 
         const s=allSongs.find(x=>x.id===id);
+        if (!s) { document.getElementById("loadingOverlay").style.display = "none"; return showToast("Canzone non trovata", "warning"); }
         switchView('view-editor');
         window.scrollTo(0, 0);
         document.getElementById("editorTitle").innerText=s.title;
@@ -598,24 +639,23 @@ window.openEditor = (id) => {
         window.renderPreview();
         if (autoScrollInterval) window.toggleAutoScroll();
 
+        // Se la canzone ha accordi/testo da sistemare, il bottone Auto-correggi diventa giallo
+        const btnFix = document.getElementById("btnAutoFix");
+        if (btnFix) {
+            const needsFix = isAdmin && isAutoFixable(s);
+            btnFix.classList.toggle("btn-warning", needsFix);
+            btnFix.classList.toggle("btn-outline-dark", !needsFix);
+        }
+
         document.getElementById("loadingOverlay").style.display = "none";
-    }, 300);
+    }, NAV_DELAY_MS);
 };
 
 window.renderPreview = () => {
     const txt = document.getElementById("lyricsEditor").value;
-    const div = document.getElementById("previewArea"); 
-    div.innerHTML = ""; 
+    const div = document.getElementById("previewArea");
     div.style.fontSize = currentFontSize + 'px';
-    
-    txt.split("\n").forEach(l => {
-        let formattedLine = l.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
-                             .replace(/__(.*?)__/g, '<i>$1</i>');
-        let pl = formattedLine.replace(/\[(.*?)\]/g, (m, p1) => 
-            `<span class="chord-span">${transposeChord(normalizeChord(p1), currentTranspose)}</span>`
-        );
-        div.innerHTML += `<div>${pl || '&nbsp;'}</div>`;
-    });
+    div.innerHTML = lyricsToHtml(txt, currentTranspose, "", isAdmin ? suspiciousChords(txt) : null);
 };
 
 window.handleSongSubmission = async () => {
@@ -713,9 +753,10 @@ window.handleSongSubmission = async () => {
     } catch(e) { 
         console.error(e); 
         showToast("Errore: " + e.message, 'danger');
-    } finally { 
-        document.getElementById("loadingOverlay").style.display = "none"; 
-        loadData(); 
+    } finally {
+        document.getElementById("loadingOverlay").style.display = "none";
+        // Niente loadData() qui: la canzone nuova è già stata aggiunta ad allSongs,
+        // ricaricare tutto il canzoniere costava N letture e riportava alla lista mentre eri nell'editor
     }
 };
 
@@ -1158,6 +1199,26 @@ window.generateFullLatex = () => {
 // UTILS & EXTRAS
 const fileToBase64 = file => new Promise((resolve, reject) => { const r = new FileReader(); r.readAsDataURL(file); r.onload = () => resolve(r.result); r.onerror = error => reject(error); });
 
+// Le copertine delle sezioni finiscono DENTRO il documento Firestore e vengono scaricate a ogni apertura
+// dell'app (e un documento Firestore non può superare 1 MB: una foto del telefono non ci sta nemmeno).
+// Le ridimensiono a max 1200 px: per l'export PDF in A5 sono ancora ~200 dpi.
+// Le PNG restano PNG (trasparenza intatta), le foto diventano JPEG.
+const compressImageToDataUrl = (fileOrDataUrl, maxSide = 1200, quality = 0.82) => new Promise((resolve, reject) => {
+    const isPng = typeof fileOrDataUrl === "string" ? fileOrDataUrl.startsWith("data:image/png") : fileOrDataUrl.type === "image/png";
+    const img = new Image();
+    img.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * scale);
+        c.height = Math.round(img.height * scale);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        resolve(isPng ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = reject;
+    if (typeof fileOrDataUrl === "string") img.src = fileOrDataUrl;
+    else fileToBase64(fileOrDataUrl).then(u => { img.src = u; }, reject);
+});
+
 window.openLoginModal=()=>mLogin.show();
 
 function manageDynamicBackgrounds() {
@@ -1251,7 +1312,7 @@ window.previewCoverFile = () => {
     const f = fileInput.files[0];
     if (f) { const r = new FileReader(); r.onload = e => { const img = document.getElementById("coverPreviewImg"); img.src = e.target.result; img.style.display = 'block'; }; r.readAsDataURL(f); }
 };
-window.saveSectionSettings=async()=>{const n=document.getElementById("editSectionNameInput").value;const f=document.getElementById("coverFileInput").files[0];document.getElementById("loadingOverlay").style.display="flex";try{let u=currentCoverUrl;if(f)u=await fileToBase64(f);if(n!==currentCategory){const b=writeBatch(db);b.update(doc(db,"sections",editingSectionId),{name:n,coverUrl:u});allSongs.filter(s=>s.category===currentCategory).forEach(s=>b.update(doc(db,"songs",s.id),{category:n}));await b.commit();}else{await updateDoc(doc(db,"sections",editingSectionId),{coverUrl:u});}mEditSection.hide();showToast("Salvato");loadData();}catch(e){showToast(e.message,'danger');}finally{document.getElementById("loadingOverlay").style.display="none";}};
+window.saveSectionSettings=async()=>{const n=document.getElementById("editSectionNameInput").value;const f=document.getElementById("coverFileInput").files[0];document.getElementById("loadingOverlay").style.display="flex";try{let u=currentCoverUrl;if(f)u=await compressImageToDataUrl(f);if(n!==currentCategory){const b=writeBatch(db);b.update(doc(db,"sections",editingSectionId),{name:n,coverUrl:u});allSongs.filter(s=>s.category===currentCategory).forEach(s=>b.update(doc(db,"songs",s.id),{category:n}));await b.commit();}else{await updateDoc(doc(db,"sections",editingSectionId),{coverUrl:u});}mEditSection.hide();showToast("Salvato");loadData();}catch(e){showToast(e.message,'danger');}finally{document.getElementById("loadingOverlay").style.display="none";}};
 window.triggerDeleteSection = (id, name) => {
     if (!isSuperAdmin) return window.showToast("Non hai i permessi per eliminare.", "danger"); // NUOVA RIGA
     // 1. Controllo di sicurezza
@@ -1371,8 +1432,7 @@ window.saveSongMetadata = async () => {
     } catch (e) { showToast("Errore salvataggio: " + e.message, "danger"); } finally { document.getElementById("loadingOverlay").style.display = "none"; }
 };
 window.openProposalsView = () => {
-    document.getElementById("loadingOverlay").style.display = "flex";
-    
+    if (NAV_DELAY_MS > 0) document.getElementById("loadingOverlay").style.display = "flex";
     setTimeout(() => {
         window.switchView('view-proposals');
         const c = document.getElementById("proposalsContainer");
@@ -1411,11 +1471,11 @@ window.openProposalsView = () => {
             <div class="card mb-3 shadow-sm border-secondary" style="background: #222;">
                 <div class="card-body d-flex justify-content-between align-items-center">
                     <div class="overflow-hidden">
-                        <h5 class="fw-bold mb-1 text-white">${p.title} ${badge}</h5>
+                        <h5 class="fw-bold mb-1 text-white">${escapeHtml(p.title)} ${badge}</h5>
                         <small class="text-muted d-block text-truncate">
-                            ${authorText} &bull; ${p.category}
+                            ${escapeHtml(authorText)} &bull; ${escapeHtml(p.category)}
                         </small>
-                        <small class="text-secondary fst-italic">Proposto da: ${p.proposer || (p._isSongReview ? 'Admin' : 'Anonimo')}</small>
+                        <small class="text-secondary fst-italic">Proposto da: ${escapeHtml(p.proposer || (p._isSongReview ? 'Admin' : 'Anonimo'))}</small>
                     </div>
                     <div class="d-flex gap-2 flex-shrink-0">
                         ${actions}
@@ -1424,7 +1484,7 @@ window.openProposalsView = () => {
             </div>`;
         });
         document.getElementById("loadingOverlay").style.display = "none";
-    }, 300);
+    }, NAV_DELAY_MS);
 };
 window.acceptProposal=(id)=>window.confirmModal("Approvare?",async()=>{const p=allProposals.find(x=>x.id===id);await addDoc(collection(db,"songs"),{title:p.title,author:p.author,category:p.category,lyrics:p.lyrics,chords:window.extractChords(p.lyrics)});await deleteDoc(doc(db,"proposals",id));showToast("Approvata!",'success');await loadProposals();loadData();window.openProposalsView();});
 window.rejectProposal=(id)=>window.confirmModal("Rifiutare?",async()=>{await deleteDoc(doc(db,"proposals",id));await loadProposals();window.openProposalsView();});
@@ -1493,6 +1553,8 @@ window.addEventListener('popstate', (event) => {
         // Ricarica i dati necessari per la vista
         if (event.state.view === 'view-list' && currentCategory) {
             window.renderList(allSongs.filter(s => s.category === currentCategory));
+        } else if (event.state.view === 'view-doctor') {
+            refreshDoctor(); // dopo aver corretto una canzone la lista si aggiorna
         } else if (event.state.view === 'view-setlists') {
             if (currentSetlistId) {
                 document.getElementById('activeSetlistDetail').style.display = 'block';
@@ -1546,7 +1608,7 @@ window.processTxtImport = () => {
     const reader = new FileReader();
     reader.onload = async (e) => {
         const text = e.target.result; const lines = text.split('\n'); document.getElementById("loadingOverlay").style.display = "flex";
-        const batch = writeBatch(db); let operationCount = 0; let currentSectionName = "Generale"; const processedSections = new Set(allSections.map(s => s.name));
+        let batch = writeBatch(db); let operationCount = 0; let currentSectionName = "Generale"; const processedSections = new Set(allSections.map(s => s.name));
         try {
             for (let line of lines) {
                 line = line.trim(); if (!line) continue;
@@ -1561,7 +1623,7 @@ window.processTxtImport = () => {
                     if (rawContent.includes("- Autore:")) { const split = rawContent.split("- Autore:"); title = split[0].trim(); author = split[1].trim(); }
                     batch.set(doc(collection(db, "songs")), { title: title, author: author, category: currentSectionName, lyrics: "", chords: [], added: true, year: "", description: "" }); operationCount++;
                 }
-                if (operationCount >= 450) { await batch.commit(); operationCount = 0; }
+                if (operationCount >= 450) { await batch.commit(); batch = writeBatch(db); operationCount = 0; } // un batch già inviato non si può riusare
             }
             if (operationCount > 0) await batch.commit(); showToast("Importazione completata!", "success"); loadData(); 
         } catch (error) { showToast("Errore import: " + error.message, "danger"); } finally { document.getElementById("loadingOverlay").style.display = "none"; fileInput.value = ""; }
@@ -1571,14 +1633,14 @@ window.processTxtImport = () => {
 const normalizeStr = (str) => str ? str.trim().toLowerCase() : "";
 function checkTitleDuplicate(title, excludeId = null) { const cleanTitle = normalizeStr(title); return allSongs.some(s => { if (excludeId && s.id === excludeId) return false; return normalizeStr(s.title) === cleanTitle; }); }
 window.openSetlistsView = () => { 
-    document.getElementById("loadingOverlay").style.display = "flex";
+    if (NAV_DELAY_MS > 0) document.getElementById("loadingOverlay").style.display = "flex";
     setTimeout(() => {
         switchView('view-setlists'); 
         window.renderSetlistsList(); 
         document.getElementById('activeSetlistDetail').style.display = 'none'; 
         currentSetlistId = null; 
         document.getElementById("loadingOverlay").style.display = "none";
-    }, 300);
+    }, NAV_DELAY_MS);
 };
 window.renderSetlistsList = () => {
     const c = document.getElementById("setlistsContainer"); c.innerHTML = "";
@@ -1615,12 +1677,12 @@ window.confirmCreateSetlist = async () => {
     }
 };
 window.openSetlistDetail = (id) => {
-    if (!isFirstLoad) {
+    if (!isFirstLoad && NAV_DELAY_MS > 0) {
         document.getElementById("loadingOverlay").style.display = "flex";
         startLoaderAnimation();
     }
     
-    const waitTime = isFirstLoad ? 0 : 300;
+    const waitTime = isFirstLoad ? 0 : NAV_DELAY_MS;
 
     setTimeout(() => {
         currentSetlistId = id;
@@ -2413,12 +2475,7 @@ window.createNewSection = async () => {
     try {
         let coverUrl = "";
         if (fileInput.files.length > 0) {
-            coverUrl = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(fileInput.files[0]);
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = error => reject(error);
-            });
+            coverUrl = await compressImageToDataUrl(fileInput.files[0]);
         }
 
         // Calcola ordine (in fondo alla lista)
@@ -2445,8 +2502,7 @@ window.createNewSection = async () => {
     }
 };
 window.openExportView = () => {
-    document.getElementById("loadingOverlay").style.display = "flex";
-
+    if (NAV_DELAY_MS > 0) document.getElementById("loadingOverlay").style.display = "flex";
     setTimeout(() => {
         switchView('view-export');
         
@@ -2464,7 +2520,7 @@ window.openExportView = () => {
 
         window.renderExportList();
         document.getElementById("loadingOverlay").style.display = "none";
-    }, 300);
+    }, NAV_DELAY_MS);
 };
 window.createNewSetlistPrompt = () => {
     // Pulisce l'input
@@ -2529,18 +2585,8 @@ window.openProposeView = () => {
 window.renderProposePreview = () => {
     const txt = document.getElementById("propLyrics").value;
     const div = document.getElementById("propPreviewArea");
-    div.innerHTML = "";
-    
     // Usa la stessa logica di rendering dell'editor principale
-    txt.split("\n").forEach(l => {
-        let formattedLine = l.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
-                             .replace(/__(.*?)__/g, '<i>$1</i>');
-        
-        let pl = formattedLine.replace(/\[(.*?)\]/g, (m, p1) => 
-            `<span class="chord-span">${transposeChord(normalizeChord(p1), 0)}</span>`
-        );
-        div.innerHTML += `<div>${pl || '&nbsp;'}</div>`;
-    });
+    div.innerHTML = lyricsToHtml(txt, 0);
 };
 // Variabile temporanea per sapere quale ID stiamo modificando
 let currentReviewId = null;
@@ -2612,19 +2658,8 @@ window.openProposalEditor = (id) => {
 window.renderReviewPreview = () => {
     const txt = document.getElementById("reviewLyrics").value;
     const div = document.getElementById("reviewPreviewArea");
-    div.innerHTML = "";
-    
-    // Logica di formattazione (Grassetto, Corsivo, Accordi)
-    txt.split("\n").forEach(l => {
-        let formattedLine = l.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
-                             .replace(/__(.*?)__/g, '<i>$1</i>');
-        
-        // Evidenzia accordi
-        let pl = formattedLine.replace(/\[(.*?)\]/g, (m, p1) => 
-            `<span class="chord-span" style="color: #ff85c0; font-weight:bold;">${transposeChord(normalizeChord(p1), 0)}</span>`
-        );
-        div.innerHTML += `<div>${pl || '&nbsp;'}</div>`;
-    });
+    // Stessa logica dell'editor, accordi evidenziati in rosa
+    div.innerHTML = lyricsToHtml(txt, 0, ' style="color: #ff85c0; font-weight:bold;"', suspiciousChords(txt));
 };
 
 // 3. SALVA E APPROVA (Crea canzone e cancella proposta)
@@ -3087,3 +3122,200 @@ const robustNormalize = (str) => {
               .trim();
 };
 
+// =====================================================================
+// CONTROLLO CANZONI (solo admin): trova e corregge testi/accordi sbagliati
+// Lavora su allSongs già in memoria, quindi la scansione non costa letture Firestore.
+// =====================================================================
+let doctorReport = null;
+let doctorFilter = "chords-above";
+const DOCTOR_MAX_ROWS = 200;
+
+function refreshDoctor() {
+    doctorReport = scanSongs(allSongs);
+    renderSongDoctor();
+}
+
+window.openSongDoctorView = () => {
+    if (!isAdmin) return;
+    window.switchView('view-doctor');
+    doctorReport = scanSongs(allSongs);
+    if (!doctorReport[doctorFilter] || doctorReport[doctorFilter].length === 0) {
+        const first = Object.keys(ISSUES).find(k => doctorReport[k].length > 0);
+        if (first) doctorFilter = first;
+    }
+    renderSongDoctor();
+};
+
+window.setDoctorFilter = (code) => { doctorFilter = code; renderSongDoctor(); };
+
+function renderSongDoctor() {
+    const chips = document.getElementById("doctorChips");
+    const list = document.getElementById("doctorList");
+    if (!chips || !list || !doctorReport) return;
+
+    chips.innerHTML = Object.entries(ISSUES).map(([code, info]) => {
+        const n = doctorReport[code].length;
+        const cls = code === doctorFilter ? "btn-warning" : (n ? "btn-outline-light" : "btn-outline-secondary");
+        return `<button class="btn btn-sm ${cls}" onclick="window.setDoctorFilter('${code}')">${escapeHtml(info.label)} <span class="badge bg-dark ms-1">${n}</span></button>`;
+    }).join("");
+
+    const info = ISSUES[doctorFilter];
+    const items = doctorReport[doctorFilter].slice().sort((a, b) => (a.song.title || "").localeCompare(b.song.title || ""));
+    let html = `<div class="small text-white-50 mb-2">${escapeHtml(info.hint)}</div>`;
+
+    if (info.fixable && items.length) {
+        const n = items.filter(x => isAutoFixable(x.song)).length;
+        html += `<button class="btn btn-success btn-sm fw-bold mb-3" onclick="window.batchAutoFix('${doctorFilter}')">
+                    <i class="bi bi-magic me-1"></i> Correggi automaticamente tutte (${n})
+                 </button>`;
+    }
+
+    if (!items.length) {
+        html += `<div class="text-center text-muted mt-4">Nessuna canzone in questa categoria.</div>`;
+    } else {
+        html += items.slice(0, DOCTOR_MAX_ROWS).map(({ song, detail }) => `
+            <button class="list-group-item list-group-item-action p-3 border-0 mb-1 rounded" onclick="window.openEditor('${song.id}')">
+                <div class="d-flex justify-content-between align-items-center gap-2">
+                    <div class="text-truncate"><strong>${escapeHtml(song.title)}</strong>
+                        <small class="text-muted ms-1">${escapeHtml(song.category || "")}</small></div>
+                    <small class="text-warning text-nowrap">${escapeHtml(detail)}</small>
+                </div>
+            </button>`).join("");
+        if (items.length > DOCTOR_MAX_ROWS) {
+            html += `<div class="text-center text-muted small my-3">Mostrate le prime ${DOCTOR_MAX_ROWS} di ${items.length}.</div>`;
+        }
+    }
+    list.innerHTML = html;
+    renderDoctorCovers();
+}
+
+// Peso delle copertine delle sezioni (scaricate a ogni apertura dell'app)
+const HEAVY_COVER = 400000; // caratteri base64, circa 300 KB
+const coversAlreadyCompressed = new Set(); // per non ricomprimere la stessa foto (perderebbe qualità a ogni giro)
+const heavyCovers = () => allSections.filter(s => (s.coverUrl || "").startsWith("data:") && s.coverUrl.length > HEAVY_COVER && !coversAlreadyCompressed.has(s.id));
+function renderDoctorCovers() {
+    const box = document.getElementById("doctorCovers");
+    if (!box) return;
+    const total = allSections.reduce((t, s) => t + (s.coverUrl || "").length, 0);
+    const heavy = heavyCovers();
+    const kb = Math.round(total * 0.75 / 1024);
+    box.innerHTML = `<i class="bi bi-image me-1"></i> Copertine sezioni: <strong>${kb} KB</strong> scaricati a ogni apertura` +
+        (heavy.length ? ` <button class="btn btn-sm btn-outline-warning ms-2" onclick="window.compressSectionCovers()">Comprimi ${heavy.length === 1 ? "1 copertina pesante" : heavy.length + " copertine pesanti"}</button>` : ` <span class="text-success ms-1">ok</span>`);
+}
+
+window.compressSectionCovers = () => {
+    const heavy = heavyCovers();
+    if (!heavy.length) return;
+    window.confirmModal(`Ridimensionare ${heavy.length} copertine (max 1200 px)? Si vedranno uguali, anche nell'export PDF, ma l'app si aprirà più in fretta.`, async () => {
+        document.getElementById("loadingOverlay").style.display = "flex";
+        try {
+            for (const sec of heavy) {
+                const small = await compressImageToDataUrl(sec.coverUrl);
+                coversAlreadyCompressed.add(sec.id);
+                if (small.length < sec.coverUrl.length * 0.9) {
+                    await updateDoc(doc(db, "sections", sec.id), { coverUrl: small });
+                    sec.coverUrl = small;
+                }
+            }
+            showToast("Copertine compresse", "success");
+        } catch (e) {
+            showToast("Errore compressione: " + e.message, "danger");
+        } finally {
+            document.getElementById("loadingOverlay").style.display = "none";
+            renderDoctorCovers();
+        }
+    });
+};
+
+// Bottone "Auto-correggi" nell'editor: corregge il testo aperto, NON salva (controlli l'anteprima e premi Salva)
+window.autoFixCurrentSong = () => {
+    const ta = document.getElementById("lyricsEditor");
+    const { text, changes } = fixLyrics(ta.value);
+    if (text === ta.value) return showToast("Niente da correggere in questa canzone", "info");
+
+    ta.focus();
+    ta.select();
+    // insertText mantiene Ctrl+Z per annullare; se il browser non lo supporta sostituisco il valore
+    let ok = false;
+    try { ok = document.execCommand("insertText", false, text); } catch (e) { ok = false; }
+    if (!ok || ta.value !== text) ta.value = text;
+
+    hasUnsavedChanges = true;
+    window.renderPreview();
+    showToast(describeChanges(changes) + ". Controlla l'anteprima e premi Salva.", "success");
+};
+
+function downloadJson(data, filename) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+// Scrive su Firestore a blocchi da 400 (il limite di un batch è 500)
+async function writeLyricsInChunks(updates) {
+    for (let i = 0; i < updates.length; i += 400) {
+        const chunk = updates.slice(i, i + 400);
+        const b = writeBatch(db);
+        chunk.forEach(u => b.update(doc(db, "songs", u.id), { lyrics: u.lyrics, chords: extractChords(u.lyrics) }));
+        await b.commit();
+        chunk.forEach(u => {
+            const s = allSongs.find(x => x.id === u.id);
+            if (s) { s.lyrics = u.lyrics; s.chords = extractChords(u.lyrics); }
+        });
+    }
+}
+
+window.batchAutoFix = (code) => {
+    const targets = doctorReport[code].map(x => x.song).filter(s => isAutoFixable(s));
+    if (!targets.length) return showToast("Niente da correggere in automatico", "info");
+
+    window.confirmModal(`Correggere automaticamente ${targets.length} canzoni? Prima viene scaricato un file di backup con i testi originali.`, async () => {
+        const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+        downloadJson(targets.map(s => ({ id: s.id, title: s.title, lyrics: s.lyrics || "" })), `backup-testi-${stamp}.json`);
+
+        document.getElementById("loadingOverlay").style.display = "flex";
+        try {
+            await writeLyricsInChunks(targets.map(s => ({ id: s.id, lyrics: fixLyrics(s.lyrics).text })));
+            showToast(`${targets.length === 1 ? "1 canzone corretta" : targets.length + " canzoni corrette"}. Il backup è nei download.`, "success");
+        } catch (e) {
+            showToast("Errore durante la correzione: " + e.message, "danger");
+        } finally {
+            document.getElementById("loadingOverlay").style.display = "none";
+            refreshDoctor();
+        }
+    });
+};
+
+// Ripristino da un file di backup scaricato prima di una correzione automatica
+window.restoreLyricsBackup = (input) => {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+        input.value = "";
+        let data;
+        try { data = JSON.parse(reader.result); } catch (e) { return showToast("File di backup non valido", "danger"); }
+        const valid = Array.isArray(data)
+            ? data.filter(x => x && typeof x.id === "string" && typeof x.lyrics === "string" && allSongs.some(s => s.id === x.id))
+            : [];
+        if (!valid.length) return showToast("Nessuna canzone del backup trovata nel canzoniere", "warning");
+
+        window.confirmModal(`Ripristinare il testo originale di ${valid.length} canzoni?`, async () => {
+            document.getElementById("loadingOverlay").style.display = "flex";
+            try {
+                await writeLyricsInChunks(valid.map(x => ({ id: x.id, lyrics: x.lyrics })));
+                showToast(`${valid.length} canzoni ripristinate`, "success");
+            } catch (e) {
+                showToast("Errore ripristino: " + e.message, "danger");
+            } finally {
+                document.getElementById("loadingOverlay").style.display = "none";
+                refreshDoctor();
+            }
+        });
+    };
+    reader.readAsText(file);
+};
