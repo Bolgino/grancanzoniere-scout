@@ -200,6 +200,110 @@ export function describeChanges(c) {
     return parts.length ? parts.join(", ") : "nessuna modifica agli accordi (solo spazi)";
 }
 
+// --- TONALITÀ E ACCORDI FUORI TONALITÀ ---------------------------------------------
+//
+// Ogni accordo diventa (radice 0-11, tipo). Per ognuna delle 12 tonalità maggiori k
+// (la relativa minore ha gli stessi accordi) si contano gli accordi che le appartengono:
+//   diatonici:        I(k) ii(k+2,m) iii(k+4,m) IV(k+5) V(k+7) vi(k+9,m) vii°(k+11,dim)   peso 1
+//   prestiti comuni:  II(k+2) = V/V,  III(k+4) = V/vi (anche il V del minore),
+//                     VI(k+9) = V/ii, bVII(k+10), iv(k+5,m)                            peso 0,5
+// Vince la tonalità col punteggio più alto; gli accordi che non stanno in nessuna delle due
+// liste sono "sospetti". Non dice se un accordo è giusto: dice solo che è insolito.
+
+const PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+const KEY_NAMES = ["Do", "Reb", "Re", "Mib", "Mi", "Fa", "Fa#", "Sol", "Lab", "La", "Sib", "Si"];
+
+// "Lam7" -> { pc: 9, q: "m" }, "Do7" -> { pc: 0, q: "M" }, "Sib/Re" -> { pc: 10, q: "M" }
+export function chordToPc(raw) {
+    let c = tidyChord(raw);
+    const slash = c.indexOf("/");
+    if (slash > 0) c = c.slice(0, slash);
+    // Fadd9 / Faug sono accordi inglesi; il resto Do/Re/Mi... -> C/D/E...
+    if (!/^F(add|aug)/.test(c)) c = c.replace(/^(Do|Re|Mi|Fa|Sol|La|Si)/, r => ({ Do: "C", Re: "D", Mi: "E", Fa: "F", Sol: "G", La: "A", Si: "B" })[r]);
+    const m = c.match(/^([A-G])([#b]?)(.*)$/);
+    if (!m) return null;
+    const pc = (PC[m[1]] + (m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0) + 12) % 12;
+    const suf = m[3];
+    let q = "M";
+    if (/^(dim|°|ø|m7b5|m7-5)/.test(suf)) q = "dim";
+    else if (/^(m(?!aj)|min|-)/.test(suf)) q = "m";
+    else if (/^sus/.test(suf)) q = "sus";
+    else if (/^5$/.test(suf)) q = "5";
+    return { pc, q };
+}
+
+function fitWeight(k, { pc, q }) {
+    const d = (pc - k + 12) % 12;
+    if (q === "M") return [0, 5, 7].includes(d) ? 1 : [2, 4, 9, 10].includes(d) ? 0.5 : 0;
+    if (q === "m") return [2, 4, 9].includes(d) ? 1 : d === 5 ? 0.5 : 0;
+    if (q === "dim") return d === 11 ? 1 : [1, 6, 8].includes(d) ? 0.5 : 0; // vii°, e i diminuiti di passaggio più comuni
+    if (q === "sus" || q === "5") return [0, 2, 5, 7, 9].includes(d) ? 1 : 0;
+    return 0;
+}
+
+// Tutti gli accordi della canzone, sia tra [ ] sia sulle righe di soli accordi
+export function collectChords(lyrics) {
+    const out = [];
+    (lyrics || "").replace(/\r\n?/g, "\n").split("\n").forEach(l => {
+        const line = expandTabs(l.replace(/ /g, " "));
+        const parsed = parseChordLine(line);
+        if (parsed) {
+            parsed.tokens.filter(t => t.kind === "chord").forEach(t => out.push(t.text.replace(/^\(|\)$/g, "")));
+            return;
+        }
+        for (const m of line.matchAll(/\[([^\[\]]*)\]/g)) {
+            const inner = m[1].trim();
+            if (!inner || RE_BRACKET_NOTE.test(inner)) continue;
+            inner.split(/\s+/).filter(p => isBracketChord(p)).forEach(p => out.push(p));
+        }
+    });
+    return out;
+}
+
+export function analyzeKey(lyrics) {
+    const names = collectChords(lyrics);
+    const parsed = names.map(n => ({ name: tidyChord(n), ...chordToPc(n) })).filter(x => x.pc !== undefined);
+    if (parsed.length < 4) return null;
+
+    let best = null;
+    for (let k = 0; k < 12; k++) {
+        let score = parsed.reduce((t, c) => t + fitWeight(k, c), 0);
+        const first = parsed[0];
+        if (first.pc === k && first.q === "M") score += 0.5;          // inizia sul I
+        if (first.pc === (k + 9) % 12 && first.q === "m") score += 0.5; // inizia sul vi (canzone in minore)
+        if (!best || score > best.score) best = { k, score };
+    }
+    const k = best.k;
+    const firstIsMinorTonic = parsed[0].pc === (k + 9) % 12 && parsed[0].q === "m";
+    const keyName = firstIsMinorTonic ? KEY_NAMES[(k + 9) % 12] + "m" : KEY_NAMES[k];
+
+    const outside = new Map();
+    let inKey = 0;
+    parsed.forEach(c => {
+        if (fitWeight(k, c) > 0) inKey++;
+        else outside.set(c.name, (outside.get(c.name) || 0) + 1);
+    });
+
+    // In tonalità con i bemolli (Fa, Sib, Mib, Lab, Reb e le loro relative) La# si scrive Sib, ecc.
+    const FLAT_KEYS = [1, 3, 5, 8, 10];
+    const spelling = new Set();
+    if (FLAT_KEYS.includes(k)) parsed.forEach(c => { if (/#/.test(c.name)) spelling.add(c.name); });
+
+    return {
+        key: keyName,
+        fit: inKey / parsed.length,
+        total: parsed.length,
+        outside: [...outside.entries()].map(([chord, count]) => ({ chord, count })),
+        spelling: [...spelling],
+    };
+}
+
+// Insieme degli accordi (come sono scritti) da evidenziare nell'anteprima
+export function suspiciousChords(lyrics) {
+    const a = analyzeKey(lyrics);
+    return a && a.fit >= 0.6 ? new Set(a.outside.map(o => o.chord)) : new Set();
+}
+
 // --- DIAGNOSI -------------------------------------------------------------------
 
 export const ISSUES = {
@@ -208,6 +312,7 @@ export const ISSUES = {
     "brackets":      { label: "Parentesi [ ] non chiuse", hint: "Una [ senza ] (o viceversa) sulla stessa riga. Da correggere a mano.", fixable: false },
     "encoding":      { label: "Caratteri strani (Ã¨, â€™…)", hint: "Accenti rovinati da un import. Correggibile in automatico.", fixable: true },
     "tidy":          { label: "Accordi scritti male", hint: "[SOL7], [ Do ], [Fa♯], [Do Sol]... Correggibile in automatico.", fixable: true },
+    "off-key":       { label: "Accordi fuori tonalità", hint: "Accordi che non stanno nella tonalità della canzone: spesso sono errori di battitura (manca una m, # al posto di m...). Nell'editor sono sottolineati in rosso. Da controllare a orecchio: possono anche essere giusti.", fixable: false },
     "duplicate":     { label: "Titoli doppi", hint: "Stesso titolo (ignorando accenti e punteggiatura) in più canzoni.", fixable: false },
     "empty":         { label: "Vuote", hint: "Senza testo.", fixable: false },
     "no-chords":     { label: "Senza accordi", hint: "Solo testo.", fixable: false },
@@ -244,6 +349,10 @@ export function diagnoseSong(song) {
     const fixed = fixLyrics(lyrics);
     if (fixed.changes.chordsTidied || fixed.changes.splitBrackets) {
         issues.push({ code: "tidy", detail: `${fixed.changes.chordsTidied + fixed.changes.splitBrackets} accordi` });
+    }
+    const key = analyzeKey(lyrics);
+    if (key && key.fit >= 0.6 && key.outside.length) {
+        issues.push({ code: "off-key", detail: `in ${key.key}: ` + key.outside.map(o => o.count > 1 ? `${o.chord} ×${o.count}` : o.chord).join(", ") });
     }
     if (!above && !lyrics.includes("[")) issues.push({ code: "no-chords", detail: "" });
     return issues;

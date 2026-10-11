@@ -146,6 +146,8 @@ input::placeholder, textarea::placeholder { color: #888 !important; }
     margin: 0;              
 }
 .hide-chords .chord-span { display: none; }
+/* Accordi fuori tonalità (Controllo Canzoni, solo admin) */
+.chord-suspect { color: #ff6b6b !important; text-decoration: underline wavy #ff6b6b; }
 
 /* Box note editor */
 #editorMeta {

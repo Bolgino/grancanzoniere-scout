@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebas
 import { getFirestore, collection, getDocs, doc, updateDoc, addDoc, deleteDoc, writeBatch, arrayUnion, arrayRemove, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, inMemoryPersistence } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 import { extractChords, normalizeChord, transposeChord } from "./music-utils.js";
-import { scanSongs, fixLyrics, describeChanges, isAutoFixable, ISSUES } from "./song-doctor.js";
+import { scanSongs, fixLyrics, describeChanges, isAutoFixable, ISSUES, suspiciousChords, tidyChord } from "./song-doctor.js";
 
 // --- 1. FUNZIONI DI UTILITÀ ---
 function debounce(func, wait) {
@@ -21,13 +21,16 @@ function escapeHtml(str) {
 window.escapeHtml = escapeHtml;
 
 // Unico renderer del testo con accordi (editor, proposta, revisione): costruisce la stringa e la scrive una volta sola
-function lyricsToHtml(txt, transpose = 0, chordStyle = "") {
+// suspects: accordi fuori tonalità da sottolineare in rosso (solo per admin)
+function lyricsToHtml(txt, transpose = 0, chordStyle = "", suspects = null) {
     return (txt || "").split("\n").map(l => {
         let line = escapeHtml(l)
             .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
             .replace(/__(.*?)__/g, '<i>$1</i>')
-            .replace(/\[(.*?)\]/g, (m, p1) =>
-                `<span class="chord-span"${chordStyle}>${transposeChord(normalizeChord(p1), transpose)}</span>`);
+            .replace(/\[(.*?)\]/g, (m, p1) => {
+                const bad = suspects && suspects.has(tidyChord(p1));
+                return `<span class="chord-span${bad ? ' chord-suspect' : ''}"${bad ? ' title="Fuori tonalità: controlla"' : chordStyle}>${transposeChord(normalizeChord(p1), transpose)}</span>`;
+            });
         return `<div>${line || '&nbsp;'}</div>`;
     }).join("");
 }
@@ -627,7 +630,7 @@ window.renderPreview = () => {
     const txt = document.getElementById("lyricsEditor").value;
     const div = document.getElementById("previewArea");
     div.style.fontSize = currentFontSize + 'px';
-    div.innerHTML = lyricsToHtml(txt, currentTranspose);
+    div.innerHTML = lyricsToHtml(txt, currentTranspose, "", isAdmin ? suspiciousChords(txt) : null);
 };
 
 window.handleSongSubmission = async () => {
@@ -2626,7 +2629,7 @@ window.renderReviewPreview = () => {
     const txt = document.getElementById("reviewLyrics").value;
     const div = document.getElementById("reviewPreviewArea");
     // Stessa logica dell'editor, accordi evidenziati in rosa
-    div.innerHTML = lyricsToHtml(txt, 0, ' style="color: #ff85c0; font-weight:bold;"');
+    div.innerHTML = lyricsToHtml(txt, 0, ' style="color: #ff85c0; font-weight:bold;"', suspiciousChords(txt));
 };
 
 // 3. SALVA E APPROVA (Crea canzone e cancella proposta)
