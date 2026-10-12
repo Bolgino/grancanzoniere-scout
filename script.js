@@ -2,7 +2,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebas
 import { getFirestore, collection, getDocs, doc, updateDoc, addDoc, deleteDoc, writeBatch, arrayUnion, arrayRemove, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, inMemoryPersistence } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 import { extractChords, normalizeChord, transposeChord } from "./music-utils.js";
-import { scanSongs, fixLyrics, describeChanges, isAutoFixable, ISSUES, suspiciousChords, tidyChord, layoutLine, chordDisplay, lineWithoutChords, classifyBracket } from "./song-doctor.js";
+import { scanSongs, fixLyrics, describeChanges, isAutoFixable, ISSUES, suspiciousChords, tidyChord, layoutLine, chordDisplay, lineWithoutChords, classifyBracket, isSameSong, parseChordLine, parseBracketChordLine } from "./song-doctor.js";
+import { notify, appConfirm, appPrompt } from "./ui.js";
 
 // --- 1. FUNZIONI DI UTILITÀ ---
 function debounce(func, wait) {
@@ -42,10 +43,12 @@ function lyricsToHtml(txt, transpose = 0, chordStyle = "", suspects = null, mark
             if (seg.kind === "note") return `<span class="chord-note">${escapeHtml(seg.text)}</span>`;
             let cls = "", attr = chordStyle;
             const name = tidyChord(seg.raw);
-            if (likely && likely.has(name)) { cls = " chord-suspect"; attr = ' title="Probabile errore: controlla"'; }
-            else if (unusual && unusual.has(name)) { cls = " chord-unusual"; attr = ' title="Accordo insolito per questa tonalità"'; }
-            else if (marks && seg.cls.kind === "typo") { cls = " chord-typo"; attr = ` title="Scritto: ${escapeHtml(seg.raw.trim())} (la bacchetta lo corregge)"`; }
-            else if (marks && seg.cls.kind === "unknown") { cls = " chord-unknown"; attr = ' title="Accordo non riconosciuto"'; }
+            const why = suspects && suspects.why ? suspects.why.get(name) : null;
+            const data = ` data-chord="${escapeHtml(name)}"`;
+            if (likely && likely.has(name)) { cls = " chord-suspect"; attr = ` title="${escapeHtml(why || "Probabile errore: controlla")}"` + data; }
+            else if (unusual && unusual.has(name)) { cls = " chord-unusual"; attr = ` title="${escapeHtml(why || "Accordo insolito per questa tonalità")}"` + data; }
+            else if (marks && seg.cls.kind === "typo") { cls = " chord-typo"; attr = ` title="Scritto: ${escapeHtml(seg.raw.trim())} (la bacchetta lo corregge)"` + ` data-chord="${escapeHtml(seg.raw.trim())}" data-fix="${escapeHtml(seg.cls.suggestion)}"`; }
+            else if (marks && seg.cls.kind === "unknown") { cls = " chord-unknown"; attr = ' title="Accordo non riconosciuto"' + ` data-chord="${escapeHtml(seg.raw.trim())}"`; }
             return `<span class="chord-span${cls}"${attr}>${escapeHtml(seg.display)}</span>`;
         }).join("")
             .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
@@ -488,19 +491,97 @@ window.renderDashboard = () => {
         }
     }, waitTime);
 };
+// --- RICERCA: titolo, autore e parole del testo (senza accenti né punteggiatura) ---
+// Modalità: tutto / titolo / autore / testo. Ordine: titolo che inizia con la ricerca, titolo che la contiene,
+// autore, poi testo (frase esatta prima delle parole sparse). Per il testo si vede la riga trovata.
+let searchMode = (() => { try { return localStorage.getItem('searchMode') || 'all'; } catch (e) { return 'all'; } })();
+const searchCache = new WeakMap();
+function searchFields(s) {
+    let c = searchCache.get(s);
+    if (c && c.src === s.lyrics && c.t0 === s.title && c.a0 === s.author) return c;
+    const lines = (s.lyrics || "").split("\n")
+        .filter(l => !parseChordLine(l) && !parseBracketChordLine(l))           // le righe di soli accordi non sono testo
+        .map(l => lineWithoutChords(l).replace(/\*\*|__/g, "").replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+    const linesN = lines.map(robustNormalize);
+    c = { src: s.lyrics, t0: s.title, a0: s.author, t: robustNormalize(s.title), a: robustNormalize(s.author || ""), lines, linesN, all: " " + linesN.join(" | ") + " " };
+    searchCache.set(s, c);
+    return c;
+}
+const ACCENTS = { a: "aàáâä", e: "eèéêë", i: "iìíîï", o: "oòóôö", u: "uùúûü", c: "cç", n: "nñ" };
+// Evidenzia le parole cercate nel testo originale (accenti e apostrofi compresi)
+function highlight(text, words) {
+    const pats = words.filter(Boolean).map(w => [...w].map(ch => {
+        const cls = ACCENTS[ch] ? `[${ACCENTS[ch]}]` : ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return cls;
+    }).join("[^\\p{L}\\p{N}\\s]*"));
+    if (!pats.length) return escapeHtml(text);
+    const re = new RegExp(pats.join("|"), "giu");
+    let out = "", last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+        if (!m[0]) { re.lastIndex++; continue; }
+        out += escapeHtml(text.slice(last, m.index)) + "<mark>" + escapeHtml(m[0]) + "</mark>";
+        last = m.index + m[0].length;
+    }
+    return out + escapeHtml(text.slice(last));
+}
+function matchSong(s, q, words, mode) {
+    const f = searchFields(s);
+    const all = (str) => words.every(w => str.includes(w));
+    if (mode === 'all' || mode === 'title') {
+        if (f.t.startsWith(q)) return { score: 100, where: 'title' };
+        if (f.t.includes(q)) return { score: 90, where: 'title' };
+        if (all(f.t)) return { score: 80, where: 'title' };
+    }
+    if (mode === 'all' || mode === 'author') {
+        if (f.a && f.a.includes(q)) return { score: 70, where: 'author' };
+        if (f.a && all(f.a)) return { score: 60, where: 'author' };
+    }
+    if (mode === 'all' && all(f.t + " " + f.a)) return { score: 55, where: 'title' };
+    if (mode === 'all' || mode === 'lyrics') {
+        let idx = f.linesN.findIndex(l => l.includes(q));
+        if (idx >= 0) return { score: 40, where: 'lyrics', line: f.lines[idx] };
+        if (all(f.all)) {
+            idx = f.linesN.findIndex(l => l.includes(words[0]));
+            return { score: 30, where: 'lyrics', line: idx >= 0 ? f.lines[idx] : "" };
+        }
+    }
+    return null;
+}
+// Riga trovata accorciata attorno alla parola cercata
+function snippetAround(line, word) {
+    if (line.length <= 90) return line;
+    const pos = Math.max(0, robustNormalize(line).indexOf(word));
+    const start = Math.max(0, pos - 30);
+    return (start > 0 ? "…" : "") + line.slice(start, start + 90) + (start + 90 < line.length ? "…" : "");
+}
+window.setSearchMode = (mode) => {
+    searchMode = mode;
+    try { localStorage.setItem('searchMode', mode); } catch (e) {}
+    document.querySelectorAll('#searchModes button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    const input = document.getElementById('globalSearch');
+    if (input) {
+        input.placeholder = { all: "Cerca titolo, autore o parole del testo...", title: "Cerca per titolo...", author: "Cerca per autore...", lyrics: "Cerca una frase del testo..." }[mode];
+        if (input.value.trim()) window.performGlobalSearch();
+    }
+};
+window.addEventListener('load', () => window.setSearchMode(searchMode));
+
 window.performGlobalSearch = () => {
     // Ignora accenti e punteggiatura: "perche" trova "Perché"
     const q = robustNormalize(document.getElementById('globalSearch').value);
     if (!q) { window.renderDashboard(); return; }
+    const words = q.split(" ").filter(Boolean);
 
-    // Trova TUTTI i risultati
-    const allRes = allSongs.filter(s => robustNormalize(s.title + " " + (s.author || "")).includes(q));
+    // Trova TUTTI i risultati, i migliori prima
+    const allRes = allSongs.map(s => ({ s, m: matchSong(s, q, words, searchMode) })).filter(x => x.m)
+        .sort((x, y) => y.m.score - x.m.score || x.s.title.localeCompare(y.s.title));
     document.getElementById("favoritesSection").style.display = 'none';
     
     // Taglia l'array per mostrare solo i primi 30 risultati
     const res = allRes.slice(0, 30);
     
-    let htmlContent = res.length ? res.map(s => {
+    let htmlContent = res.length ? res.map(({ s, m }) => {
         let badgeHtml = "";
         
         // LOGICA BOLLINI ADMIN
@@ -524,16 +605,22 @@ window.performGlobalSearch = () => {
             transBadge = `<span class="badge bg-secondary bg-opacity-25 text-white border border-secondary ms-2" style="font-size: 0.75rem;">${sign}${s.savedTranspose}</span>`;
         }
 
+        const titleHtml = m.where === 'title' ? highlight(s.title, words) : escapeHtml(s.title);
+        const authorHtml = m.where === 'author' ? highlight(s.author || '', words) : escapeHtml(s.author || '');
+        const snippet = m.where === 'lyrics' && m.line
+            ? `<div class="search-snippet"><i class="bi bi-text-paragraph me-1"></i>${highlight(snippetAround(m.line, words[0]), words)}</div>` : "";
+
         return `<div class="col-12"><div class="card shadow-sm border-0" onclick="window.openEditor('${s.id}')" style="cursor:pointer">
             <div class="card-body d-flex justify-content-between align-items-center">
-                <div>
-                    <h6 class="fw-bold mb-0">${escapeHtml(s.title)} ${badgeHtml} ${transBadge}</h6>
-                    <small>${escapeHtml(s.author || '')} <span class="badge bg-light text-dark ms-2">${escapeHtml(s.category)}</span></small>
+                <div class="search-hit" style="min-width:0">
+                    <h6 class="fw-bold mb-0">${titleHtml} ${badgeHtml} ${transBadge}</h6>
+                    <small>${authorHtml} <span class="badge bg-light text-dark ms-2">${escapeHtml(s.category)}</span></small>
+                    ${snippet}
                 </div>
                 <i class="bi bi-chevron-right text-muted"></i>
             </div>
         </div></div>`;
-    }).join('') : `<div class="text-center mt-4">Nessun risultato.</div>`;
+    }).join('') : `<div class="text-center mt-4">Nessun risultato${searchMode !== 'all' ? ` cercando solo per ${({ title: "titolo", author: "autore", lyrics: "testo" })[searchMode]} — <a href="#" onclick="window.setSearchMode('all'); return false;">cerca ovunque</a>` : ""}.</div>`;
 
     // Se ci sono più di 30 risultati, aggiungi un avviso alla fine della lista
     if (allRes.length > 30) {
@@ -695,7 +782,41 @@ window.renderPreview = () => {
     const txt = document.getElementById("lyricsEditor").value;
     const div = document.getElementById("previewArea");
     div.style.fontSize = currentFontSize + 'px';
-    div.innerHTML = lyricsToHtml(txt, currentTranspose, "", isAdmin ? suspiciousChords(txt) : null, isAdmin);
+    const song = allSongs.find(x => x.id === currentSongId);
+    div.innerHTML = lyricsToHtml(txt, currentTranspose, "", isAdmin ? suspiciousChords(txt, song && song.chordOk) : null, isAdmin);
+};
+
+// Tocco su un accordo segnalato (solo admin): spiega il motivo e permette di segnarlo come giusto
+document.addEventListener("click", (e) => {
+    const el = e.target.closest("#previewArea .chord-suspect, #previewArea .chord-unusual, #previewArea .chord-typo, #previewArea .chord-unknown");
+    if (!el || !isAdmin) return;
+    const name = el.dataset.chord || el.textContent;
+    if (el.classList.contains("chord-typo")) {
+        return notify(`Nel testo c'è scritto "${name}": quasi certamente è ${el.dataset.fix}. L'anteprima lo mostra già corretto; la bacchetta lo corregge nel testo.`, "info",
+            { actions: [{ label: "Correggi con la bacchetta", onClick: () => window.autoFixCurrentSong() }] });
+    }
+    if (el.classList.contains("chord-unknown")) {
+        return notify(`"${name}" non è un accordo né un'annotazione che riconosco: correggilo a mano nel testo.`, "warning");
+    }
+    notify(el.title || "Accordo fuori tonalità", el.classList.contains("chord-suspect") ? "warning" : "info", {
+        duration: 10000,
+        actions: [{ label: "È giusto, non segnalarlo più", onClick: () => window.markChordOk(name) }],
+    });
+});
+
+window.markChordOk = async (name, undo = false) => {
+    const s = allSongs.find(x => x.id === currentSongId);
+    if (!s || !isAdmin) return;
+    try {
+        await updateDoc(doc(db, "songs", s.id), { chordOk: undo ? arrayRemove(name) : arrayUnion(name) });
+        const list = new Set(s.chordOk || []);
+        if (undo) list.delete(name); else list.add(name);
+        s.chordOk = [...list];
+        window.renderPreview();
+        if (!undo) notify(`${name} segnato come giusto in "${s.title}".`, "success", { actions: [{ label: "Annulla", primary: false, onClick: () => window.markChordOk(name, true) }] });
+    } catch (err) {
+        notify("Non sono riuscito a salvare: " + err.message, "danger");
+    }
 };
 
 window.handleSongSubmission = async () => {
@@ -713,7 +834,8 @@ window.handleSongSubmission = async () => {
 
     // 2. CONTROLLO DUPLICATI ROBUSTO (Usa la nuova funzione robustNormalize)
     const normInputTitle = robustNormalize(t);
-    const existingSong = allSongs.find(s => robustNormalize(s.title) === normInputTitle);
+    // stesso titolo con un altro autore è un'altra canzone (es. due "Alleluia")
+    const existingSong = allSongs.find(s => isSameSong(t, a, s.title, s.author));
 
     // Preparazione oggetto dati
     const songData = { 
@@ -1457,7 +1579,7 @@ window.saveSongMetadata = async () => {
     const y = document.getElementById("editSongYearInput").value; const d = document.getElementById("editSongDescInput").value;
     const newCategory = document.getElementById("editSongCategorySelect").value;
     if (!t) return showToast("Il titolo non può essere vuoto", "warning");
-    if (checkTitleDuplicate(t, currentSongId)) return showToast(`Attenzione: esiste già "${t}"`, 'danger');
+    if (checkTitleDuplicate(t, currentSongId, a)) return showToast(`Esiste già "${t}" dello stesso autore`, 'danger');
     document.getElementById("loadingOverlay").style.display = "flex";
     try {
         await updateDoc(doc(db, "songs", currentSongId), { title: t, author: a, year: y, description: d, category: newCategory });
@@ -1560,8 +1682,14 @@ window.rejectAdminSong = (id) => {
     });
 };
 
-window.showToast=(m,t='info')=>{const el=document.createElement('div');el.className=`toast align-items-center text-white bg-${t} border-0`;el.innerHTML=`<div class="d-flex"><div class="toast-body">${m}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`;document.getElementById('toastContainer').appendChild(el);new bootstrap.Toast(el).show();};
-window.confirmModal=(m,c)=>{document.getElementById('confirmMessage').innerText=m;document.getElementById('confirmBtnAction').onclick=()=>{c();mConfirm.hide();};mConfirm.show();};
+// Notifiche e conferme nello stile dell'app (ui.js) al posto dei toast di Bootstrap e di confirm() del browser
+window.showToast = (m, t = 'info') => notify(m, t);
+window.confirmModal = (m, c, opts = {}) => {
+    const danger = opts.danger ?? /elimin|rifiut|cancell|sovrascriv/i.test(m);
+    appConfirm(m, { title: opts.title || (danger ? "Attenzione" : "Conferma"), danger, okText: opts.okText || (danger ? "Sì, procedi" : "Conferma") })
+        .then(ok => { if (ok) c(); });
+};
+window.notify = notify;
 // --- GESTIONE CRONOLOGIA E TASTO INDIETRO ---
 let isNavigatingBack = false;
 
@@ -1572,6 +1700,13 @@ window.addEventListener('load', () => {
 
 // Ascolta il tasto indietro fisico del telefono
 window.addEventListener('popstate', (event) => {
+    // Tasto indietro del telefono dall'editor con modifiche non salvate: resto e chiedo
+    const editorView = document.getElementById('view-editor');
+    if (hasUnsavedChanges && editorView && editorView.classList.contains('active') && !(event.state && event.state.view === 'view-editor')) {
+        history.pushState({ view: 'view-editor' }, '', '#view-editor');
+        confirmLeaveEditor().then(ok => { if (ok) { hasUnsavedChanges = false; history.back(); } });
+        return;
+    }
     if (event.state && event.state.view) {
         isNavigatingBack = true; 
         
@@ -1606,6 +1741,7 @@ window.addEventListener('popstate', (event) => {
 
 // Nuova funzione switchView che aggiorna la cronologia
 window.switchView = (id) => {
+    if (id !== 'view-editor' && autoScrollInterval) window.toggleAutoScroll();
     document.querySelectorAll('.view-screen').forEach(el => el.classList.remove('active'));
     document.getElementById(id).classList.add('active');
     window.scrollTo(0, 0);
@@ -1629,8 +1765,13 @@ window.goHome = () => {
     }
 };
 
+const confirmLeaveEditor = () => appConfirm("Hai modifiche non salvate in questa canzone. Vuoi uscire senza salvare?",
+    { title: "Modifiche non salvate", okText: "Esci senza salvare", cancelText: "Resta", danger: true });
 window.goBackToList = () => { 
-    if (hasUnsavedChanges && !confirm("Modifiche non salvate. Uscire?")) return; 
+    if (hasUnsavedChanges) {
+        confirmLeaveEditor().then(ok => { if (ok) { hasUnsavedChanges = false; history.back(); } });
+        return;
+    }
     history.back(); // Simula la pressione del tasto indietro del telefono
 };
 window.changeTone=(d)=>{currentTranspose+=d;document.getElementById("toneDisplay").innerText=currentTranspose>0?"+"+currentTranspose:String(currentTranspose);window.renderPreview();};
@@ -1640,7 +1781,8 @@ window.toggleFavorite=()=>{if(favorites.includes(currentSongId))favorites=favori
 function updateFavIcon(){document.getElementById('favIcon').className=favorites.includes(currentSongId)?"bi bi-star-fill":"bi bi-star";}
 window.processTxtImport = () => {
     const fileInput = document.getElementById("txtImporter"); const file = fileInput.files[0]; if (!file) return;
-    if (!confirm("Importare da TXT? (Admin)")) { fileInput.value = ""; return; }
+    appConfirm(`Importare le canzoni da "${file.name}"?`, { title: "Importa da TXT", okText: "Importa" }).then(ok => {
+    if (!ok) { fileInput.value = ""; return; }
     const reader = new FileReader();
     reader.onload = async (e) => {
         const text = e.target.result; const lines = text.split('\n'); document.getElementById("loadingOverlay").style.display = "flex";
@@ -1665,9 +1807,10 @@ window.processTxtImport = () => {
         } catch (error) { showToast("Errore import: " + error.message, "danger"); } finally { document.getElementById("loadingOverlay").style.display = "none"; fileInput.value = ""; }
     };
     reader.readAsText(file);
+    });
 };
 const normalizeStr = (str) => str ? str.trim().toLowerCase() : "";
-function checkTitleDuplicate(title, excludeId = null) { const cleanTitle = normalizeStr(title); return allSongs.some(s => { if (excludeId && s.id === excludeId) return false; return normalizeStr(s.title) === cleanTitle; }); }
+function checkTitleDuplicate(title, excludeId = null, author = "") { return allSongs.some(s => { if (excludeId && s.id === excludeId) return false; return isSameSong(title, author, s.title, s.author); }); }
 window.openSetlistsView = () => { 
     if (NAV_DELAY_MS > 0) document.getElementById("loadingOverlay").style.display = "flex";
     setTimeout(() => {
@@ -1823,7 +1966,7 @@ async function updateSetlistSongs(setlistId, newSongsArray) { try { const localS
 window.moveSetlistSong = (idx, dir) => { const sl = allSetlists.find(s => s.id === currentSetlistId); if (!sl) return; if (idx + dir < 0 || idx + dir >= sl.songs.length) return; const newSongs = [...sl.songs]; const temp = newSongs[idx]; newSongs[idx] = newSongs[idx + dir]; newSongs[idx + dir] = temp; updateSetlistSongs(currentSetlistId, newSongs); };
 window.removeFromSetlist = (idx) => { const sl = allSetlists.find(s => s.id === currentSetlistId); if (!sl) return; const newSongs = [...sl.songs]; newSongs.splice(idx, 1); updateSetlistSongs(currentSetlistId, newSongs); };
 window.openAddToSetlistModal = () => { const c = document.getElementById('setlistSelectorContainer'); c.innerHTML = ""; if (allSetlists.length === 0) c.innerHTML = "<div class='small text-muted text-center'>Nessuna scaletta.</div>"; else allSetlists.forEach(sl => { c.innerHTML += `<button class="list-group-item list-group-item-action py-2" onclick="window.addSongToSetlistId('${sl.id}')">${escapeHtml(sl.name)}</button>`; }); mAddToSetlist.show(); };
-window.createNewSetlistFromModal = async () => { const name = prompt("Nome nuova scaletta:"); if(name) { try { const docRef = await addDoc(collection(db, "setlists"), { name: name, songs: [], createdAt: Date.now() }); try { const mine = JSON.parse(localStorage.getItem('mySetlists')) || []; mine.push(docRef.id); localStorage.setItem('mySetlists', JSON.stringify(mine)); } catch (err) {} await loadData(); window.addSongToSetlistId(docRef.id); } catch(e) { showToast("Errore"); } } };
+window.createNewSetlistFromModal = async () => { const name = await appPrompt("Come la chiamiamo?", "", { title: "Nuova scaletta", okText: "Crea", placeholder: "Es. Fuoco di bivacco" }); if(name) { try { const docRef = await addDoc(collection(db, "setlists"), { name: name, songs: [], createdAt: Date.now() }); try { const mine = JSON.parse(localStorage.getItem('mySetlists')) || []; mine.push(docRef.id); localStorage.setItem('mySetlists', JSON.stringify(mine)); } catch (err) {} await loadData(); window.addSongToSetlistId(docRef.id); } catch(e) { showToast("Errore"); } } };
 window.addSongToSetlistId = async (setId) => { const sl = allSetlists.find(s => s.id === setId); if (sl) { const isPresent = sl.songs.some(item => { const id = typeof item === 'string' ? item : item.id; return id === currentSongId; }); if (isPresent) { showToast("Già presente", 'warning'); return; } try { const newSongEntry = { id: currentSongId, trans: 0 }; await updateDoc(doc(db, "setlists", setId), { songs: arrayUnion(newSongEntry) }); sl.songs.push(newSongEntry); showToast(`Aggiunta a "${sl.name}"`, 'success'); mAddToSetlist.hide(); } catch (e) { showToast("Errore", 'danger'); } } };
 window.openSetlistExportModal = () => { document.getElementById('setlistCoverInputModal').value = ""; mExportSetlist.show(); };
 window.confirmSetlistPDF = async () => {
@@ -2154,60 +2297,98 @@ window.performSetlistSearch = () => {
 };
 window.addSongFromSearch = (songId) => { const sl = allSetlists.find(s => s.id === currentSetlistId); if(sl) { const isPresent = sl.songs.some(item => (typeof item === 'string' ? item : item.id) === songId); if(isPresent) return showToast("Già in scaletta", "info"); const newSongs = [...sl.songs, { id: songId, trans: 0 }]; updateSetlistSongs(currentSetlistId, newSongs); showToast("Aggiunta!", "success"); window.performSetlistSearch(); } };
 window.insertFormatting = (tag) => { const textarea = document.getElementById("lyricsEditor"); const start = textarea.selectionStart; const end = textarea.selectionEnd; textarea.value = textarea.value.substring(0, start) + tag + textarea.value.substring(start, end) + tag + textarea.value.substring(end); textarea.selectionStart = start + tag.length; textarea.selectionEnd = end + tag.length; textarea.focus(); window.renderPreview(); };
+// SCORRIMENTO AUTOMATICO con 10 velocità (pixel al secondo). Prima: 1 pixel ogni 40 ms (25 px/s) fisso.
+// La velocità scelta resta salvata (anche per ogni canzone); lo schermo non si spegne mentre scorre.
+const SCROLL_SPEEDS = [8, 12, 17, 24, 32, 42, 55, 72, 95, 125];
+const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+let scrollLevel = lsGet('scrollLevel', 6);
+let scrollPaused = false, scrollAcc = 0, scrollLastTs = 0, wakeLock = null;
+
 const setInteractingTrue = () => { isUserInteracting = true; };
-const setInteractingFalse = () => { isUserInteracting = false; };
+const setInteractingFalse = () => { isUserInteracting = false; scrollLastTs = 0; };
+
+function updateAutoScrollUi() {
+    const bar = document.getElementById('autoScrollBar');
+    const btn = document.getElementById('btnAutoScroll');
+    const on = !!autoScrollInterval;
+    if (bar) {
+        bar.hidden = !on;
+        bar.classList.toggle('paused', scrollPaused);
+        document.getElementById('scrollSpeedLabel').textContent = scrollLevel;
+        document.getElementById('scrollSpeedDots').innerHTML = SCROLL_SPEEDS.map((_, i) => i < scrollLevel ? '<b>•</b>' : '•').join('');
+        document.getElementById('autoScrollPauseIcon').className = 'bi ' + (scrollPaused ? 'bi-play-fill' : 'bi-pause-fill');
+    }
+    if (btn) {
+        btn.classList.toggle('btn-success', on);
+        btn.classList.toggle('btn-outline-success', !on);
+        btn.innerHTML = on ? '<i class="bi bi-pause-fill"></i>' : '<i class="bi bi-mouse3"></i>';
+    }
+}
+
+async function keepScreenOn(on) {
+    try {
+        if (on && 'wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); }
+        if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    } catch (e) { wakeLock = null; }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && autoScrollInterval) keepScreenOn(true); });
+
+function autoScrollFrame(ts) {
+    if (!autoScrollInterval) return;
+    autoScrollInterval.raf = requestAnimationFrame(autoScrollFrame);
+    if (scrollPaused || isUserInteracting) { scrollLastTs = 0; return; }   // pausa mentre tocchi lo schermo
+    if (!scrollLastTs) { scrollLastTs = ts; return; }
+    const dt = Math.min(0.1, (ts - scrollLastTs) / 1000);
+    scrollLastTs = ts;
+    scrollAcc += SCROLL_SPEEDS[scrollLevel - 1] * dt;
+    const step = Math.floor(scrollAcc);
+    if (step >= 1) {
+        scrollAcc -= step;
+        if ((window.innerHeight + window.scrollY) >= document.body.scrollHeight - 2) {   // fine canzone
+            window.toggleAutoScroll();
+            notify("Fine della canzone", "info", { duration: 2000 });
+            return;
+        }
+        window.scrollBy(0, step);
+    }
+}
 
 window.toggleAutoScroll = () => {
-    const btn = document.getElementById('btnAutoScroll');
-    
     if (autoScrollInterval) { 
-        // --- STOP SCROLL ---
-        clearInterval(autoScrollInterval);
+        // --- STOP ---
+        cancelAnimationFrame(autoScrollInterval.raf);
         autoScrollInterval = null;
         isUserInteracting = false;
-        
-        if(btn) {
-            btn.classList.replace('btn-success', 'btn-outline-success');
-            btn.innerHTML = '<i class="bi bi-mouse3"></i>';
-        }
-
-        // Rimuovi listener
         window.removeEventListener('mousedown', setInteractingTrue);
         window.removeEventListener('mouseup', setInteractingFalse);
         window.removeEventListener('touchstart', setInteractingTrue);
         window.removeEventListener('touchend', setInteractingFalse);
+        keepScreenOn(false);
     } else {
-        // --- START SCROLL ---
-        
-        // 1. Reset importante: assicuriamoci che non pensi che stiamo già toccando lo schermo
-        isUserInteracting = false;
-
-        if(btn) {
-            btn.classList.replace('btn-outline-success', 'btn-success');
-            btn.innerHTML = '<i class="bi bi-pause-fill"></i>';
-        }
-
-        // Aggiungi listener
+        // --- START: velocità salvata per questa canzone, altrimenti l'ultima usata ---
+        const perSong = lsGet('scrollLevels', {});
+        if (currentSongId && perSong[currentSongId]) scrollLevel = perSong[currentSongId];
+        isUserInteracting = false; scrollPaused = false; scrollAcc = 0; scrollLastTs = 0;
         window.addEventListener('mousedown', setInteractingTrue);
         window.addEventListener('mouseup', setInteractingFalse);
         window.addEventListener('touchstart', setInteractingTrue, {passive: true});
         window.addEventListener('touchend', setInteractingFalse);
-
-        autoScrollInterval = setInterval(() => {
-            if (isUserInteracting) return; // Pausa momentanea se l'utente tocca
-            
-            // 2. Calcolo corretto della fine pagina usando scrollHeight
-            // Se la posizione attuale + altezza finestra >= altezza totale documento
-            if ((window.innerHeight + window.scrollY) >= document.body.scrollHeight - 2) {
-                window.toggleAutoScroll(); // Stop quando arriva in fondo
-                return;
-            }
-            
-            // Scorri di 1 pixel
-            window.scrollBy(0, 1); 
-        }, 40); // Velocità dello scroll (più alto = più lento)
+        autoScrollInterval = { raf: requestAnimationFrame(autoScrollFrame) };
+        keepScreenOn(true);
     }
+    updateAutoScrollUi();
 };
+
+window.changeScrollSpeed = (delta) => {
+    scrollLevel = Math.min(SCROLL_SPEEDS.length, Math.max(1, scrollLevel + delta));
+    lsSet('scrollLevel', scrollLevel);
+    if (currentSongId) { const perSong = lsGet('scrollLevels', {}); perSong[currentSongId] = scrollLevel; lsSet('scrollLevels', perSong); }
+    updateAutoScrollUi();
+};
+
+window.toggleAutoScrollPause = () => { scrollPaused = !scrollPaused; scrollLastTs = 0; updateAutoScrollUi(); };
+
 window.handleSetlistBack = () => { const detail = document.getElementById('activeSetlistDetail'); if (detail.style.display === 'block') { detail.style.display = 'none'; currentSetlistId = null; window.renderSetlistsList(); } else { window.goHome(); } };
 // --- FIX EXPORT MANCANTI ---
 window.generateFullTxtList = () => {
@@ -2652,9 +2833,8 @@ window.openProposalEditor = (id) => {
     });
 
     // --- CONTROLLO DUPLICATO PER ADMIN ---
-    const cleanTitle = p.title.trim().toLowerCase();
-    // Cerca canzone esistente con stesso titolo
-    const duplicate = allSongs.find(s => s.title.trim().toLowerCase() === cleanTitle);
+    // Cerca canzone esistente con stesso titolo e stesso autore (autori diversi = canzoni diverse)
+    const duplicate = allSongs.find(s => isSameSong(p.title, p.author, s.title, s.author));
     
     // Gestione visuale dell'avviso (Creiamo/Aggiorniamo un div di alert nel modale)
     let alertBox = document.getElementById("proposalMergeAlert");
@@ -3161,7 +3341,7 @@ const robustNormalize = (str) => {
 // Lavora su allSongs già in memoria, quindi la scansione non costa letture Firestore.
 // =====================================================================
 let doctorReport = null;
-let doctorFilter = "chords-above";
+let doctorFilter = "typo";
 const DOCTOR_MAX_ROWS = 200;
 
 function refreshDoctor() {
@@ -3193,6 +3373,7 @@ function renderSongDoctor() {
         return `<button class="btn btn-sm ${cls}" onclick="window.setDoctorFilter('${code}')">${escapeHtml(info.label)} <span class="badge bg-dark ms-1">${n}</span></button>`;
     }).join("");
 
+    if (!ISSUES[doctorFilter]) doctorFilter = Object.keys(ISSUES)[0];
     const info = ISSUES[doctorFilter];
     const items = doctorReport[doctorFilter].slice().sort((a, b) => (a.song.title || "").localeCompare(b.song.title || ""));
     let html = `<div class="small text-white-50 mb-2">${escapeHtml(info.hint)}</div>`;
