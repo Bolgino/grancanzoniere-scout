@@ -634,4 +634,119 @@ body.user-admin .setlist-item-controls {
     }
 }
 
+/* ============================================================
+   NOTIFICHE DELL'APP (al posto dei toast di Bootstrap e degli alert del browser)
+   ============================================================ */
+#appNotifications {
+    position: fixed; top: 76px; left: 50%; transform: translateX(-50%);
+    z-index: 2000; width: min(440px, calc(100vw - 24px));
+    display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+}
+.app-note {
+    --accent: #6ea8fe;
+    position: relative; overflow: hidden; pointer-events: auto; cursor: pointer; touch-action: pan-x;
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px 12px 12px 14px; border-radius: 14px;
+    background: rgba(16, 20, 32, 0.94); color: #e9ecef;
+    border: 1px solid rgba(255, 255, 255, 0.08); border-left: 4px solid var(--accent);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55), 0 0 18px color-mix(in srgb, var(--accent) 25%, transparent);
+    backdrop-filter: blur(8px);
+    opacity: 0; transform: translateY(-14px) scale(0.98);
+    transition: opacity .2s ease, transform .2s ease;
+}
+.app-note.shown { opacity: 1; transform: none; }
+.app-note.dragging { transition: none; }
+.app-note.leaving { opacity: 0; transform: translateY(-14px) scale(0.98); }
+.app-note-success { --accent: #2ecc71; }
+.app-note-danger  { --accent: #ff6b6b; }
+.app-note-warning { --accent: #ffb347; }
+.app-note-info    { --accent: #6ea8fe; }
+.app-note-icon { color: var(--accent); font-size: 1.15rem; line-height: 1.3; flex-shrink: 0; }
+.app-note-body { flex: 1; min-width: 0; }
+.app-note-text { font-size: 0.95rem; line-height: 1.35; word-break: break-word; }
+.app-note-close { background: none; border: 0; color: #8a93a6; padding: 0 2px; line-height: 1; }
+.app-note-close:hover { color: #fff; }
+.app-note-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.app-note-action {
+    border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); background: transparent; color: var(--accent);
+    border-radius: 999px; padding: 3px 12px; font-size: 0.85rem; font-weight: 600;
+}
+.app-note-action.primary { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.app-note-timer {
+    position: absolute; left: 0; bottom: 0; height: 2px; width: 100%;
+    background: var(--accent); opacity: .6; transform-origin: left;
+    animation-name: appNoteTimer; animation-timing-function: linear; animation-fill-mode: forwards;
+}
+.app-note.paused .app-note-timer { animation-play-state: paused; }
+@keyframes appNoteTimer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 
+/* ============================================================
+   FINESTRE DI CONFERMA DELL'APP (al posto di confirm/prompt del browser)
+   ============================================================ */
+.app-dialog-overlay {
+    position: fixed; inset: 0; z-index: 2100;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+    background: rgba(3, 5, 12, 0.7); backdrop-filter: blur(3px);
+    opacity: 0; transition: opacity .18s ease;
+}
+.app-dialog-overlay.shown { opacity: 1; }
+.app-dialog {
+    width: min(420px, 100%); padding: 20px 20px 16px; border-radius: 18px;
+    background: linear-gradient(180deg, #172036 0%, #0e1322 100%); color: #e9ecef;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(110, 168, 254, 0.08), 0 -2px 24px rgba(255, 193, 7, 0.08);
+    transform: translateY(10px) scale(0.98); transition: transform .18s ease;
+}
+.app-dialog-overlay.shown .app-dialog { transform: none; }
+.app-dialog-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.app-dialog-head i { font-size: 1.3rem; color: #ffc107; text-shadow: 0 0 10px rgba(255, 193, 7, 0.5); }
+.app-dialog.danger .app-dialog-head i { color: #ff6b6b; text-shadow: 0 0 10px rgba(255, 107, 107, 0.45); }
+.app-dialog-head h5 { margin: 0; font-weight: 700; font-size: 1.1rem; }
+.app-dialog-msg { margin: 0 0 14px; color: #c9d1e0; line-height: 1.45; white-space: pre-line; }
+.app-dialog-input {
+    width: 100%; margin-bottom: 14px; padding: 10px 12px; border-radius: 10px;
+    background: rgba(0, 0, 0, 0.35); color: #fff; border: 1px solid #3a4560; outline: none;
+}
+.app-dialog-input:focus { border-color: #6ea8fe; box-shadow: 0 0 0 3px rgba(110, 168, 254, 0.2); }
+.app-dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; }
+.app-btn { border-radius: 999px; padding: 7px 18px; font-weight: 600; border: 1px solid transparent; }
+.app-btn-ghost { background: transparent; color: #aab4c8; border-color: #3a4560; }
+.app-btn-ghost:hover { color: #fff; border-color: #6c7a99; }
+.app-btn-primary { background: #0d6efd; color: #fff; box-shadow: 0 0 14px rgba(13, 110, 253, 0.4); }
+.app-btn-danger { background: #dc3545; color: #fff; box-shadow: 0 0 14px rgba(220, 53, 69, 0.4); }
+
+/* ============================================================
+   SCORRIMENTO AUTOMATICO: barra con le velocità
+   ============================================================ */
+.autoscroll-bar {
+    position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+    z-index: 1500; display: flex; align-items: center; gap: 4px; padding: 5px;
+    border-radius: 999px; background: rgba(16, 20, 32, 0.92); border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.55), 0 0 16px rgba(46, 204, 113, 0.15); backdrop-filter: blur(8px);
+}
+.autoscroll-bar[hidden] { display: none; }
+.autoscroll-bar button {
+    min-width: 42px; height: 42px; border-radius: 999px; border: 0;
+    background: rgba(255, 255, 255, 0.06); color: #e9ecef; font-size: 1.1rem;
+}
+.autoscroll-bar button:active { background: rgba(255, 255, 255, 0.16); }
+.autoscroll-bar .as-speed { min-width: 92px; font-size: 0.95rem; font-weight: 700; color: #2ecc71; }
+.autoscroll-bar.paused .as-speed { color: #ffb347; }
+.autoscroll-bar .as-dots { display: block; font-size: 0.6rem; letter-spacing: 1px; color: #6c7a99; line-height: 1; margin-top: 2px; }
+.autoscroll-bar .as-dots b { color: #2ecc71; }
+
+/* ============================================================
+   RICERCA: titolo / autore / testo
+   ============================================================ */
+.search-modes { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+.search-modes button {
+    border-radius: 999px; padding: 3px 14px; font-size: 0.85rem;
+    background: rgba(255, 255, 255, 0.05); color: #aab4c8; border: 1px solid #333;
+}
+.search-modes button.active { background: rgba(13, 110, 253, 0.25); color: #fff; border-color: #0d6efd; }
+.search-snippet { font-size: 0.85rem; color: #aab4c8; margin-top: 3px; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-snippet mark, .search-hit mark { background: rgba(255, 193, 7, 0.28); color: #fff; padding: 0 1px; border-radius: 3px; }
+.search-where { font-size: 0.7rem; color: #6c7a99; text-transform: uppercase; letter-spacing: .5px; }
+
+/* accordi segnalati: si possono toccare per vedere il motivo */
+.chord-suspect, .chord-unusual, .chord-typo, .chord-unknown { cursor: pointer; }

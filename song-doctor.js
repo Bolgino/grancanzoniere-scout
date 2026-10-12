@@ -292,78 +292,6 @@ function formatStandalone(parsed, opts, changes) {
     return out.replace(/\s+$/, "");
 }
 
-// Indice nel testo che corrisponde a una colonna visibile (i ** e __ non occupano spazio nell'anteprima)
-function rawIndexForCol(text, col) {
-    let vis = 0, i = 0;
-    while (i < text.length && vis < col) {
-        if (text.startsWith("**", i) || text.startsWith("__", i)) { i += 2; continue; }
-        vis++; i++;
-    }
-    return { index: i, missing: col - vis };
-}
-
-// Inserisce gli accordi della riga sopra dentro la riga di testo, alle stesse colonne.
-// Per una riga [accordi] non si sa se chi l'ha scritta l'ha allineata guardando l'editor (colonne con le
-// parentesi) o l'anteprima (parentesi a larghezza zero): provo entrambe e tengo quella in cui gli accordi
-// cadono più spesso all'inizio di una parola.
-// Indice effettivo dopo lo spostamento dallo spazio alla parola (lo stesso che fa mergeChordLine)
-const nudge = (text, i) => (text[i] === " " && text[i + 1] && /\S/.test(text[i + 1])) ? i + 1 : i;
-const atWordStart = (text, i) => { const j = nudge(text, i); return j < text.length && /\S/.test(text[j]) && (j === 0 || /\s/.test(text[j - 1])); };
-function mergeChordLine(parsed, lyric, opts, changes) {
-    const chords = parsed.tokens.filter(t => t.kind === "chord");
-    let positions;   // indici nel testo (con eventuali ** e __) dove inserire gli accordi
-    if (parsed.bracket) {
-        const visual = chords.map(t => rawIndexForCol(lyric, t.col));
-        const source = chords.map(t => ({ index: Math.min(t.src, lyric.length), missing: Math.max(0, t.src - lyric.length) }));
-        // punteggio: accordo esattamente sull'inizio di una parola 1, sullo spazio subito prima 0,6, dentro la parola 0
-        const score = (pos) => pos.reduce((t, p) => t + (p.missing > 0 || !atWordStart(lyric, p.index) ? 0
-            : (nudge(lyric, p.index) === p.index ? 1 : 0.6)), 0);
-        // a parità vince l'editor: chi scrive [accordi] sopra il testo li allinea guardando l'editor
-        positions = score(visual) > score(source) ? visual : source;
-    } else {
-        positions = chords.map(t => ({ index: Math.min(t.col, lyric.length), missing: Math.max(0, t.col - lyric.length) }));
-    }
-    let text = lyric;
-    const pad = Math.max(0, ...positions.map(p => p.missing));
-    // da destra a sinistra così gli indici non si spostano
-    for (let i = chords.length - 1; i >= 0; i--) {
-        const name = chordName(chords[i].text, opts, changes);
-        let { index, missing } = positions[i];
-        if (missing > 0) index = lyric.length + missing;
-        else if (text[index] === " " && text[index + 1] && /\S/.test(text[index + 1])) index++;   // dallo spazio alla parola
-        if (text.length < index) text += " ".repeat(index - text.length);
-        text = text.slice(0, index) + `[${name}]` + text.slice(index);
-    }
-    return pad ? text : text.replace(/\s+$/, "");
-}
-
-// Colonne (come si vedono nell'anteprima) degli accordi già dentro una riga di testo
-function inlineChordCols(line) {
-    const cols = [];
-    let vis = 0;
-    for (let i = 0; i < line.length; ) {
-        if (line[i] === "[") {
-            const end = line.indexOf("]", i);
-            if (end < 0) break;
-            const k = classifyBracket(line.slice(i + 1, end)).kind;
-            if (k === "chord" || k === "typo") cols.push(vis);
-            else if (k === "multi") classifyBracket(line.slice(i + 1, end)).parts.forEach(() => cols.push(vis));
-            i = end + 1; continue;
-        }
-        if (line.startsWith("**", i) || line.startsWith("__", i)) { i += 2; continue; }
-        vis++; i++;
-    }
-    return cols;
-}
-// La riga di accordi sopra è allineata a quelli già nel testo? (almeno 2 su 3 entro 2 colonne)
-function alignedWith(parsed, lyric) {
-    const top = parsed.tokens.filter(t => t.kind === "chord");
-    const cols = inlineChordCols(lyric);
-    if (!top.length || top.length !== cols.length) return false;
-    const close = (t, i) => Math.abs(t.col - cols[i]) <= 2 || (parsed.bracket && Math.abs(t.src - cols[i]) <= 2);
-    return top.filter(close).length * 3 >= top.length * 2;
-}
-
 // Accordi (tra parentesi) presenti in una riga di testo, in notazione confrontabile
 function lineChordKeys(line) {
     const keys = [];
@@ -381,16 +309,6 @@ function chordKey(c) {
     return `${pp.pc}:${p.suffix.replace(/^-/, "m")}${p.bass ? "/" + (p.bass.digits || p.bass.root) : ""}`;
 }
 const sameSeq = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
-// Due sequenze "quasi uguali" (stessa lunghezza, al massimo un accordo diverso, o una contenuta nell'altra)
-function similarSeq(a, b) {
-    if (!a.length || !b.length) return false;
-    if (a.length === b.length) return a.filter((x, i) => x !== b[i]).length <= Math.max(1, Math.floor(a.length / 3));
-    const [s, l] = a.length < b.length ? [a, b] : [b, a];
-    let j = 0;
-    for (const x of l) if (j < s.length && x === s[j]) j++;
-    return j === s.length && s.length >= 2;
-}
-
 // [Do Sol] -> [Do] [Sol];  [ Do ] -> [Do];  [SOL7] -> [Sol7];  [Do][Do] -> [Do];  refusi (se opts.typos)
 function fixBracketsInLine(line, opts, changes) {
     let out = line.replace(/\[([^\[\]]*)\]/g, (whole, inner) => {
@@ -426,22 +344,6 @@ function fixBracketsInLine(line, opts, changes) {
     return out;
 }
 
-// [Do] [Sol] [Lam] oppure [Do][Sol][Lam]: accordi separati da al massimo uno spazio. Non sono allineati al testo
-// sotto (nell'anteprima si sovrapporrebbero): è una sequenza, da lasciare su una riga a sé e distanziare.
-function isCompactBracketLine(line) {
-    const ms = [...line.matchAll(/\[[^\[\]]*\]/g)];
-    if (ms.length < 2) return false;
-    for (let i = 1; i < ms.length; i++) {
-        const gap = line.slice(ms[i - 1].index + ms[i - 1][0].length, ms[i].index);
-        if (gap.length > 1 || /\S/.test(gap)) return false;
-    }
-    return true;
-}
-
-const hasBracketChord = (line) => [...line.matchAll(/\[([^\[\]]*)\]/g)].some(m => {
-    const k = classifyBracket(m[1]).kind;
-    return k === "chord" || k === "multi" || k === "typo";
-});
 
 // Correzione completa del testo. opts.typos = correggi anche i refusi negli accordi.
 // Restituisce il testo nuovo, cosa è stato cambiato e le righe da controllare a mano.
@@ -456,45 +358,18 @@ export function fixLyrics(input, opts = {}) {
         return expandTabs(fixed.replace(/\u00A0/g, " "));
     });
 
-    // 1. Righe di soli accordi (con o senza parentesi)
-    const out = [];
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
+    // 1. Righe di soli accordi (intro, parti strumentali, giri): restano righe a sé.
+    //    Senza parentesi vengono messe tra [ ] alle stesse colonne (così si traspongono);
+    //    se due accordi si toccano vengono distanziati. Non vengono mai unite al testo né tolte.
+    lines = lines.map(line => {
         const parsed = parseChordLine(line) || parseBracketChordLine(line);
-        if (!parsed) { out.push(line); continue; }
-        const next = lines[i + 1];
-        const nextIsText = next !== undefined && next.trim() !== "" && !parseChordLine(next) && !parseBracketChordLine(next);
-        const chordKeys = parsed.tokens.filter(t => t.kind === "chord").map(t => chordKey(t.text));
-
-        if (nextIsText && !parsed.hasExtras && !hasBracketChord(next) && !(parsed.bracket && isCompactBracketLine(line))) {
-            // a) accordi sopra una riga di testo senza accordi: li metto dentro il testo
-            out.push(mergeChordLine(parsed, next, opts, changes));
-            i++;
-            if (parsed.bracket) changes.bracketLines++; else changes.chordLines++;
-            continue;
-        }
-        if (nextIsText && hasBracketChord(next) && !parsed.hasExtras) {
-            const nextKeys = lineChordKeys(next);
-            if (sameSeq(chordKeys, nextKeys)) {
-                // b) riga di accordi doppia: il testo sotto ha già gli stessi accordi.
-                //    La tolgo se è allineata a quegli accordi o se sta in mezzo alla strofa; se invece apre la
-                //    strofa e non è allineata potrebbe essere un'intro con lo stesso giro: la lascio e la segnalo.
-                const prev = out.length ? out[out.length - 1] : "";
-                const midVerse = prev.trim() !== "" && !parseChordLine(prev) && !parseBracketChordLine(prev);
-                if (midVerse || alignedWith(parsed, next)) { changes.duplicateLines++; continue; }
-                changes.review.push({ line: out.length + 1, why: "riga di accordi uguale a quella del testo sotto (intro o doppione?)" });
-            } else if (similarSeq(chordKeys, nextKeys)) {
-                changes.review.push({ line: out.length + 1, why: "accordi sopra quasi uguali a quelli nel testo" });
-            }
-        }
-        // c) riga lasciata da sola (intro, interludio...): parentesi e spazi giusti
+        if (!parsed) return line;
         const formatted = formatStandalone(parsed, opts, changes);
         if (formatted !== line.replace(/\s+$/, "")) {
             if (parsed.bracket) changes.spacing++; else changes.chordLines++;
         }
-        out.push(formatted);
-    }
-    lines = out;
+        return formatted;
+    });
 
     // 2. Parentesi dentro le righe di testo
     lines = lines.map(l => l.includes("[") ? fixBracketsInLine(l, opts, changes) : l);
@@ -522,9 +397,7 @@ export function fixLyrics(input, opts = {}) {
 const plural = (n, uno, tanti) => `${n} ${n === 1 ? uno : tanti}`;
 export function describeChanges(c) {
     const parts = [];
-    if (c.chordLines) parts.push(plural(c.chordLines, "riga di accordi convertita", "righe di accordi convertite"));
-    if (c.bracketLines) parts.push(plural(c.bracketLines, "riga di [accordi] unita al testo", "righe di [accordi] unite al testo"));
-    if (c.duplicateLines) parts.push(plural(c.duplicateLines, "riga di accordi doppia tolta", "righe di accordi doppie tolte"));
+    if (c.chordLines) parts.push(plural(c.chordLines, "riga di accordi messa tra [ ] (ora si traspone)", "righe di accordi messe tra [ ] (ora si traspongono)"));
     if (c.spacing) parts.push(plural(c.spacing, "riga di accordi distanziata", "righe di accordi distanziate"));
     if (c.dupChords) parts.push(plural(c.dupChords, "accordo ripetuto tolto", "accordi ripetuti tolti"));
     if (c.splitBrackets) parts.push(plural(c.splitBrackets, "parentesi con più accordi divisa", "parentesi con più accordi divise"));
@@ -554,8 +427,8 @@ export function chordToPc(raw) { return chordPitch(tidyChord(raw)); }
 
 function fitWeight(k, { pc, q }) {
     const d = (pc - k + 12) % 12;
-    if (q === "M") return [0, 5, 7].includes(d) ? 1 : [2, 4, 8, 9, 10].includes(d) ? 0.5 : 0;
-    if (q === "m") return [2, 4, 9].includes(d) ? 1 : d === 5 ? 0.5 : 0;
+    if (q === "M") return [0, 5, 7].includes(d) ? 1 : [2, 3, 4, 8, 9, 10].includes(d) ? 0.5 : 0;
+    if (q === "m") return [2, 4, 9].includes(d) ? 1 : [0, 5, 7].includes(d) ? 0.5 : 0;
     if (q === "dim") return d === 11 ? 1 : [1, 6, 8].includes(d) ? 0.5 : 0;
     if (q === "sus" || q === "5") return [0, 2, 5, 7, 9].includes(d) ? 1 : 0;
     return 0;
@@ -564,10 +437,14 @@ function fitWeight(k, { pc, q }) {
 // Tutti gli accordi della canzone con la strofa in cui stanno, sia tra [ ] sia sulle righe di soli accordi
 export function collectChords(lyrics) {
     const out = [];
-    let section = 0;
+    let section = 0, prevType = null;
     (lyrics || "").replace(/\r\n?/g, "\n").split("\n").forEach((l, lineNo) => {
         const line = expandTabs(l.replace(/\u00A0/g, " "));
-        if (!line.trim()) { section++; return; }
+        if (!line.trim()) { section++; prevType = null; return; }
+        // passaggio da righe di soli accordi (parte strumentale) a righe cantate o viceversa = nuova strofa
+        const type = (parseChordLine(line) || parseBracketChordLine(line)) ? "chords" : "text";
+        if (prevType && type !== prevType) section++;
+        prevType = type;
         const plain = parseChordLine(line);
         if (plain) { plain.tokens.filter(t => t.kind === "chord").forEach(t => out.push({ name: t.text, section, line: lineNo })); return; }
         for (const m of line.matchAll(/\[([^\[\]]*)\]/g)) {
@@ -592,7 +469,24 @@ function bestKey(parsed, favour = -1) {
     return best.k;
 }
 
-export function analyzeKey(lyrics) {
+// Una riga tutta nel modo parallelo: in una canzone maggiore (tonica k) gli accordi del minore parallelo
+// (relativa maggiore k+3: diatonici, più il V maggiore e la tonica maggiore come V/iv); in una minore quelli
+// del maggiore parallelo.
+function inParallelMode(seq, k, minorTonic) {
+    if (minorTonic) {
+        const P = (k + 9) % 12;
+        return seq.every(c => fitWeight(P, c) === 1);
+    }
+    const r = (k + 3) % 12;
+    return seq.every(c => {
+        if (fitWeight(r, c) === 1) return true;
+        const d = (c.pc - r + 12) % 12;
+        return c.q === "M" && (d === 4 || d === 9);
+    });
+}
+
+export function analyzeKey(lyrics, okChords = []) {
+    const ok = new Set((okChords || []).map(c => tidyChord(c)));
     const parsed = collectChords(lyrics).map(c => {
         const name = tidyChord(c.name);
         return { name, section: c.section, line: c.line, ...chordPitch(name) };
@@ -601,6 +495,7 @@ export function analyzeKey(lyrics) {
 
     const k = bestKey(parsed);
     const firstIsMinorTonic = parsed[0].pc === (k + 9) % 12 && parsed[0].q === "m";
+    const minorTonic = firstIsMinorTonic;
     const keyName = firstIsMinorTonic ? KEY_NAMES[(k + 9) % 12] + "m" : KEY_NAMES[k];
 
     // tonalità di ogni strofa (se ha abbastanza accordi)
@@ -630,14 +525,18 @@ export function analyzeKey(lyrics) {
         if (!bySeq.has(key)) bySeq.set(key, { seq, count: 0 });
         bySeq.get(key).count++;
     });
-    const evidence = new Map();   // nome accordo -> accordo che le altre strofe hanno al suo posto
+    const evidence = new Map();   // nome accordo -> { near: accordo che le altre strofe hanno al suo posto, others: quante }
     const groups = [...bySeq.values()];
     for (const A of groups) for (const B of groups) {
         if (A === B || A.seq.length !== B.seq.length || B.count < 2 || B.count < 2 * A.count) continue;
         const diff = A.seq.map((c, i) => i).filter(i => A.seq[i].name !== B.seq[i].name);
         if (diff.length !== 1) continue;
         const a = A.seq[diff[0]], b = B.seq[diff[0]];
-        if (near(a, b) && fitWeight(localKey[a.section], a) < 1) evidence.set(a.name, b.name);
+        if (!near(a, b) || fitWeight(localKey[a.section], a) >= 1) continue;
+        // Se tutta la riga sta nel modo parallelo (Dom Mib Fam Sol7 al posto di Do Mi Fa Sol7) è un cambio
+        // di modo voluto: lo considero errore solo se le righe "normali" sono molte di più (almeno 3 contro 1).
+        if (inParallelMode(A.seq, localKey[a.section], minorTonic) && !(B.count >= 3 && B.count >= 3 * A.count)) continue;
+        evidence.set(a.name, { near: b.name, others: B.count });
     }
 
     let inKey = 0;
@@ -655,16 +554,22 @@ export function analyzeKey(lyrics) {
     // gemello nella tonalità compare almeno 3 volte. Tutti gli altri fuori tonalità sono solo "insoliti".
     const inKeyNames = new Map();
     parsed.forEach(c => { if (fitWeight(localKey[c.section], c) > 0 && !evidence.has(c.name)) inKeyNames.set(c.name, c); });
-    const result = [...outside.values()].map(o => {
-        let nearName = evidence.get(o.chord) || null;
-        if (!nearName && o.count === 1) {
+    const keyLabel = (kk) => minorTonic ? KEY_NAMES[(kk + 9) % 12] + "m" : KEY_NAMES[kk];
+    const result = [...outside.values()].filter(o => !ok.has(o.chord)).map(o => {
+        const ev = evidence.get(o.chord);
+        let nearName = ev ? ev.near : null, why;
+        if (ev) {
+            why = `Le altre ${ev.others} righe uguali hanno ${ev.near} in questo punto: probabile errore di battitura.`;
+        } else if (o.count === 1) {
             let best = -1;
             for (const c of inKeyNames.values()) {
                 const n = countOf(c.name);
                 if (near(o, c) && n >= 3 && n > best) { best = n; nearName = c.name; }
             }
+            if (nearName) why = `Non appartiene alla tonalità (${keyLabel(o.key)}), compare una volta sola e ${nearName} compare ${best} volte: forse è ${nearName}.`;
         }
-        return { chord: o.chord, count: o.count, likely: !!nearName, near: nearName, lines: o.lines };
+        if (!why) why = `Non appartiene alla tonalità stimata (${keyLabel(o.key)}). Spesso è giusto: passaggio cromatico, cambio di tonalità o di modo.`;
+        return { chord: o.chord, count: o.count, likely: !!nearName, near: nearName, lines: o.lines, why };
     });
 
     const FLAT_KEYS = [1, 3, 5, 8, 10];
@@ -675,30 +580,38 @@ export function analyzeKey(lyrics) {
 }
 
 // Accordi da evidenziare nell'anteprima: likely = probabile errore (rosso), unusual = insolito (arancione)
-export function suspiciousChords(lyrics) {
-    const a = analyzeKey(lyrics);
-    const res = { likely: new Set(), unusual: new Set() };
+export function suspiciousChords(lyrics, okChords = []) {
+    const a = analyzeKey(lyrics, okChords);
+    const res = { likely: new Set(), unusual: new Set(), why: new Map() };
     if (!a || a.fit < 0.6) return res;
-    a.outside.forEach(o => (o.likely ? res.likely : res.unusual).add(o.chord));
+    a.outside.forEach(o => { (o.likely ? res.likely : res.unusual).add(o.chord); res.why.set(o.chord, o.why); });
     return res;
 }
 
 // --- DIAGNOSI -------------------------------------------------------------------
 
 export const ISSUES = {
-    "chords-above":  { label: "Accordi su riga separata", hint: "Righe di soli accordi (con o senza parentesi) sopra il testo, o righe di accordi doppie. Correggibile in automatico.", fixable: true },
     "typo":          { label: "Accordi con refusi", hint: "Quasi accordi con una correzione sicura: [Miaj7] → Mimaj7, [Fasos2] → Fasus2, [H7] → Si7. Correggibile in automatico.", fixable: true, opts: { typos: true } },
     "unknown-chord": { label: "Accordi non riconosciuti", hint: "Contenuto tra [ ] che non è né un accordo né un'annotazione. Da correggere a mano.", fixable: false },
     "brackets":      { label: "Parentesi [ ] non chiuse", hint: "Una [ senza ] (o viceversa) sulla stessa riga. Da correggere a mano.", fixable: false },
     "encoding":      { label: "Caratteri strani (Ã¨, â€™…)", hint: "Accenti rovinati da un import. Correggibile in automatico.", fixable: true },
-    "tidy":          { label: "Accordi scritti male", hint: "[SOL7], [ Do ], [Fa♯], [Do Sol], [Do][Do], accordi attaccati su una riga di soli accordi. Correggibile in automatico.", fixable: true },
-    "review":        { label: "Righe da controllare", hint: "Accordi ripetuti due volte nella stessa riga o riga di accordi quasi uguale a quella del testo sotto: probabilmente un'unione sbagliata. Da controllare a mano (o ripristina il backup).", fixable: false },
-    "off-key-likely":{ label: "Accordi sospetti", hint: "Fuori tonalità e con un accordo simile nella canzone (manca una m, # al posto di m...): probabile errore. Nell'editor sono sottolineati in rosso.", fixable: false },
-    "off-key":       { label: "Accordi insoliti", hint: "Fuori dalla tonalità ma senza un accordo simile nella canzone: spesso sono giusti (passaggi, prestiti). Nell'editor sono sottolineati in arancione.", fixable: false },
-    "duplicate":     { label: "Titoli doppi", hint: "Stesso titolo (ignorando accenti e punteggiatura) in più canzoni.", fixable: false },
+    "tidy":          { label: "Accordi scritti male", hint: "[SOL7], [ Do ], [Fa♯], [Do Sol], [Do][Do] sopra il testo, accordi attaccati che si sovrappongono. Correggibile in automatico. Le righe di soli accordi (parti strumentali) restano dove sono.", fixable: true },
+    "review":        { label: "Righe da controllare", hint: "Ogni accordo ripetuto due volte nella stessa riga: probabilmente una riga di accordi unita due volte al testo dalla vecchia bacchetta. Da controllare a mano (o ripristina il backup).", fixable: false },
+    "off-key-likely":{ label: "Accordi sospetti", hint: "Le altre righe uguali della canzone hanno un accordo gemello in quel punto (Rem invece di Re...): probabile errore. Nell'editor sono sottolineati in rosso: toccali per vedere il motivo o per segnarli come giusti.", fixable: false },
+    "off-key":       { label: "Accordi insoliti", hint: "Fuori dalla tonalità stimata: spesso sono giusti (passaggi cromatici, cambi di tonalità). Nell'editor sono sottolineati in arancione: toccali per segnarli come giusti.", fixable: false },
+    "duplicate":     { label: "Titoli doppi", hint: "Stesso titolo e stesso autore (o autore mancante). Stesso titolo con autori diversi è normale e non viene segnalato.", fixable: false },
     "empty":         { label: "Vuote", hint: "Senza testo.", fixable: false },
     "no-chords":     { label: "Senza accordi", hint: "Solo testo.", fixable: false },
 };
+
+// Stessa canzone = stesso titolo e stesso autore. Se uno dei due non ha l'autore la consideriamo la stessa;
+// stesso titolo con autori diversi sono canzoni diverse (es. due "Alleluia").
+const normAuthor = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+export function isSameSong(titleA, authorA, titleB, authorB) {
+    if (normTitle(titleA) !== normTitle(titleB) || !normTitle(titleA)) return false;
+    const a = normAuthor(authorA), b = normAuthor(authorB);
+    return !a || !b || a === b;
+}
 
 const normTitle = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
@@ -710,8 +623,6 @@ export function diagnoseSong(song) {
 
     const lines = lyrics.split("\n");
     const { changes } = fixLyrics(lyrics, { typos: false });
-    const above = changes.chordLines + changes.bracketLines + changes.duplicateLines;
-    if (above) issues.push({ code: "chords-above", detail: above === 1 ? "1 riga" : `${above} righe` });
 
     // nome -> righe in cui compare (per dire dove andare a correggere)
     const unknown = new Map(), typos = new Map(), badBrackets = [];
@@ -736,7 +647,7 @@ export function diagnoseSong(song) {
     if (tidy) issues.push({ code: "tidy", detail: tidy === 1 ? "1 correzione" : `${tidy} correzioni` });
     if (changes.review.length) issues.push({ code: "review", detail: "riga " + changes.review.map(r => r.line).join(", ") });
 
-    const key = analyzeKey(lyrics);
+    const key = analyzeKey(lyrics, song.chordOk);
     if (key && key.fit >= 0.6) {
         const fmt = (o) => (o.count > 1 ? `${o.chord} ×${o.count}` : o.chord) + (o.near ? ` forse ${o.near}?` : "")
             + (o.lines && o.lines.length ? ` (riga ${o.lines.slice(0, 4).join(", ")}${o.lines.length > 4 ? "…" : ""})` : "");
@@ -761,9 +672,11 @@ export function scanSongs(songs) {
         byTitle.get(k).push(s);
     });
     byTitle.forEach(list => {
-        if (list.length > 1) list.forEach(s => report.duplicate.push({
-            song: s, detail: list.filter(o => o !== s).map(o => o.category).join(", ") || ""
-        }));
+        if (list.length < 2) return;
+        list.forEach(s => {
+            const twins = list.filter(o => o !== s && isSameSong(s.title, s.author, o.title, o.author));
+            if (twins.length) report.duplicate.push({ song: s, detail: twins.map(o => `${o.author || "senza autore"} · ${o.category || ""}`).join(", ") });
+        });
     });
     return report;
 }
