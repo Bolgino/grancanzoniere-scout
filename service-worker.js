@@ -1,4 +1,4 @@
-const CACHE_NAME = "canzoniere-dynamic-v5"; // Cambiato nome per forzare l'aggiornamento un'ultima volta
+const CACHE_NAME = "canzoniere-dynamic-v6"; // Cambiato nome per forzare l'aggiornamento un'ultima volta
 const ASSETS_TO_CACHE = [
   "./",
   "./index.html",
