@@ -142,3 +142,37 @@ export const appConfirm = (message, opts = {}) => appDialog({ message, ...opts }
 export const appPrompt = (message, value = "", opts = {}) =>
     appDialog({ title: opts.title || "Inserisci", message, okText: opts.okText || "OK", icon: "bi-pencil-fill", input: { value, placeholder: opts.placeholder || "" } })
         .then(r => (r.ok && r.value ? r.value : null));
+
+// Foglio che sale dal basso (diagrammi degli accordi, capotasto, condivisione, cronologia...).
+// openSheet({ title, html, wide }) -> { el, body, close }. Si chiude col pulsante, toccando fuori o con Esc.
+let openSheets = [];
+export function openSheet({ title = "", html = "", wide = false, onClose = null } = {}) {
+    const overlay = document.createElement("div");
+    overlay.className = "app-sheet-overlay";
+    overlay.innerHTML = `<div class="app-sheet ${wide ? "wide" : ""}" role="dialog" aria-modal="true">
+        <div class="app-sheet-grip"></div>
+        <div class="app-sheet-head"><h5></h5><button class="app-sheet-close" aria-label="Chiudi"><i class="bi bi-x-lg"></i></button></div>
+        <div class="app-sheet-body"></div></div>`;
+    overlay.querySelector("h5").textContent = title;
+    const body = overlay.querySelector(".app-sheet-body");
+    body.innerHTML = html;
+    let closed = false;
+    const close = () => {
+        if (closed) return;
+        closed = true;
+        document.removeEventListener("keydown", onKey, true);
+        overlay.classList.remove("shown");
+        openSheets = openSheets.filter(x => x !== api);
+        setTimeout(() => overlay.remove(), 200);
+        if (onClose) try { onClose(); } catch (e) { console.error(e); }
+    };
+    const onKey = (e) => { if (e.key === "Escape" && openSheets[openSheets.length - 1] === api) { e.preventDefault(); close(); } };
+    overlay.addEventListener("click", (e) => { if (e.target === overlay || e.target.closest(".app-sheet-close")) close(); });
+    document.addEventListener("keydown", onKey, true);
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add("shown"));
+    const api = { el: overlay, body, close, setTitle: (t) => { overlay.querySelector("h5").textContent = t; } };
+    openSheets.push(api);
+    return api;
+}
+export const closeAllSheets = () => openSheets.slice().forEach(s => s.close());

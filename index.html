@@ -128,6 +128,7 @@
                     <i class="bi bi-music-note-beamed me-1"></i>
                     <span id="totalSongsCount" class="fw-bold text-white">...</span>
                 </div>
+                <span id="offlineBadge" class="offline-badge" hidden title="Sei offline: usi le canzoni salvate sul telefono"><i class="bi bi-wifi-off"></i> Offline</span>
 
                 <button class="navbar-toggler border-0" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar">
                     <span class="navbar-toggler-icon"></span>
@@ -173,6 +174,13 @@
                     <i class="bi bi-list-check text-info fs-4 me-3"></i> 
                     <span class="fs-5">Scalette</span>
                 </button>
+
+                <button class="btn btn-outline-light text-start py-2 px-3 w-100 d-flex align-items-center rounded-3 border-secondary" 
+                        onclick="window.openOfflineSheet(); document.querySelector('.btn-close').click()">
+                    <i class="bi bi-cloud-arrow-down text-success fs-5 me-3"></i> 
+                    <span>Uso offline</span>
+                    <span class="badge rounded-pill bg-success ms-auto" id="offlineReadyBadge" hidden>pronto</span>
+                </button>
         
             </div>
         
@@ -194,6 +202,12 @@
                     <button class="btn btn-link text-white text-decoration-none text-start p-2 d-flex align-items-center" 
                             onclick="window.openSongDoctorView(); document.querySelector('.btn-close').click()">
                         <i class="bi bi-clipboard2-pulse me-3 fs-5"></i> Controllo Canzoni
+                    </button>
+        
+                    <button class="btn btn-link text-white text-decoration-none text-start p-2 d-flex align-items-center" 
+                            onclick="window.openTagsView(); document.querySelector('.btn-close').click()">
+                        <i class="bi bi-tags-fill me-3 fs-5"></i> Etichette canzoni
+                        <span class="badge rounded-pill bg-info text-dark ms-auto" id="tagsBadge" style="display:none">0</span>
                     </button>
         
                     <button class="btn btn-link text-white text-decoration-none text-start p-2 d-flex align-items-center" 
@@ -235,6 +249,7 @@
                         <button data-mode="author" onclick="window.setSearchMode('author')"><i class="bi bi-person me-1"></i>Autore</button>
                         <button data-mode="lyrics" onclick="window.setSearchMode('lyrics')"><i class="bi bi-text-paragraph me-1"></i>Testo</button>
                     </div>
+                    <div class="search-filters" id="searchFilters"></div>
                 </div>
             </div>
 
@@ -383,6 +398,11 @@
                         </div>
                     </div>
                     
+                    <div class="d-flex gap-2 mb-3">
+                        <button class="btn btn-primary btn-sm flex-grow-1 fw-bold" onclick="window.openPerformSetlist()"><i class="bi bi-play-circle-fill me-1"></i> Esibizione</button>
+                        <button class="btn btn-outline-info btn-sm flex-grow-1" onclick="window.openShareSetlist()"><i class="bi bi-qr-code me-1"></i> Condividi</button>
+                    </div>
+
                     <div class="bg-secondary bg-opacity-25 p-2 rounded mb-0 setlist-controls">
                         <button class="btn btn-light w-100 fw-bold text-dark" onclick="window.openSearchForSetlistModal()">
                             <i class="bi bi-search"></i> Aggiungi Canzone
@@ -522,6 +542,7 @@
                             <h5 id="editorTitle" class="m-0 fw-bold text-wrap">Titolo</h5>
                             <small id="editorAuthor" class="text-muted text-wrap">Autore</small>
                             <div id="editorMeta" class="small text-secondary fst-italic text-wrap"></div>
+                            <div id="editorTags" class="editor-tags"></div>
                         </div>
                         <button class="btn btn-link text-warning p-0 ms-2" onclick="window.toggleFavorite()" title="Aggiungi ai preferiti">
                             <i class="bi bi-star" id="favIcon"></i>
@@ -548,8 +569,11 @@
                         <button class="btn btn-outline-primary btn-sm" onclick="window.changeTone(1)">#</button>
                     </div>
 
-                    <div class="d-flex gap-2 align-items-center">
+                    <div class="d-flex gap-2 align-items-center flex-wrap">
                         <button class="btn btn-outline-secondary btn-sm" onclick="window.toggleChords()" title="Nascondi Accordi"><i class="bi bi-music-note-beamed"></i></button>
+                        <button class="btn btn-outline-warning btn-sm" id="btnCapo" onclick="window.openCapoSheet()" title="Capotasto"><i class="bi bi-sliders2-vertical"></i> <span id="capoLabel">Capo</span></button>
+                        <button class="btn btn-outline-info btn-sm" onclick="window.openPerformSong()" title="Schermo intero"><i class="bi bi-arrows-fullscreen"></i></button>
+                        <button class="btn btn-outline-light btn-sm admin-only" onclick="window.openHistory()" title="Cronologia delle modifiche"><i class="bi bi-clock-history"></i></button>
                         <button class="btn btn-outline-success btn-sm" id="btnAutoScroll" onclick="window.toggleAutoScroll()" title="Auto-Scroll">
                             <i class="bi bi-mouse3"></i>
                         </button>
@@ -605,6 +629,18 @@
                 </button>
             </div>
             <div id="manageSectionsContainer" class="d-flex flex-column gap-2"></div>
+        </div>
+
+        <div id="view-tags" class="view-screen">
+            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom border-secondary">
+                <button class="btn btn-outline-secondary btn-sm" onclick="window.goHome()">
+                    <i class="bi bi-arrow-left"></i> Home
+                </button>
+                <h3 class="fw-bold m-0 text-white">Etichette</h3>
+                <div style="width:70px"></div>
+            </div>
+            <div id="tagsToolbar" class="mb-3"></div>
+            <div id="tagsList" class="d-flex flex-column gap-2"></div>
         </div>
 
         <div id="view-doctor" class="view-screen">
@@ -993,6 +1029,25 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Modalità esibizione: schermo intero, scorri per cambiare canzone -->
+    <div id="performView" class="perform-view" hidden>
+        <div class="perform-top">
+            <button class="perform-btn" onclick="window.closePerform()" aria-label="Chiudi"><i class="bi bi-x-lg"></i></button>
+            <div class="perform-title"><div id="performTitle"></div><small id="performSub"></small></div>
+            <button class="perform-btn" onclick="window.performFont(-2)" aria-label="Testo più piccolo">A−</button>
+            <button class="perform-btn" onclick="window.performFont(2)" aria-label="Testo più grande">A+</button>
+            <button class="perform-btn" onclick="window.performToggleChords()" aria-label="Mostra o nascondi gli accordi" title="Accordi sì/no"><i class="bi bi-music-note-beamed"></i></button>
+            <button class="perform-btn" id="performScrollBtn" onclick="window.toggleAutoScroll()" aria-label="Scorrimento automatico"><i class="bi bi-mouse3"></i></button>
+            <button class="perform-btn" id="performLiveBtn" onclick="window.togglePerformLive()" aria-label="Dal vivo" hidden><i class="bi bi-broadcast"></i></button>
+        </div>
+        <div id="performBody" class="perform-body"></div>
+        <div class="perform-bottom">
+            <button class="perform-nav" onclick="window.performGo(-1)" aria-label="Canzone precedente"><i class="bi bi-chevron-left"></i> <span id="performPrev"></span></button>
+            <span id="performPos" class="perform-pos"></span>
+            <button class="perform-nav" onclick="window.performGo(1)" aria-label="Canzone successiva"><span id="performNext"></span> <i class="bi bi-chevron-right"></i></button>
+        </div>
+    </div>
+
     <!-- Scorrimento automatico: velocità e pausa -->
     <div id="autoScrollBar" class="autoscroll-bar" hidden>
         <button onclick="window.changeScrollSpeed(-1)" aria-label="Più lento" title="Più lento"><i class="bi bi-dash-lg"></i></button>
@@ -1004,7 +1059,7 @@
         <button onclick="window.toggleAutoScroll()" aria-label="Ferma lo scorrimento" title="Ferma"><i class="bi bi-x-lg"></i></button>
     </div>
 
-    <script type="module" src="script.js?v=6"></script>
+    <script type="module" src="script.js?v=7"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./service-worker.js')
