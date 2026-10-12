@@ -2334,24 +2334,38 @@ async function keepScreenOn(on) {
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && autoScrollInterval) keepScreenOn(true); });
 
+// Cosa scorre: la pagina, oppure il contenitore della modalità esibizione quando è aperta
+let scrollContainer = null;
+const scrollBox = () => scrollContainer || document.scrollingElement || document.documentElement;
+// Bootstrap mette "scroll-behavior: smooth" su tutta la pagina: ogni piccolo spostamento partiva come
+// animazione e quella dopo la interrompeva, quindi il testo andava a scatti (2px, 0, 2px, 0...) e tremava.
+// Durante lo scorrimento automatico lo tolgo e sposto la pagina in modo continuo (anche frazioni di pixel).
+let scrollPosF = null, savedScrollBehavior = null;
+function setInstantScroll(on) {
+    const el = document.documentElement;
+    if (on && savedScrollBehavior === null) { savedScrollBehavior = el.style.scrollBehavior; el.style.scrollBehavior = "auto"; }
+    if (!on && savedScrollBehavior !== null) { el.style.scrollBehavior = savedScrollBehavior; savedScrollBehavior = null; }
+    if (scrollContainer) scrollContainer.style.scrollBehavior = "auto";
+}
+
 function autoScrollFrame(ts) {
     if (!autoScrollInterval) return;
     autoScrollInterval.raf = requestAnimationFrame(autoScrollFrame);
-    if (scrollPaused || isUserInteracting) { scrollLastTs = 0; return; }   // pausa mentre tocchi lo schermo
+    if (scrollPaused || isUserInteracting) { scrollLastTs = 0; scrollPosF = null; return; }   // pausa mentre tocchi lo schermo
     if (!scrollLastTs) { scrollLastTs = ts; return; }
     const dt = Math.min(0.1, (ts - scrollLastTs) / 1000);
     scrollLastTs = ts;
-    scrollAcc += SCROLL_SPEEDS[scrollLevel - 1] * dt;
-    const step = Math.floor(scrollAcc);
-    if (step >= 1) {
-        scrollAcc -= step;
-        if ((window.innerHeight + window.scrollY) >= document.body.scrollHeight - 2) {   // fine canzone
-            window.toggleAutoScroll();
-            notify("Fine della canzone", "info", { duration: 2000 });
-            return;
-        }
-        window.scrollBy(0, step);
+    const box = scrollBox();
+    const cur = box.scrollTop;
+    // se la pagina è stata spostata a mano riparto da dove si trova adesso
+    if (scrollPosF === null || Math.abs(cur - scrollPosF) > 3) scrollPosF = cur;
+    if (cur + box.clientHeight >= box.scrollHeight - 2) {   // fine canzone
+        window.toggleAutoScroll();
+        if (window.onAutoScrollEnd) window.onAutoScrollEnd(); else notify("Fine della canzone", "info", { duration: 2000 });
+        return;
     }
+    scrollPosF += SCROLL_SPEEDS[scrollLevel - 1] * dt;
+    box.scrollTop = scrollPosF;
 }
 
 window.toggleAutoScroll = () => {
@@ -2359,6 +2373,7 @@ window.toggleAutoScroll = () => {
         // --- STOP ---
         cancelAnimationFrame(autoScrollInterval.raf);
         autoScrollInterval = null;
+        setInstantScroll(false);
         isUserInteracting = false;
         window.removeEventListener('mousedown', setInteractingTrue);
         window.removeEventListener('mouseup', setInteractingFalse);
@@ -2374,6 +2389,8 @@ window.toggleAutoScroll = () => {
         window.addEventListener('mouseup', setInteractingFalse);
         window.addEventListener('touchstart', setInteractingTrue, {passive: true});
         window.addEventListener('touchend', setInteractingFalse);
+        scrollPosF = null;
+        setInstantScroll(true);
         autoScrollInterval = { raf: requestAnimationFrame(autoScrollFrame) };
         keepScreenOn(true);
     }
