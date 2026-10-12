@@ -2,7 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebas
 import { getFirestore, collection, getDocs, doc, updateDoc, addDoc, deleteDoc, writeBatch, arrayUnion, arrayRemove, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, inMemoryPersistence } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 import { extractChords, normalizeChord, transposeChord } from "./music-utils.js";
-import { scanSongs, fixLyrics, describeChanges, isAutoFixable, ISSUES, suspiciousChords, tidyChord } from "./song-doctor.js";
+import { scanSongs, fixLyrics, describeChanges, isAutoFixable, ISSUES, suspiciousChords, tidyChord, layoutLine, chordDisplay, lineWithoutChords, classifyBracket } from "./song-doctor.js";
 
 // --- 1. FUNZIONI DI UTILITÀ ---
 function debounce(func, wait) {
@@ -20,19 +20,56 @@ function escapeHtml(str) {
 }
 window.escapeHtml = escapeHtml;
 
-// Unico renderer del testo con accordi (editor, proposta, revisione): costruisce la stringa e la scrive una volta sola
-// suspects: accordi fuori tonalità da sottolineare in rosso (solo per admin)
-function lyricsToHtml(txt, transpose = 0, chordStyle = "", suspects = null) {
+// Testo da mettere dentro onclick="...('${...}')": prima l'escape per la stringa JS, poi per l'attributo HTML.
+// Senza, una sezione con l'apostrofo (es. "Canti dell'alba") non si apriva.
+function jsArg(str) {
+    return escapeHtml(String(str ?? "").replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\r?\n/g, "\\n"));
+}
+window.jsArg = jsArg;
+
+// Unico renderer del testo con accordi (editor, proposta, revisione): costruisce la stringa e la scrive una volta sola.
+//   suspects: { likely, unusual } accordi fuori tonalità da sottolineare (solo admin)
+//   marks:    true = evidenzia anche refusi e accordi non riconosciuti (solo admin)
+// Le annotazioni ([Rit.] [x2] [Chorus]) si scrivono in linea e restano visibili anche nascondendo gli accordi;
+// due accordi troppo vicini ([Do][Sol]) vengono distanziati invece di sovrapporsi.
+function lyricsToHtml(txt, transpose = 0, chordStyle = "", suspects = null, marks = false) {
+    const likely = suspects && suspects.likely ? suspects.likely : (suspects instanceof Set ? suspects : null);
+    const unusual = suspects && suspects.unusual ? suspects.unusual : null;
     return (txt || "").split("\n").map(l => {
-        let line = escapeHtml(l)
+        let line = layoutLine(l, transpose).map(seg => {
+            if (seg.kind === "text") return escapeHtml(seg.text);
+            if (seg.kind === "pad") return `<span class="chord-pad">${seg.text}</span>`;
+            if (seg.kind === "note") return `<span class="chord-note">${escapeHtml(seg.text)}</span>`;
+            let cls = "", attr = chordStyle;
+            const name = tidyChord(seg.raw);
+            if (likely && likely.has(name)) { cls = " chord-suspect"; attr = ' title="Probabile errore: controlla"'; }
+            else if (unusual && unusual.has(name)) { cls = " chord-unusual"; attr = ' title="Accordo insolito per questa tonalità"'; }
+            else if (marks && seg.cls.kind === "typo") { cls = " chord-typo"; attr = ` title="Scritto: ${escapeHtml(seg.raw.trim())} (la bacchetta lo corregge)"`; }
+            else if (marks && seg.cls.kind === "unknown") { cls = " chord-unknown"; attr = ' title="Accordo non riconosciuto"'; }
+            return `<span class="chord-span${cls}"${attr}>${escapeHtml(seg.display)}</span>`;
+        }).join("")
             .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
-            .replace(/__(.*?)__/g, '<i>$1</i>')
-            .replace(/\[(.*?)\]/g, (m, p1) => {
-                const bad = suspects && suspects.has(tidyChord(p1));
-                return `<span class="chord-span${bad ? ' chord-suspect' : ''}"${bad ? ' title="Fuori tonalità: controlla"' : chordStyle}>${transposeChord(normalizeChord(p1), transpose)}</span>`;
-            });
+            .replace(/__(.*?)__/g, '<i>$1</i>');
         return `<div>${line || '&nbsp;'}</div>`;
     }).join("");
+}
+
+// Testo per LaTeX: caratteri speciali protetti, **grassetto** e __corsivo__ convertiti,
+// accordi come \[accordo], annotazioni in corsivo. chordFn(contenuto) -> nome da stampare.
+function latexEscape(t) {
+    return String(t ?? "").replace(/\\/g, "\u0001").replace(/([&%$#_{}])/g, "\\$1")
+        .replace(/~/g, "\\textasciitilde{}").replace(/\^/g, "\\textasciicircum{}").replace(/\u0001/g, "\\textbackslash{}");
+}
+function latexLine(line, chordFn) {
+    const saved = [];
+    let t = String(line ?? "").replace(/\[([^\[\]]*)\]/g, (w, inner) => {
+        const k = classifyBracket(inner).kind;
+        saved.push(k === "note" ? `\\textit{${latexEscape(inner.trim())}}` : k === "empty" ? "" : `\\[${chordFn(inner)}]`);
+        return `\u0003${saved.length - 1}\u0004`;
+    });
+    t = t.replace(/\*\*(.*?)\*\*/g, "\u0005$1\u0006").replace(/__(.*?)__/g, "\u0007$1\u0008");
+    t = latexEscape(t).replace(/\u0005/g, "\\textbf{").replace(/\u0007/g, "\\textit{").replace(/[\u0006\u0008]/g, "}");
+    return t.replace(/\u0003(\d+)\u0004/g, (w, i) => saved[+i]);
 }
 
 // --- 2. DEFINIZIONE DELLA RICERCA ---
@@ -271,15 +308,18 @@ async function loadData() {
             getDocs(collection(db, "setlists"))
         ]);
         allSections = [];
-        secSnap.forEach(d => allSections.push({id: d.id, ...d.data()}));
+        secSnap.forEach(d => { const data = d.data(); data.name = String(data.name ?? ""); allSections.push({id: d.id, ...data}); });
 
         allSongs = [];
         songSnap.forEach(d => {
-            if(!d.data().title.startsWith("Info")) allSongs.push({id: d.id, ...d.data()})
+            const data = d.data();
+            data.title = String(data.title ?? ""); // un documento senza titolo prima bloccava tutto il caricamento
+            if(!data.title.startsWith("Info")) allSongs.push({id: d.id, ...data})
         });
         
         allSetlists = [];
         setlistSnap.forEach(d => allSetlists.push({id: d.id, ...d.data()}));
+        allSetlists.forEach(sl => { sl.name = String(sl.name ?? ""); if (!Array.isArray(sl.songs)) sl.songs = []; });
         allSetlists.sort((a,b) => a.name.localeCompare(b.name));
 
         window.updateTotalSongsCounter();
@@ -377,7 +417,7 @@ window.renderDashboard = () => {
         const favs=allSongs.filter(s=>favorites.includes(s.id));
         if(favs.length>0){
             favS.style.display='block';
-            favC.innerHTML=favs.map(s=>`<button class="list-group-item list-group-item-action border-0 d-flex justify-content-between align-items-center" onclick="window.openEditor('${s.id}')"><div><i class="bi bi-star-fill text-warning me-2"></i> <strong>${s.title}</strong></div><small class="text-muted">${s.author}</small></button>`).join('');
+            favC.innerHTML=favs.map(s=>`<button class="list-group-item list-group-item-action border-0 d-flex justify-content-between align-items-center" onclick="window.openEditor('${s.id}')"><div><i class="bi bi-star-fill text-warning me-2"></i> <strong>${escapeHtml(s.title)}</strong></div><small class="text-muted">${escapeHtml(s.author || '')}</small></button>`).join('');
         } else favS.style.display='none';
 
         const c = document.getElementById("categoriesContainer"); 
@@ -427,9 +467,9 @@ window.renderDashboard = () => {
                 htmlContent += `
                 <div class="col-md-4 col-sm-6">
                     <div class="category-card shadow-sm">
-                        <div class="cat-cover" style="${bg}" onclick="window.openList('${sec.name}')">${ico}</div>
-                        <div class="p-3 text-center" onclick="window.openList('${sec.name}')">
-                            <h5 class="fw-bold mb-1 text-truncate">${sec.name}</h5>
+                        <div class="cat-cover" style="${bg}" onclick="window.openList('${jsArg(sec.name)}')">${ico}</div>
+                        <div class="p-3 text-center" onclick="window.openList('${jsArg(sec.name)}')">
+                            <h5 class="fw-bold mb-1 text-truncate">${escapeHtml(sec.name)}</h5>
                             <small class="text-muted">${count} canzoni</small>
                             ${adminStatsHtml}
                         </div>
@@ -521,7 +561,7 @@ window.openList = (cat) => {
         const sectionSongs = allSongs.filter(s => s.category === cat);
         
         document.getElementById("listTitle").innerHTML = `
-            ${cat} <span class="badge bg-primary rounded-pill ms-2" style="font-size: 0.5em; vertical-align: middle; opacity: 0.8;">
+            ${escapeHtml(cat)} <span class="badge bg-primary rounded-pill ms-2" style="font-size: 0.5em; vertical-align: middle; opacity: 0.8;">
                 ${sectionSongs.length}
             </span>`; 
             
@@ -619,7 +659,7 @@ window.openEditor = (id) => {
         switchView('view-editor');
         window.scrollTo(0, 0);
         document.getElementById("editorTitle").innerText=s.title;
-        document.getElementById("editorAuthor").innerText=s.author;
+        document.getElementById("editorAuthor").innerText=s.author || ""; // prima: "undefined" se mancava l'autore
         
         let metaText = [];
         if(s.description) metaText.push(s.description);
@@ -642,7 +682,7 @@ window.openEditor = (id) => {
         // Se la canzone ha accordi/testo da sistemare, il bottone Auto-correggi diventa giallo
         const btnFix = document.getElementById("btnAutoFix");
         if (btnFix) {
-            const needsFix = isAdmin && isAutoFixable(s);
+            const needsFix = isAdmin && isAutoFixable(s, { typos: true });
             btnFix.classList.toggle("btn-warning", needsFix);
             btnFix.classList.toggle("btn-outline-dark", !needsFix);
         }
@@ -655,7 +695,7 @@ window.renderPreview = () => {
     const txt = document.getElementById("lyricsEditor").value;
     const div = document.getElementById("previewArea");
     div.style.fontSize = currentFontSize + 'px';
-    div.innerHTML = lyricsToHtml(txt, currentTranspose, "", isAdmin ? suspiciousChords(txt) : null);
+    div.innerHTML = lyricsToHtml(txt, currentTranspose, "", isAdmin ? suspiciousChords(txt) : null, isAdmin);
 };
 
 window.handleSongSubmission = async () => {
@@ -1047,8 +1087,9 @@ window.generateFullPDF = async () => {
                     parts.forEach(p => {
                         if (p.startsWith("[")) {
                             let c = p.replace(/[\[\]]/g,'');
-                            c = transposeChord(normalizeChord(c), songTrans);
+                            c = chordDisplay(c, songTrans); // annotazioni ([Chorus], [x2]) non trasposte
                             doc.setFont(undefined, 'bold'); doc.setFontSize(chordSize); doc.setTextColor(220, 53, 69);
+                            if (lineX < lastChordEnd) lineX = lastChordEnd; // [Do][Sol]: non sovrapporre i due accordi
                             
                             const chordWidth = doc.getTextWidth(c);
                             // Se l'accordo sfora il margine destro, va a capo
@@ -1088,7 +1129,7 @@ window.generateFullPDF = async () => {
                     });
                     currentY += (lineHeight + 4); 
                 } else {
-                    const cleanLine = l.replace(/\[.*?\]/g, ''); 
+                    const cleanLine = lineWithoutChords(l); // tiene (Rit.) (x2), toglie gli accordi
                     doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
                     const splitText = doc.splitTextToSize(cleanLine, COL_WIDTH);
                     doc.text(splitText, lineX, currentY);
@@ -1164,7 +1205,7 @@ window.generateFullLatex = () => {
     let l = `\\documentclass{article}\n\\usepackage[utf8]{inputenc}\n\\usepackage[a5paper]{geometry}\n\\usepackage{songs}\n\\begin{document}\n\\title{Canzoniere}\\maketitle\\tableofcontents\\newpage\n`;
     
     sectionOrder.forEach(secName => {
-        l += `\\section{${secName}}\n`;
+        l += `\\section{${latexEscape(secName)}}\n`;
         
         allSongs.filter(s => s.category === secName)
                 .sort((a, b) => a.title.localeCompare(b.title))
@@ -1172,16 +1213,11 @@ window.generateFullLatex = () => {
                     // RECUPERA TONALITÀ SALVATA
                     const tr = s.savedTranspose || 0;
 
-                    l += `\\beginsong{${s.title}}[by={${s.author || ''}}]\n\\beginverse\n`;
+                    l += `\\beginsong{${latexEscape(s.title)}}[by={${latexEscape(s.author || '')}}]\n\\beginverse\n`;
                     
                     (s.lyrics || "").split("\n").forEach(line => {
-                        // APPLICA TRASPOSIZIONE AGLI ACCORDI
-                        let processedLine = line.replace(/\[(.*?)\]/g, (m, p1) => {
-                            // Normalizza e poi Trasponi
-                            const transposed = transposeChord(normalizeChord(p1), tr);
-                            return `\\[${transposed}]`;
-                        });
-                        l += processedLine + "\n";
+                        // Accordi trasposti, annotazioni in corsivo, & % # _ protetti, **grassetto** e __corsivo__
+                        l += latexLine(line, (p1) => chordDisplay(p1, tr)) + "\n";
                     });
                     
                     l += `\\endverse\n\\endsong\n`;
@@ -1306,7 +1342,7 @@ window.createNewSection = async () => {
     await addDoc(collection(db, "sections"), { name: n, coverUrl: "" });
     mAddSection.hide(); showToast("Sezione creata"); loadData();
 };
-window.openSectionSettings=(id,name,url,e)=>{e.stopPropagation();editingSectionId=id;currentCategory=name;currentCoverUrl=url;document.getElementById("editSectionNameInput").value=name;document.getElementById("coverFileInput").value="";const img=document.getElementById("coverPreviewImg");img.src=url||"";img.style.display=url?'block':'none';mEditSection.show();};
+window.openSectionSettings=(id,name,url,e)=>{if(e)e.stopPropagation();const secObj=allSections.find(x=>x.id===id);if(url==null)url=secObj?secObj.coverUrl||"":"";if(secObj)name=secObj.name;editingSectionId=id;currentCategory=name;currentCoverUrl=url;document.getElementById("editSectionNameInput").value=name;document.getElementById("coverFileInput").value="";const img=document.getElementById("coverPreviewImg");img.src=url||"";img.style.display=url?'block':'none';mEditSection.show();};
 window.previewCoverFile = () => {
     const fileInput = document.getElementById("coverFileInput");
     const f = fileInput.files[0];
@@ -1358,7 +1394,7 @@ window.triggerDeleteSection = (id, name) => {
         }
     });
 };
-window.showAddModal=()=>{const s=document.getElementById("newSongCategorySelect");s.innerHTML="";allSections.forEach(sec=>s.innerHTML+=`<option value="${sec.name}">${sec.name}</option>`);document.getElementById("newSongTitle").value="";document.getElementById("newSongAuthor").value="";document.getElementById("newSongLyrics").value="";mAddSong.show();};
+window.showAddModal=()=>{const s=document.getElementById("newSongCategorySelect");s.innerHTML="";allSections.forEach(sec=>s.innerHTML+=`<option value="${escapeHtml(sec.name)}">${escapeHtml(sec.name)}</option>`);document.getElementById("newSongTitle").value="";document.getElementById("newSongAuthor").value="";document.getElementById("newSongLyrics").value="";mAddSong.show();};
 window.saveSong = async () => {
     const t = document.getElementById("lyricsEditor").value;
     try {
@@ -1410,7 +1446,7 @@ window.deleteCurrentSong = () => {
 
 window.openSongMetadataModal = () => {
     const s = allSongs.find(x => x.id === currentSongId); if (!s) return;
-    document.getElementById("editSongTitleInput").value = s.title; document.getElementById("editSongAuthorInput").value = s.author;
+    document.getElementById("editSongTitleInput").value = s.title || ""; document.getElementById("editSongAuthorInput").value = s.author || "";
     document.getElementById("editSongYearInput").value = s.year || ""; document.getElementById("editSongDescInput").value = s.description || "";
     const catSelect = document.getElementById("editSongCategorySelect"); catSelect.innerHTML = "";
     allSections.forEach(sec => { const opt = document.createElement("option"); opt.value = sec.name; opt.innerText = sec.name; if (sec.name === s.category) opt.selected = true; catSelect.appendChild(opt); });
@@ -1597,8 +1633,8 @@ window.goBackToList = () => {
     if (hasUnsavedChanges && !confirm("Modifiche non salvate. Uscire?")) return; 
     history.back(); // Simula la pressione del tasto indietro del telefono
 };
-window.changeTone=(d)=>{currentTranspose+=d;document.getElementById("toneDisplay").innerText=currentTranspose;window.renderPreview();};
-window.adjustFontSize=(d)=>{currentFontSize+=d;window.renderPreview();};
+window.changeTone=(d)=>{currentTranspose+=d;document.getElementById("toneDisplay").innerText=currentTranspose>0?"+"+currentTranspose:String(currentTranspose);window.renderPreview();};
+window.adjustFontSize=(d)=>{currentFontSize=Math.min(40,Math.max(8,currentFontSize+d));window.renderPreview();};
 window.toggleChords=()=>document.getElementById('previewArea').classList.toggle('hide-chords');
 window.toggleFavorite=()=>{if(favorites.includes(currentSongId))favorites=favorites.filter(id=>id!==currentSongId);else{favorites.push(currentSongId);showToast("Aggiunta ai preferiti",'success');}localStorage.setItem('scoutFavorites',JSON.stringify(favorites));updateFavIcon();};
 function updateFavIcon(){document.getElementById('favIcon').className=favorites.includes(currentSongId)?"bi bi-star-fill":"bi bi-star";}
@@ -1645,7 +1681,7 @@ window.openSetlistsView = () => {
 window.renderSetlistsList = () => {
     const c = document.getElementById("setlistsContainer"); c.innerHTML = "";
     if (allSetlists.length === 0) { c.innerHTML = `<div class="text-center text-muted p-3">Nessuna scaletta pubblica presente. Creane una!</div>`; return; }
-    allSetlists.forEach(sl => { c.innerHTML += `<button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onclick="window.openSetlistDetail('${sl.id}')"><div class="fw-bold"><i class="bi bi-folder2-open me-2 text-warning"></i>${sl.name}</div><span class="badge bg-secondary rounded-pill">${sl.songs.length}</span></button>`; });
+    allSetlists.forEach(sl => { c.innerHTML += `<button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" onclick="window.openSetlistDetail('${sl.id}')"><div class="fw-bold"><i class="bi bi-folder2-open me-2 text-warning"></i>${escapeHtml(sl.name)}</div><span class="badge bg-secondary rounded-pill">${sl.songs.length}</span></button>`; });
 };
 // NUOVA FUNZIONE CREAZIONE SCALETTA (POPUP)
 window.confirmCreateSetlist = async () => {
@@ -1733,8 +1769,8 @@ window.renderActiveSetlistSongs = () => {
         <div class="list-group-item p-3" id="setlist-item-${idx}">
             <div class="d-flex justify-content-between align-items-start">
                 <div class="text-truncate" style="cursor:pointer; flex-grow: 1;" onclick="document.getElementById('preview-box-${idx}').classList.toggle('d-none')">
-                    <strong class="text-primary">${idx + 1}. ${song.title}</strong>
-                    <div class="small text-muted">${song.author || ''} 
+                    <strong class="text-primary">${idx + 1}. ${escapeHtml(song.title)}</strong>
+                    <div class="small text-muted">${escapeHtml(song.author || '')} 
                         <span class="badge bg-light text-dark border ms-2" id="badge-trans-${idx}" data-val="${savedTrans}">Tono: ${savedTrans > 0 ? '+'+savedTrans : savedTrans}</span>
                     </div>
                 </div>
@@ -1763,7 +1799,7 @@ window.renderActiveSetlistSongs = () => {
     });
 };
 window.changeSetlistPreviewTone = (idx, songId, delta) => { const badge = document.getElementById(`badge-trans-${idx}`); const snippetDiv = document.getElementById(`snippet-content-${idx}`); let currentVal = parseInt(badge.getAttribute('data-val')); let newVal = currentVal + delta; badge.setAttribute('data-val', newVal); badge.innerText = `Tono: ${newVal > 0 ? '+' + newVal : newVal}`; badge.classList.remove('bg-light', 'text-dark'); badge.classList.add('bg-warning', 'text-dark'); const song = allSongs.find(s => s.id === songId); if (song) snippetDiv.innerHTML = generateSnippetHtml(song.lyrics, newVal); };
-window.saveSetlistSongTone = async (idx) => { const sl = allSetlists.find(s => s.id === currentSetlistId); if(!sl) return; const badge = document.getElementById(`badge-trans-${idx}`); const finalVal = parseInt(badge.getAttribute('data-val')); const newSongs = [...sl.songs]; let item = newSongs[idx]; if (typeof item === 'string') item = { id: item, trans: 0 }; else item = { ...item }; item.trans = finalVal; newSongs[idx] = item; await updateDoc(doc(db, "setlists", currentSetlistId), { songs: newSongs }); sl.songs = newSongs; badge.classList.remove('bg-warning'); badge.classList.add('bg-light'); showToast("Tonalità salvata!", "success"); };
+window.saveSetlistSongTone = async (idx) => { const sl = allSetlists.find(s => s.id === currentSetlistId); if(!sl) return; const badge = document.getElementById(`badge-trans-${idx}`); const finalVal = parseInt(badge.getAttribute('data-val')); const newSongs = [...sl.songs]; let item = newSongs[idx]; if (typeof item === 'string') item = { id: item, trans: 0 }; else item = { ...item }; item.trans = finalVal; newSongs[idx] = item; try { await updateDoc(doc(db, "setlists", currentSetlistId), { songs: newSongs }); } catch (e) { return showToast("Errore salvataggio: " + e.message, "danger"); } sl.songs = newSongs; badge.classList.remove('bg-warning'); badge.classList.add('bg-light'); showToast("Tonalità salvata!", "success"); };
 function generateSnippetHtml(lyrics, transposeVal) {
     if (!lyrics) return "...";
     
@@ -1771,14 +1807,12 @@ function generateSnippetHtml(lyrics, transposeVal) {
     const lines = lyrics.split('\n').slice(0, 4);
     
     return lines.map(line => {
-        // Logica per posizionare l'accordo
-        // Usiamo uno span vuoto prima dell'accordo per ancorarlo alla posizione giusta
-        const formattedLine = line.replace(/\[(.*?)\]/g, (match, p1) => {
-            const originalChord = normalizeChord(p1);
-            const newChord = transposeChord(originalChord, transposeVal);
-            // La classe .snippet-chord ora lo sposterà in alto col CSS
-            return `<span class="snippet-chord">${newChord}</span>`;
-        });
+        // Stessa impaginazione dell'editor: accordi distanziati, annotazioni non trasposte
+        const formattedLine = layoutLine(line, transposeVal).map(seg => {
+            if (seg.kind === "chord") return `<span class="snippet-chord">${escapeHtml(seg.display)}</span>`;
+            if (seg.kind === "note") return `<span class="chord-note">${escapeHtml(seg.text)}</span>`;
+            return escapeHtml(seg.text);
+        }).join("");
         
         // Avvolgiamo la riga
         return `<div class="snippet-line">${formattedLine || '&nbsp;'}</div>`;
@@ -1788,8 +1822,8 @@ window.deleteActiveSetlist = () => window.confirmModal("Eliminare questa scalett
 async function updateSetlistSongs(setlistId, newSongsArray) { try { const localSl = allSetlists.find(s => s.id === setlistId); if(localSl) localSl.songs = newSongsArray; if(currentSetlistId === setlistId) window.renderActiveSetlistSongs(); await updateDoc(doc(db, "setlists", setlistId), { songs: newSongsArray }); } catch(e) { showToast("Errore sync", "danger"); await loadData(); } }
 window.moveSetlistSong = (idx, dir) => { const sl = allSetlists.find(s => s.id === currentSetlistId); if (!sl) return; if (idx + dir < 0 || idx + dir >= sl.songs.length) return; const newSongs = [...sl.songs]; const temp = newSongs[idx]; newSongs[idx] = newSongs[idx + dir]; newSongs[idx + dir] = temp; updateSetlistSongs(currentSetlistId, newSongs); };
 window.removeFromSetlist = (idx) => { const sl = allSetlists.find(s => s.id === currentSetlistId); if (!sl) return; const newSongs = [...sl.songs]; newSongs.splice(idx, 1); updateSetlistSongs(currentSetlistId, newSongs); };
-window.openAddToSetlistModal = () => { const c = document.getElementById('setlistSelectorContainer'); c.innerHTML = ""; if (allSetlists.length === 0) c.innerHTML = "<div class='small text-muted text-center'>Nessuna scaletta.</div>"; else allSetlists.forEach(sl => { c.innerHTML += `<button class="list-group-item list-group-item-action py-2" onclick="window.addSongToSetlistId('${sl.id}')">${sl.name}</button>`; }); mAddToSetlist.show(); };
-window.createNewSetlistFromModal = async () => { const name = prompt("Nome nuova scaletta:"); if(name) { try { const docRef = await addDoc(collection(db, "setlists"), { name: name, songs: [], createdAt: Date.now() }); await loadData(); window.addSongToSetlistId(docRef.id); } catch(e) { showToast("Errore"); } } };
+window.openAddToSetlistModal = () => { const c = document.getElementById('setlistSelectorContainer'); c.innerHTML = ""; if (allSetlists.length === 0) c.innerHTML = "<div class='small text-muted text-center'>Nessuna scaletta.</div>"; else allSetlists.forEach(sl => { c.innerHTML += `<button class="list-group-item list-group-item-action py-2" onclick="window.addSongToSetlistId('${sl.id}')">${escapeHtml(sl.name)}</button>`; }); mAddToSetlist.show(); };
+window.createNewSetlistFromModal = async () => { const name = prompt("Nome nuova scaletta:"); if(name) { try { const docRef = await addDoc(collection(db, "setlists"), { name: name, songs: [], createdAt: Date.now() }); try { const mine = JSON.parse(localStorage.getItem('mySetlists')) || []; mine.push(docRef.id); localStorage.setItem('mySetlists', JSON.stringify(mine)); } catch (err) {} await loadData(); window.addSongToSetlistId(docRef.id); } catch(e) { showToast("Errore"); } } };
 window.addSongToSetlistId = async (setId) => { const sl = allSetlists.find(s => s.id === setId); if (sl) { const isPresent = sl.songs.some(item => { const id = typeof item === 'string' ? item : item.id; return id === currentSongId; }); if (isPresent) { showToast("Già presente", 'warning'); return; } try { const newSongEntry = { id: currentSongId, trans: 0 }; await updateDoc(doc(db, "setlists", setId), { songs: arrayUnion(newSongEntry) }); sl.songs.push(newSongEntry); showToast(`Aggiunta a "${sl.name}"`, 'success'); mAddToSetlist.hide(); } catch (e) { showToast("Errore", 'danger'); } } };
 window.openSetlistExportModal = () => { document.getElementById('setlistCoverInputModal').value = ""; mExportSetlist.show(); };
 window.confirmSetlistPDF = async () => {
@@ -1967,8 +2001,9 @@ window.confirmSetlistPDF = async () => {
                 parts.forEach(p => {
                     if (p.startsWith("[")) {
                         let c = p.replace(/[\[\]]/g,'');
-                        c = transposeChord(normalizeChord(c), sTrans); // <-- Qui usiamo sTrans
+                        c = chordDisplay(c, sTrans); // <-- Qui usiamo sTrans (annotazioni non trasposte)
                         doc.setFont(undefined, 'bold'); doc.setFontSize(chordSize); doc.setTextColor(220, 53, 69);
+                        if (lineX < lastChordEnd) lineX = lastChordEnd; // [Do][Sol]: non sovrapporre i due accordi
                         
                         const chordWidth = doc.getTextWidth(c);
                         if (lineX + chordWidth > currentX + COL_WIDTH && lineX > currentX) {
@@ -2005,7 +2040,7 @@ window.confirmSetlistPDF = async () => {
                 });
                 currentY += (lineHeight + 4); 
             } else {
-                    const cleanLine = l.replace(/\[.*?\]/g, ''); 
+                    const cleanLine = lineWithoutChords(l); // tiene (Rit.) (x2), toglie gli accordi
                     doc.setFont(undefined, 'normal'); doc.setFontSize(lyricSize); doc.setTextColor(0);
                     const splitText = doc.splitTextToSize(cleanLine, COL_WIDTH);
                     doc.text(splitText, lineX, currentY);
@@ -2065,7 +2100,7 @@ window.confirmSetlistPDF = async () => {
 };
 window.openSearchForSetlistModal = () => { document.getElementById("searchSetlistInput").value = ""; window.performSetlistSearch(); mSearchSetlist.show(); };
 window.performSetlistSearch = () => {
-    const q = document.getElementById("searchSetlistInput").value.toLowerCase();
+    const q = robustNormalize(document.getElementById("searchSetlistInput").value);
     const c = document.getElementById("searchSetlistResults");
     
     let allRes;
@@ -2074,7 +2109,7 @@ window.performSetlistSearch = () => {
     if (q.trim() === "") {
         allRes = [...allSongs].sort((a,b) => a.title.localeCompare(b.title));
     } else {
-        allRes = allSongs.filter(s => s.title.toLowerCase().includes(q) || (s.author && s.author.toLowerCase().includes(q)));
+        allRes = allSongs.filter(s => robustNormalize(s.title + " " + (s.author || "")).includes(q));
     }
     
     if (allRes.length === 0) { 
@@ -2099,8 +2134,8 @@ window.performSetlistSearch = () => {
         htmlContent += `
         <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
             <div class="text-truncate" style="max-width: 80%;">
-                <div class="fw-bold text-truncate">${s.title}</div>
-                <small class="text-muted text-truncate">${s.author || ''}</small>
+                <div class="fw-bold text-truncate">${escapeHtml(s.title)}</div>
+                <small class="text-muted text-truncate">${escapeHtml(s.author || '')}</small>
             </div>
             <button class="btn btn-sm ${btnClass} rounded-circle" ${action} style="width: 32px; height: 32px; padding: 0;">${icon}</button>
         </div>`;
@@ -2248,8 +2283,9 @@ window.exportSinglePDF = () => {
             let lastChordEnd = 0; 
             parts.forEach(p => {
                 if(p.startsWith("[")) {
-                    let c = transposeChord(normalizeChord(p.replace(/[\[\]]/g,'')), currentTranspose);
+                    let c = chordDisplay(p.replace(/[\[\]]/g,''), currentTranspose);
                     doc.setTextColor(220, 53, 69); doc.setFont(undefined, 'bold');
+                    if (lineX < lastChordEnd) lineX = lastChordEnd; // [Do][Sol]: non sovrapporre i due accordi
                     doc.text(c, lineX, currentY);
                     const chordWidth = doc.getTextWidth(c);
                     lastChordEnd = lineX + chordWidth + 1.5; 
@@ -2266,7 +2302,7 @@ window.exportSinglePDF = () => {
             currentY += 10; 
         } else {
             doc.setTextColor(0); doc.setFont(undefined, 'normal');
-            doc.text(l, MARGIN, currentY);
+            doc.text(lineWithoutChords(l), MARGIN, currentY); // prima, con gli accordi nascosti, stampava "[Do]testo"
             currentY += 7;
         }
     }
@@ -2292,26 +2328,24 @@ window.exportSingleLatex = () => {
 
     // Metadati (Autore e Anno se presenti)
     let meta = [];
-    if(s.author) meta.push(`by={${s.author}}`);
-    if(s.year) meta.push(`sr={${s.year}}`);
+    if(s.author) meta.push(`by={${latexEscape(s.author)}}`);
+    if(s.year) meta.push(`sr={${latexEscape(s.year)}}`);
     const metaStr = meta.length > 0 ? `[${meta.join(',')}]` : "";
 
     // Inizio Canzone
-    l += `\\beginsong{${s.title}}${metaStr}\n`;
+    l += `\\beginsong{${latexEscape(s.title)}}${metaStr}\n`;
     l += `\\beginverse\n`;
 
     // Processamento righe
     const lines = rawLyrics.split("\n");
     lines.forEach(line => {
-        // A. Gestione Accordi: [Do] -> \[C] 
-        // Il pacchetto songs lavora meglio con accordi in Inglese (normalizeChord)
-        let processed = line.replace(/\[(.*?)\]/g, (m, p1) => {
-            return `\\[${normalizeChord(p1)}]`;
+        // A. Accordi: [Do] -> \[C] (il pacchetto songs lavora meglio con accordi in Inglese)
+        //    Annotazioni ([Rit.], [x2]) in corsivo, refusi sicuri corretti
+        // B. Formattazione: **grassetto** e __corsivo__; & % # _ protetti (prima rompevano il file)
+        const processed = latexLine(line, (p1) => {
+            const k = classifyBracket(p1);
+            return normalizeChord(k.kind === "typo" ? k.suggestion : p1);
         });
-
-        // B. Gestione Formattazione
-        processed = processed.replace(/\*\*(.*?)\*\*/g, "\\textbf{$1}"); // Grassetto
-        processed = processed.replace(/__(.*?)__/g, "\\textit{$1}");     // Corsivo
 
         l += processed + "\n";
     });
@@ -2373,7 +2407,7 @@ window.renderManageSections = () => {
         const isLast = index === sortedSections.length - 1;
         
         // CORREZIONE QUI SOTTO: Escape del nome per evitare errori con gli apostrofi
-        const safeName = sec.name.replace(/'/g, "\\'"); 
+        const safeName = jsArg(sec.name); 
 
         c.innerHTML += `
         <div class="card bg-dark border-secondary shadow-sm p-2 mb-2" style="border: 1px solid #444;">
@@ -2396,12 +2430,12 @@ window.renderManageSections = () => {
                 </div>
 
                 <div class="flex-grow-1 overflow-hidden">
-                    <h5 class="fw-bold mb-0 text-white text-truncate">${sec.name}</h5>
+                    <h5 class="fw-bold mb-0 text-white text-truncate">${escapeHtml(sec.name)}</h5>
                     <small class="text-white-50" style="font-size: 0.85rem;">${songCount} canzoni</small>
                 </div>
 
                 <div class="d-flex gap-2">
-                    <button class="btn btn-outline-light btn-sm" title="Modifica" onclick="window.openSectionSettings('${sec.id}','${safeName}','${sec.coverUrl||''}', event)">
+                    <button class="btn btn-outline-light btn-sm" title="Modifica" onclick="window.openSectionSettings('${sec.id}','${safeName}',null, event)">
                         <i class="bi bi-pencil"></i>
                     </button>
                     ${isSuperAdmin ? `
@@ -2576,7 +2610,7 @@ window.openProposeView = () => {
     const sel = document.getElementById("propCategory");
     sel.innerHTML = "";
     allSections.forEach(sec => {
-        sel.innerHTML += `<option value="${sec.name}">${sec.name}</option>`;
+        sel.innerHTML += `<option value="${escapeHtml(sec.name)}">${escapeHtml(sec.name)}</option>`;
     });
 
     // 4. Mostra la vista
@@ -2639,7 +2673,7 @@ window.openProposalEditor = (id) => {
         targetMergeSongId = duplicate.id; // Salviamo l'ID da sovrascrivere
         alertBox.innerHTML = `
             <i class="bi bi-exclamation-triangle-fill me-2"></i>
-            <strong>ATTENZIONE:</strong> Esiste già una canzone chiamata <u>${duplicate.title}</u> nella sezione <b>${duplicate.category}</b>.<br>
+            <strong>ATTENZIONE:</strong> Esiste già una canzone chiamata <u>${escapeHtml(duplicate.title)}</u> nella sezione <b>${escapeHtml(duplicate.category)}</b>.<br>
             Se clicchi "Salva e Approva", il testo di questa proposta <strong>SOVRASCRIVERÀ</strong> quello della canzone esistente.
         `;
         alertBox.style.display = "block";
@@ -2659,7 +2693,7 @@ window.renderReviewPreview = () => {
     const txt = document.getElementById("reviewLyrics").value;
     const div = document.getElementById("reviewPreviewArea");
     // Stessa logica dell'editor, accordi evidenziati in rosa
-    div.innerHTML = lyricsToHtml(txt, 0, ' style="color: #ff85c0; font-weight:bold;"', suspiciousChords(txt));
+    div.innerHTML = lyricsToHtml(txt, 0, ' style="color: #ff85c0; font-weight:bold;"', suspiciousChords(txt), true);
 };
 
 // 3. SALVA E APPROVA (Crea canzone e cancella proposta)
@@ -2735,7 +2769,7 @@ window.renderExportList = () => {
         
         list.innerHTML += `
         <div class="list-group-item bg-dark border-secondary text-white d-flex align-items-center justify-content-between p-2 mb-1 rounded ${opacityClass}" 
-             onmouseenter="window.hoverSectionPreview('${sec.id}', '${sec.name.replace(/'/g, "\\'")}')">
+             onmouseenter="window.hoverSectionPreview('${sec.id}', '${jsArg(sec.name)}')">
             
             <div class="d-flex align-items-center gap-2 flex-grow-1" style="min-width:0;">
                 <div class="form-check form-switch me-1">
@@ -2748,14 +2782,14 @@ window.renderExportList = () => {
                 </div>
                 
                 <div class="text-truncate">
-                    <div class="fw-bold small">${sec.name}</div>
+                    <div class="fw-bold small">${escapeHtml(sec.name)}</div>
                     <div class="d-flex align-items-center gap-1">
                         <small>${hasDbCover}</small>
                         <label class="btn btn-outline-secondary btn-xs py-0 px-1 border-0" style="font-size: 0.7rem;">
                             <i class="bi bi-upload"></i> Cambia
                             <input type="file" hidden accept="image/*" 
                                    data-sec-id="${sec.id}"
-                                   onchange="window.updateExportPreview('section_custom', this, '${sec.name.replace(/'/g, "\\'")}')">
+                                   onchange="window.updateExportPreview('section_custom', this, '${jsArg(sec.name)}')">
                         </label>
                     </div>
                 </div>
@@ -2856,10 +2890,10 @@ window.generateExcelList = () => {
     
     sorted.forEach(s => {
         // Pulisci i campi da eventuali punti e virgola che romperebbero il CSV
-        const safeTitle = (s.title || "").replace(/;/g, ",");
-        const safeAuthor = (s.author || "").replace(/;/g, ",");
-        const safeYear = (s.year || "").replace(/;/g, "");
-        const safeCategory = (s.category || "").replace(/;/g, ",");
+        const safeTitle = String(s.title ?? "").replace(/;/g, ",");
+        const safeAuthor = String(s.author ?? "").replace(/;/g, ",");
+        const safeYear = String(s.year ?? "").replace(/;/g, "");
+        const safeCategory = String(s.category ?? "").replace(/;/g, ",");
         
         csvContent += `${safeTitle};${safeAuthor};${safeYear};${safeCategory}\n`;
     });
@@ -3164,7 +3198,7 @@ function renderSongDoctor() {
     let html = `<div class="small text-white-50 mb-2">${escapeHtml(info.hint)}</div>`;
 
     if (info.fixable && items.length) {
-        const n = items.filter(x => isAutoFixable(x.song)).length;
+        const n = items.filter(x => isAutoFixable(x.song, info.opts)).length;
         html += `<button class="btn btn-success btn-sm fw-bold mb-3" onclick="window.batchAutoFix('${doctorFilter}')">
                     <i class="bi bi-magic me-1"></i> Correggi automaticamente tutte (${n})
                  </button>`;
@@ -3230,8 +3264,11 @@ window.compressSectionCovers = () => {
 // Bottone "Auto-correggi" nell'editor: corregge il testo aperto, NON salva (controlli l'anteprima e premi Salva)
 window.autoFixCurrentSong = () => {
     const ta = document.getElementById("lyricsEditor");
-    const { text, changes } = fixLyrics(ta.value);
-    if (text === ta.value) return showToast("Niente da correggere in questa canzone", "info");
+    const { text, changes } = fixLyrics(ta.value, { typos: true });
+    if (text === ta.value) {
+        if (changes.review.length) return showToast("Da controllare a mano: riga " + changes.review.map(r => r.line).join(", "), "warning");
+        return showToast("Niente da correggere in questa canzone", "info");
+    }
 
     ta.focus();
     ta.select();
@@ -3255,6 +3292,16 @@ function downloadJson(data, filename) {
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 
+// Backup completo: tutte le canzoni (testo, accordi e dati) in un file. Si ripristina con "Ripristina".
+window.downloadFullBackup = () => {
+    if (!isAdmin) return;
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+    downloadJson(allSongs.map(s => ({ id: s.id, title: s.title, author: s.author || "", category: s.category || "",
+        year: s.year || "", description: s.description || "", savedTranspose: s.savedTranspose || 0, lyrics: s.lyrics || "" })),
+        `backup-canzoniere-${stamp}.json`);
+    showToast(`Backup di ${allSongs.length} canzoni scaricato`, "success");
+};
+
 // Scrive su Firestore a blocchi da 400 (il limite di un batch è 500)
 async function writeLyricsInChunks(updates) {
     for (let i = 0; i < updates.length; i += 400) {
@@ -3270,7 +3317,8 @@ async function writeLyricsInChunks(updates) {
 }
 
 window.batchAutoFix = (code) => {
-    const targets = doctorReport[code].map(x => x.song).filter(s => isAutoFixable(s));
+    const opts = (ISSUES[code] && ISSUES[code].opts) || {};
+    const targets = doctorReport[code].map(x => x.song).filter(s => isAutoFixable(s, opts));
     if (!targets.length) return showToast("Niente da correggere in automatico", "info");
 
     window.confirmModal(`Correggere automaticamente ${targets.length} canzoni? Prima viene scaricato un file di backup con i testi originali.`, async () => {
@@ -3279,7 +3327,7 @@ window.batchAutoFix = (code) => {
 
         document.getElementById("loadingOverlay").style.display = "flex";
         try {
-            await writeLyricsInChunks(targets.map(s => ({ id: s.id, lyrics: fixLyrics(s.lyrics).text })));
+            await writeLyricsInChunks(targets.map(s => ({ id: s.id, lyrics: fixLyrics(s.lyrics, opts).text })));
             showToast(`${targets.length === 1 ? "1 canzone corretta" : targets.length + " canzoni corrette"}. Il backup è nei download.`, "success");
         } catch (e) {
             showToast("Errore durante la correzione: " + e.message, "danger");

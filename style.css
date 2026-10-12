@@ -157,6 +157,14 @@ input::placeholder, textarea::placeholder { color: #888 !important; }
 .hide-chords .chord-span { display: none; }
 /* Accordi fuori tonalità (Controllo Canzoni, solo admin) */
 .chord-suspect { color: #ff6b6b !important; text-decoration: underline wavy #ff6b6b; }
+.chord-unusual { color: #ffb347 !important; text-decoration: underline dotted #ffb347; }
+/* Refusi ([Miaj7] mostrato già corretto) e accordi non riconosciuti ([Lsm]): solo admin */
+.chord-typo { outline: 1px dashed #ffb347; outline-offset: 1px; }
+.chord-unknown { color: #ff6b6b !important; outline: 1px dashed #ff6b6b; outline-offset: 1px; }
+/* Annotazioni [Rit.] [x2] [Chorus]: in linea col testo, restano visibili anche nascondendo gli accordi */
+.chord-note { color: var(--chord-color); font-style: italic; opacity: 0.85; }
+/* Spazi aggiunti tra due accordi troppo vicini: spariscono insieme agli accordi */
+.hide-chords .chord-pad { display: none; }
 
 /* Box note editor */
 #editorMeta {
