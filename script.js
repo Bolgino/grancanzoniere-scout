@@ -298,7 +298,7 @@ enableMultiTabIndexedDbPersistence(db)
           }
 
           // Le proposte dopo le canzoni: al superadmin servono le canzoni già caricate per il conteggio
-          loadData().then(() => { if (isAdmin) loadProposals(); handleStartupLink(); });
+          loadData().then(() => { if (isAdmin) { loadProposals(); loadReports(); } handleStartupLink(); });
       });
   });
 window.loadData = loadData;
@@ -494,7 +494,7 @@ window.renderDashboard = () => {
         }
 
         renderSearchFilters();
-        if (activeTags.size) window.performGlobalSearch();
+        if (filtersActive()) window.performGlobalSearch();
 
         // NASCONDI OVERLAY SOLO SE NON E' IL PRIMO AVVIO
         // (Al primo avvio ci pensa la funzione loadData dopo 3 secondi)
@@ -582,11 +582,11 @@ window.addEventListener('load', () => window.setSearchMode(searchMode));
 window.performGlobalSearch = () => {
     // Ignora accenti e punteggiatura: "perche" trova "Perché"
     const q = robustNormalize(document.getElementById('globalSearch').value);
-    if (!q && !activeTags.size) { window.renderDashboard(); return; }
+    if (!q && !filtersActive()) { window.renderDashboard(); return; }
     const words = q ? q.split(" ").filter(Boolean) : [];
 
     // Trova TUTTI i risultati, i migliori prima (solo tra le canzoni con le etichette scelte)
-    const allRes = allSongs.filter(matchTags).map(s => ({ s, m: q ? matchSong(s, q, words, searchMode) : { score: 0, where: 'tags' } })).filter(x => x.m)
+    const allRes = allSongs.filter(matchFilters).map(s => ({ s, m: q ? matchSong(s, q, words, searchMode) : { score: 0, where: 'tags' } })).filter(x => x.m)
         .sort((x, y) => y.m.score - x.m.score || x.s.title.localeCompare(y.s.title));
     document.getElementById("favoritesSection").style.display = 'none';
 
@@ -594,7 +594,7 @@ window.performGlobalSearch = () => {
     const maxShown = q ? 30 : 400;
     const res = allRes.slice(0, maxShown);
 
-    let htmlContent = (activeTags.size ? `<div class="col-12 filters-summary">${allRes.length} canzoni con: ${[...activeTags].map(t => `<b>${escapeHtml(TAG_LABEL[t] || t)}</b>`).join(", ")}</div>` : "") + (res.length ? res.map(({ s, m }) => {
+    let htmlContent = (filtersActive() ? `<div class="col-12 filters-summary">${filtersSummary(allRes.length)}</div>` : "") + (res.length ? res.map(({ s, m }) => {
         let badgeHtml = "";
         
         // LOGICA BOLLINI ADMIN
@@ -634,7 +634,7 @@ window.performGlobalSearch = () => {
                 <i class="bi bi-chevron-right text-muted"></i>
             </div>
         </div></div>`;
-    }).join('') : `<div class="text-center mt-4">Nessun risultato${q && searchMode !== 'all' ? ` cercando solo per ${({ title: "titolo", author: "autore", lyrics: "testo" })[searchMode]} — <a href="#" onclick="window.setSearchMode('all'); return false;">cerca ovunque</a>` : ""}${activeTags.size ? ` con questi filtri — <a href="#" onclick="window.clearTagFilters(); return false;">togli i filtri</a>` : ""}.</div>`);
+    }).join('') : `<div class="text-center mt-4">Nessun risultato${q && searchMode !== 'all' ? ` cercando solo per ${({ title: "titolo", author: "autore", lyrics: "testo" })[searchMode]} — <a href="#" onclick="window.setSearchMode('all'); return false;">cerca ovunque</a>` : ""}${filtersActive() ? ` con questi filtri — <a href="#" onclick="window.clearTagFilters(); return false;">togli i filtri</a>` : ""}.</div>`);
 
     // Se ci sono più di 30 risultati, aggiungi un avviso alla fine della lista
     if (allRes.length > maxShown) {
@@ -767,6 +767,7 @@ window.openEditor = (id) => {
         if(s.year) metaText.push(`(${s.year})`);
         document.getElementById("editorMeta").innerText = metaText.join(" - ");
         renderEditorTags(s);
+        renderEditorReports(s);
 
         const editor = document.getElementById("lyricsEditor");
         editor.value = s.lyrics || "";
@@ -3637,6 +3638,7 @@ function openChordSheet(el, flagged) {
     }
     if (!info && !flagHtml) return;
     const capo = capoOfElement(el);
+    const reportSong = el.closest("#performBody") && perform ? perform.list[perform.index].id : el.closest("#previewArea") ? currentSongId : null;
     const body = () => !info ? "" : `
         <div class="chord-sheet-notes">Note: <b>${info.notes.map(escapeHtml).join(" · ")}</b>${info.slash ? ` <span class="text-muted">· basso ${escapeHtml(info.bassName)}</span>` : ""}</div>
         <div class="chord-tabs" role="tablist">
@@ -3645,7 +3647,8 @@ function openChordSheet(el, flagged) {
         </div>
         <div class="chord-figs">${chordFiguresHtml(shown)}</div>
         ${capo ? `<div class="chord-sheet-capo"><i class="bi bi-sliders2-vertical"></i> Con il capotasto al ${capo}° tasto questa forma suona come <b>${escapeHtml(nicerName(transposeChord(normalizeChord(shown), capo)))}</b>.</div>` : ""}
-        <div class="chord-legend">● dito sulla corda · ○ corda a vuoto · × corda da non suonare</div>`;
+        <div class="chord-legend">● dito sulla corda · ○ corda a vuoto · × corda da non suonare</div>
+        ${!isAdmin && reportSong ? `<button type="button" class="chord-report" data-act="report"><i class="bi bi-flag me-1"></i>Questo accordo è sbagliato? Segnalalo</button>` : ""}`;
     const sheet = openSheet({ title: shown || flagName, html: flagHtml + `<div class="chord-sheet-main">${body()}</div>` });
     sheet.body.addEventListener("click", (ev) => {
         const tab = ev.target.closest("[data-inst]");
@@ -3660,6 +3663,7 @@ function openChordSheet(el, flagged) {
         sheet.close();
         if (act.dataset.act === "ok") window.markChordOk(flagName);
         if (act.dataset.act === "fix") window.autoFixCurrentSong();
+        if (act.dataset.act === "report") window.openReportSheet({ songId: reportSong, type: "accordi", note: `L'accordo ${shown} (come lo vedo io): ` });
     });
 }
 
@@ -4145,15 +4149,19 @@ function matchTags(s) {
 
 function renderSearchFilters() {
     const box = document.getElementById("searchFilters");
+    updateFavBadge();
     if (!box) return;
     const counts = {};
     allSongs.forEach(s => (s.tags || []).forEach(t => { counts[t] = (counts[t] || 0) + 1; }));
-    if (!Object.keys(counts).length && !activeTags.size) { box.innerHTML = ""; return; }
+    const hasTags = Object.keys(counts).length > 0 || activeTags.size > 0;
+    const favN = favoriteSongs().length;
+    if (!hasTags && !favN && !favFilter) { box.innerHTML = ""; return; }
     let html = `<div class="filters-row">
-        <button type="button" class="filters-toggle ${filtersOpen ? "open" : ""}" data-act="toggle"><i class="bi bi-funnel${activeTags.size ? "-fill" : ""} me-1"></i>Momento e branca <i class="bi bi-chevron-${filtersOpen ? "up" : "down"}"></i></button>
+        ${favN || favFilter ? `<button type="button" class="tag-chip fav ${favFilter ? "on" : ""}" data-act="fav" title="Solo i miei preferiti (salvati su questo telefono)"><i class="bi bi-star${favFilter ? "-fill" : ""}"></i> Preferiti <small>${favN}</small></button>` : ""}
+        ${hasTags ? `<button type="button" class="filters-toggle ${filtersOpen ? "open" : ""}" data-act="toggle"><i class="bi bi-funnel${activeTags.size ? "-fill" : ""} me-1"></i>Momento e branca <i class="bi bi-chevron-${filtersOpen ? "up" : "down"}"></i></button>` : ""}
         ${[...activeTags].map(t => `<button type="button" class="tag-chip on" data-tag="${escapeHtml(t)}">${escapeHtml(tagLabel(t))} <i class="bi bi-x"></i></button>`).join("")}
-        ${activeTags.size ? `<button type="button" class="filters-clear" data-act="clear">togli filtri</button>` : ""}</div>`;
-    if (filtersOpen) {
+        ${filtersActive() ? `<button type="button" class="filters-clear" data-act="clear">togli filtri</button>` : ""}</div>`;
+    if (filtersOpen && hasTags) {
         html += `<div class="filters-panel">` + TAG_GROUPS.map(g => {
             const tags = g.tags.filter(([k]) => counts[k] || activeTags.has(k));
             if (!tags.length) return "";
@@ -4163,12 +4171,18 @@ function renderSearchFilters() {
     }
     box.innerHTML = html;
 }
-window.clearTagFilters = () => { activeTags.clear(); renderSearchFilters(); window.performGlobalSearch(); };
+function updateFavBadge() {
+    const n = favoriteSongs().length;
+    const b = document.getElementById("favCountBadge");
+    if (b) { b.textContent = n; b.style.display = n ? "inline-block" : "none"; }
+}
+window.clearTagFilters = () => { activeTags.clear(); favFilter = false; renderSearchFilters(); window.performGlobalSearch(); };
 document.addEventListener("click", (e) => {
     if (!e.target.closest("#searchFilters")) return;
     const act = e.target.closest("[data-act]"), chip = e.target.closest("[data-tag]");
     if (act && act.dataset.act === "toggle") { filtersOpen = !filtersOpen; return renderSearchFilters(); }
-    if (act && act.dataset.act === "clear") activeTags.clear();
+    if (act && act.dataset.act === "fav") favFilter = !favFilter;
+    else if (act && act.dataset.act === "clear") { activeTags.clear(); favFilter = false; }
     else if (chip) { const t = chip.dataset.tag; if (activeTags.has(t)) activeTags.delete(t); else activeTags.add(t); }
     else return;
     renderSearchFilters();
@@ -4186,7 +4200,7 @@ function renderEditorTags(s) {
 document.addEventListener("click", (e) => {
     const chip = e.target.closest("#editorTags [data-filter-tag]");
     if (!chip) return;
-    const go = () => { hasUnsavedChanges = false; activeTags = new Set([chip.dataset.filterTag]); filtersOpen = false; window.renderDashboard(); };
+    const go = () => { hasUnsavedChanges = false; activeTags = new Set([chip.dataset.filterTag]); favFilter = false; filtersOpen = false; window.renderDashboard(); };
     if (hasUnsavedChanges) confirmLeaveEditor().then(ok => { if (ok) go(); }); else go();
 });
 
@@ -4574,3 +4588,248 @@ async function downloadAllOffline() {
     updateOnlineUi();
     return { ok: true, files: res ? res.ok : 0 };
 }
+
+// =====================================================================================================
+// PREFERITI (filtro e pulsante) E SEGNALAZIONI DI ERRORI SULLE CANZONI
+// =====================================================================================================
+
+// --- PREFERITI: ognuno ha i suoi, salvati su questo telefono -----------------------------------------
+let favFilter = false;
+const favoriteSongs = () => allSongs.filter(s => favorites.includes(s.id));
+const filtersActive = () => favFilter || activeTags.size > 0;
+const matchFilters = (s) => (!favFilter || favorites.includes(s.id)) && matchTags(s);
+function filtersSummary(n) {
+    if (favFilter && !favorites.length) return `Non hai ancora preferiti: apri una canzone e tocca la <i class="bi bi-star"></i> accanto al titolo.`;
+    const parts = [];
+    if (favFilter) parts.push(`tra i tuoi <b>preferiti</b>`);
+    if (activeTags.size) parts.push(`con: ${[...activeTags].map(t => `<b>${escapeHtml(tagLabel(t))}</b>`).join(", ")}`);
+    return `${n} canzoni ${parts.join(" ")}`;
+}
+function updateFavUi() {
+    updateFavBadge();
+    const view = document.querySelector(".view-screen.active");
+    if (view && view.id === "view-dashboard") renderSearchFilters();
+}
+window.openFavorites = () => {
+    const go = () => {
+        hasUnsavedChanges = false;
+        favFilter = true; activeTags.clear(); filtersOpen = false;
+        window.renderDashboard();
+    };
+    const editor = document.getElementById("view-editor");
+    if (hasUnsavedChanges && editor && editor.classList.contains("active")) confirmLeaveEditor().then(ok => { if (ok) go(); });
+    else go();
+};
+// la stella nell'editor aggiorna anche il conteggio e il filtro
+const toggleFavoriteBase = window.toggleFavorite;
+window.toggleFavorite = () => { toggleFavoriteBase(); updateFavUi(); };
+
+// --- SEGNALA UN ERRORE ------------------------------------------------------------------------------
+// Chiunque può segnalare cosa non va in una canzone; i capi vedono le segnalazioni in "Segnalazioni"
+// e, aprendo la canzone, anche sopra il testo.
+const REPORT_TYPES = [
+    ["accordi", "Accordi sbagliati", "bi-music-note"],
+    ["posizione", "Accordi nel punto sbagliato del testo", "bi-arrow-left-right"],
+    ["accordi-mancanti", "Mancano gli accordi", "bi-music-note-list"],
+    ["testo", "Testo sbagliato o incompleto", "bi-fonts"],
+    ["tonalita", "Tonalità sbagliata o scomoda", "bi-sliders"],
+    ["dati", "Titolo, autore o sezione sbagliati", "bi-card-heading"],
+    ["doppia", "Canzone doppia", "bi-files"],
+    ["altro", "Altro", "bi-three-dots"],
+];
+const REPORT_LABEL = Object.fromEntries(REPORT_TYPES.map(([k, l]) => [k, l]));
+const REPORTS_RULES = `match /reports/{reportId} {\n  allow create: if request.resource.data.note is string\n                && request.resource.data.note.size() <= 1000;\n  allow read, delete: if isAdmin();\n}`;
+let allReports = [], reportsBlocked = false;
+const reportsFor = (id) => allReports.filter(r => r.songId === id);
+const isPermissionError = (err) => /permission/i.test(`${(err && err.code) || ""} ${(err && err.message) || ""}`);
+
+// Canzone e tonalità che la persona sta guardando adesso (editor o modalità esibizione)
+function reportContext(songId) {
+    if (perform && (!songId || songId === perform.list[perform.index].id)) {
+        const it = perform.list[perform.index];
+        return { songId: it.id, trans: it.trans || 0, capo: capoFor(it.id, it.trans || 0) };
+    }
+    const id = songId || currentSongId;
+    return { songId: id, trans: id === currentSongId ? currentTranspose : 0, capo: id === currentSongId ? capoFor(id, currentTranspose) : 0 };
+}
+
+window.openReportSheet = (prefill = {}) => {
+    const ctxR = reportContext(prefill.songId);
+    const s = allSongs.find(x => x.id === ctxR.songId);
+    if (!s) return;
+    let type = prefill.type || "";
+    const sheet = openSheet({ title: "Segnala un errore", html: `
+        <p class="small mb-2">Cosa non va in <b>${escapeHtml(s.title)}</b>${s.author ? ` <span class="text-muted">(${escapeHtml(s.author)})</span>` : ""}? La segnalazione arriva ai capi, che la sistemano.</p>
+        <div class="report-types">${REPORT_TYPES.map(([k, l, ic]) => `<button type="button" class="report-type ${k === type ? "on" : ""}" data-type="${k}"><i class="bi ${ic}"></i>${escapeHtml(l)}</button>`).join("")}</div>
+        <label class="small text-muted mt-3 mb-1 d-block">Dove e cosa? (facoltativo, ma aiuta molto)</label>
+        <textarea class="report-note" maxlength="1000" rows="3" placeholder="Es. nel ritornello il secondo accordo è Rem, non Re"></textarea>
+        <input class="report-name mt-2" maxlength="60" placeholder="Il tuo nome (facoltativo)">
+        ${ctxR.trans || ctxR.capo ? `<div class="small text-muted mt-2"><i class="bi bi-info-circle"></i> Insieme alla segnalazione invio anche come la stai vedendo${ctxR.trans ? ` (tono ${signed(ctxR.trans)})` : ""}${ctxR.capo ? ` (capotasto ${ctxR.capo})` : ""}, così i capi capiscono di quali accordi parli.</div>` : ""}
+        <button type="button" class="app-btn app-btn-primary w-100 mt-3" data-act="send" ${type ? "" : "disabled"}><i class="bi bi-send me-1"></i>Invia segnalazione</button>` });
+    const note = sheet.body.querySelector(".report-note"), name = sheet.body.querySelector(".report-name"), send = sheet.body.querySelector("[data-act=send]");
+    note.value = prefill.note || "";
+    name.value = lsGet('reportName', "");
+    sheet.body.addEventListener("click", async (ev) => {
+        const t = ev.target.closest("[data-type]");
+        if (t) {
+            type = t.dataset.type;
+            sheet.body.querySelectorAll(".report-type").forEach(b => b.classList.toggle("on", b === t));
+            send.disabled = false;
+            return;
+        }
+        if (!ev.target.closest("[data-act=send]") || !type || send.disabled) return;
+        const data = { songId: s.id, title: s.title || "", author: s.author || "", category: s.category || "", type,
+                       note: note.value.trim().slice(0, 1000), name: name.value.trim().slice(0, 60),
+                       trans: ctxR.trans || 0, capo: ctxR.capo || 0, at: Date.now(), device: deviceId };
+        lsSet('reportName', data.name);
+        const sending = addDoc(collection(db, "reports"), data);
+        if (!navigator.onLine) {   // senza rete resta sul telefono e parte da sola appena torna la connessione
+            sheet.close();
+            notify("Segnalazione salvata: parte da sola appena torni online.", "info");
+            sending.catch(reportSendError);
+            return;
+        }
+        send.disabled = true;
+        send.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Invio...';
+        try {
+            const ref = await sending;
+            sheet.close();
+            notify("Grazie! Segnalazione inviata ai capi.", "success");
+            if (isAdmin) { allReports.unshift({ id: ref.id, ...data }); refreshReportsUi(); }
+        } catch (err) {
+            send.disabled = false;
+            send.innerHTML = '<i class="bi bi-send me-1"></i>Invia segnalazione';
+            reportSendError(err);
+        }
+    });
+};
+function reportSendError(err) {
+    console.warn("Segnalazione non inviata:", err);
+    if (isPermissionError(err)) {
+        notify(isAdmin ? "Segnalazione non inviata: nelle regole di Firestore manca il permesso per «reports»." : "Segnalazione non inviata: il canzoniere non accetta ancora segnalazioni. Avvisa un capo.", "warning",
+            isAdmin ? { duration: 12000, actions: [{ label: "Copia la regola", onClick: () => copyText(REPORTS_RULES).then(() => notify("Regola copiata: incollala nelle regole di Firestore", "success")) }] } : {});
+    } else notify("Segnalazione non inviata: " + ((err && err.message) || "errore"), "danger");
+}
+
+// --- SEGNALAZIONI (capi) ------------------------------------------------------------------------------
+async function loadReports() {
+    if (!isAdmin) return;
+    try {
+        const snap = await getDocs(collection(db, "reports"));
+        allReports = [];
+        snap.forEach(d => allReports.push({ id: d.id, ...d.data() }));
+        allReports.sort((a, b) => (b.at || 0) - (a.at || 0));
+        reportsBlocked = false;
+    } catch (err) {
+        allReports = [];
+        reportsBlocked = isPermissionError(err);
+        if (!reportsBlocked) console.warn("Segnalazioni non caricate:", err);
+    }
+    refreshReportsUi();
+}
+window.loadReports = loadReports;
+
+function refreshReportsUi() {
+    const b = document.getElementById("reportsBadge");
+    if (b) { b.textContent = allReports.length; b.style.display = allReports.length ? "inline-block" : "none"; }
+    const view = document.querySelector(".view-screen.active");
+    if (view && view.id === "view-reports") renderReportsView();
+    if (view && view.id === "view-editor") renderEditorReports(allSongs.find(x => x.id === currentSongId));
+}
+
+function reportMeta(r) {
+    return [r.name ? `da ${escapeHtml(r.name)}` : "anonima", escapeHtml(fmtDate(r.at)),
+            r.trans ? `vista con tono ${signed(r.trans)}` : "", r.capo ? `capotasto ${r.capo}` : ""].filter(Boolean).join(" · ");
+}
+
+window.openReportsView = () => {
+    if (!isAdmin) return;
+    switchView("view-reports");
+    renderReportsView();
+    loadReports();
+};
+
+function renderReportsView() {
+    const box = document.getElementById("reportsList");
+    if (!box) return;
+    if (reportsBlocked) {
+        box.innerHTML = `<div class="tags-summary"><p class="mb-2">Il database non permette ancora le segnalazioni. Nella console di Firebase, in <b>Firestore → Regole</b>, aggiungi dentro <code>match /databases/{database}/documents</code>:</p>
+            <pre class="rules-snippet">${escapeHtml(REPORTS_RULES)}</pre><button class="app-btn app-btn-primary" data-act="copyrules">Copia la regola</button></div>`;
+        return;
+    }
+    if (!allReports.length) { box.innerHTML = `<div class="text-center text-muted mt-5"><i class="bi bi-emoji-smile fs-3 d-block mb-2"></i>Nessuna segnalazione da controllare.</div>`; return; }
+    box.innerHTML = `<div class="small text-muted mb-1">${allReports.length} segnalazioni, le più recenti prima. Quando hai sistemato la canzone premi «Risolta».</div>` +
+        allReports.map(r => {
+            const s = allSongs.find(x => x.id === r.songId);
+            return `<div class="report-card" data-id="${escapeHtml(r.id)}">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div style="min-width:0"><b>${escapeHtml(s ? s.title : r.title)}</b> <small class="text-muted">${escapeHtml(s ? s.author || "" : r.author || "")}</small>${s ? "" : ` <span class="badge bg-secondary">canzone eliminata</span>`}</div>
+                    <span class="report-badge">${escapeHtml(REPORT_LABEL[r.type] || r.type || "Errore")}</span>
+                </div>
+                ${r.note ? `<div class="report-note-text">${escapeHtml(r.note)}</div>` : ""}
+                <div class="report-meta">${reportMeta(r)}</div>
+                <div class="d-flex gap-2 mt-2">
+                    ${s ? `<button class="btn btn-sm btn-outline-light" data-act="open"><i class="bi bi-pencil me-1"></i>Apri la canzone</button>` : ""}
+                    <button class="btn btn-sm btn-success ms-auto" data-act="done"><i class="bi bi-check2 me-1"></i>Risolta</button>
+                </div>
+            </div>`;
+        }).join("");
+}
+
+// Banner nell'editor (solo capi): le segnalazioni di questa canzone, mentre la sistemi
+function renderEditorReports(s) {
+    const box = document.getElementById("editorReports");
+    if (!box) return;
+    const list = isAdmin && s ? reportsFor(s.id) : [];
+    if (!list.length) { box.innerHTML = ""; return; }
+    box.innerHTML = `<div class="editor-reports"><div class="d-flex align-items-center gap-2 mb-1"><i class="bi bi-flag-fill"></i><b>${list.length === 1 ? "1 segnalazione" : `${list.length} segnalazioni`}</b>
+            ${list.length > 1 ? `<button class="btn btn-sm btn-outline-success py-0 ms-auto" data-report-done="all">Tutte risolte</button>` : ""}</div>
+        ${list.map(r => `<div class="editor-report"><div><b>${escapeHtml(REPORT_LABEL[r.type] || r.type)}</b>${r.note ? ` — ${escapeHtml(r.note)}` : ""}<div class="report-meta">${reportMeta(r)}</div></div>
+            <button class="btn btn-sm btn-success py-0" data-report-done="${escapeHtml(r.id)}" title="Risolta"><i class="bi bi-check2"></i></button></div>`).join("")}</div>`;
+}
+
+async function resolveReports(ids) {
+    const gone = allReports.filter(r => ids.includes(r.id));
+    if (!gone.length) return;
+    allReports = allReports.filter(r => !ids.includes(r.id));
+    refreshReportsUi();
+    try {
+        await Promise.all(gone.map(r => deleteDoc(doc(db, "reports", r.id))));
+        notify(gone.length === 1 ? "Segnalazione risolta" : `${gone.length} segnalazioni risolte`, "success", { duration: 5000, actions: [{ label: "Annulla", primary: false, onClick: async () => {
+            try {
+                for (const r of gone) { const { id, ...data } = r; const ref = await addDoc(collection(db, "reports"), data); allReports.push({ id: ref.id, ...data }); }
+                allReports.sort((a, b) => (b.at || 0) - (a.at || 0));
+                refreshReportsUi();
+            } catch (err) { notify("Non riesco ad annullare: " + err.message, "danger"); }
+        } }] });
+    } catch (err) {
+        allReports = allReports.concat(gone).sort((a, b) => (b.at || 0) - (a.at || 0));
+        refreshReportsUi();
+        notify("Non riesco a segnarla come risolta: " + err.message, "danger");
+    }
+}
+
+document.addEventListener("click", (e) => {
+    const done = e.target.closest("#editorReports [data-report-done]");
+    if (done) {
+        const id = done.dataset.reportDone;
+        return resolveReports(id === "all" ? reportsFor(currentSongId).map(r => r.id) : [id]);
+    }
+    if (!e.target.closest("#reportsList")) return;
+    if (e.target.closest("[data-act='copyrules']")) return copyText(REPORTS_RULES).then(() => notify("Regola copiata", "success"));
+    const card = e.target.closest(".report-card"), act = e.target.closest("[data-act]");
+    if (!card || !act) return;
+    const r = allReports.find(x => x.id === card.dataset.id);
+    if (!r) return;
+    if (act.dataset.act === "open") window.openEditor(r.songId);
+    if (act.dataset.act === "done") resolveReports([r.id]);
+});
+
+// Dopo aver salvato una canzone segnalata: chiede se il problema è risolto
+const saveSongBase = window.saveSong;
+window.saveSong = async () => {
+    await saveSongBase();
+    const list = isAdmin && !hasUnsavedChanges ? reportsFor(currentSongId) : [];
+    if (list.length) notify(list.length === 1 ? `Hai sistemato la segnalazione («${REPORT_LABEL[list[0].type] || list[0].type}»)?` : `Hai sistemato le ${list.length} segnalazioni di questa canzone?`, "info",
+        { duration: 10000, actions: [{ label: list.length === 1 ? "Sì, risolta" : "Sì, tutte risolte", onClick: () => resolveReports(list.map(r => r.id)) }] });
+};

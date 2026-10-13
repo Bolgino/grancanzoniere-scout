@@ -176,6 +176,13 @@
                 </button>
 
                 <button class="btn btn-outline-light text-start py-2 px-3 w-100 d-flex align-items-center rounded-3 border-secondary" 
+                        onclick="window.openFavorites(); document.querySelector('.btn-close').click()">
+                    <i class="bi bi-star-fill text-warning fs-5 me-3"></i> 
+                    <span>I miei preferiti</span>
+                    <span class="badge rounded-pill bg-warning text-dark ms-auto" id="favCountBadge" style="display:none">0</span>
+                </button>
+
+                <button class="btn btn-outline-light text-start py-2 px-3 w-100 d-flex align-items-center rounded-3 border-secondary" 
                         onclick="window.openOfflineSheet(); document.querySelector('.btn-close').click()">
                     <i class="bi bi-cloud-arrow-down text-success fs-5 me-3"></i> 
                     <span>Uso offline</span>
@@ -192,6 +199,12 @@
                             onclick="window.openProposalsView(); document.querySelector('.btn-close').click()">
                         <i class="bi bi-inbox-fill me-3 fs-5"></i> Revisiona Proposte
                         <span class="badge rounded-pill bg-danger ms-auto" id="proposalsBadge" style="display:none">0</span>
+                    </button>
+        
+                    <button class="btn btn-link text-white text-decoration-none text-start p-2 d-flex align-items-center" 
+                            onclick="window.openReportsView(); document.querySelector('.btn-close').click()">
+                        <i class="bi bi-flag-fill me-3 fs-5 text-danger"></i> Segnalazioni
+                        <span class="badge rounded-pill bg-danger ms-auto" id="reportsBadge" style="display:none">0</span>
                     </button>
         
                     <button class="btn btn-link text-white text-decoration-none text-start p-2 d-flex align-items-center" 
@@ -550,6 +563,9 @@
                         <button class="btn btn-link text-info p-0 ms-2" onclick="window.openAddToSetlistModal()" title="Aggiungi a una Scaletta">
                             <i class="bi bi-plus-square-fill"></i>
                         </button>
+                        <button class="btn btn-link text-danger p-0 ms-2" onclick="window.openReportSheet()" title="Segnala un errore in questa canzone">
+                            <i class="bi bi-flag"></i>
+                        </button>
                         <button class="btn btn-sm btn-light text-primary admin-only" onclick="window.openSongMetadataModal()" title="Modifica Titolo/Autore">
                             <i class="bi bi-pencil-fill"></i>
                         </button>
@@ -597,6 +613,8 @@
                 </div>
             </div>
 
+            <div id="editorReports"></div>
+
             <div class="row h-100">
                 <div class="col-md-5 mb-3 admin-block" style="display:none;">
                     <textarea id="lyricsEditor" class="form-control h-100 shadow-sm border-0" style="min-height: 500px; resize: none; font-family: monospace;" placeholder="Formato: [Do]Testo della canzone..." oninput="window.renderPreview()"></textarea>
@@ -641,6 +659,17 @@
             </div>
             <div id="tagsToolbar" class="mb-3"></div>
             <div id="tagsList" class="d-flex flex-column gap-2"></div>
+        </div>
+
+        <div id="view-reports" class="view-screen">
+            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom border-secondary">
+                <button class="btn btn-outline-secondary btn-sm" onclick="window.goHome()">
+                    <i class="bi bi-arrow-left"></i> Home
+                </button>
+                <h3 class="fw-bold m-0 text-white">Segnalazioni</h3>
+                <div style="width:70px"></div>
+            </div>
+            <div id="reportsList" class="d-flex flex-column gap-2"></div>
         </div>
 
         <div id="view-doctor" class="view-screen">
@@ -1059,7 +1088,7 @@
         <button onclick="window.toggleAutoScroll()" aria-label="Ferma lo scorrimento" title="Ferma"><i class="bi bi-x-lg"></i></button>
     </div>
 
-    <script type="module" src="script.js?v=8"></script>
+    <script type="module" src="script.js?v=9"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./service-worker.js')
