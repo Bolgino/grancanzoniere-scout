@@ -1,4 +1,4 @@
-const CACHE_NAME = "canzoniere-dynamic-v7";
+const CACHE_NAME = "canzoniere-dynamic-v8";
 
 // File dell'app (sempre aggiornati quando c'è rete)
 const APP_FILES = [
@@ -12,6 +12,7 @@ const APP_FILES = [
   "./chords.js",
   "./tags.js",
   "./qr.js",
+  "./tuner.js",
   "./manifest.json",
   "./icona.ico",
 ];
