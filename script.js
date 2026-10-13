@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getFirestore, collection, getDocs, getDocsFromCache, doc, updateDoc as fsUpdateDoc, addDoc as fsAddDoc, deleteDoc as fsDeleteDoc, writeBatch as fsWriteBatch, deleteField, where, arrayUnion, arrayRemove, enableMultiTabIndexedDbPersistence, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+import { getFirestore, collection, getDocs, getDocsFromCache, doc, updateDoc as fsUpdateDoc, addDoc as fsAddDoc, deleteDoc as fsDeleteDoc, writeBatch as fsWriteBatch, deleteField, where, getDoc, setDoc, increment, arrayUnion, arrayRemove, enableMultiTabIndexedDbPersistence, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, inMemoryPersistence } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 import { extractChords, normalizeChord, transposeChord } from "./music-utils.js";
 import { scanSongs, fixLyrics, describeChanges, isAutoFixable, ISSUES, suspiciousChords, analyzeKey, tidyChord, layoutLine, chordDisplay, lineWithoutChords, classifyBracket, isSameSong, parseChordLine, parseBracketChordLine } from "./song-doctor.js";
@@ -7,6 +7,7 @@ import { notify, appConfirm, appPrompt, openSheet, closeAllSheets } from "./ui.j
 import { chordInfo, guitarVoicings, ukuleleVoicings, chordDiagramSvg, capoOptions } from "./chords.js";
 import { TAG_GROUPS, TAG_LABEL, ALL_TAGS, suggestTags } from "./tags.js";
 import { qrSvg } from "./qr.js";
+import { detectPitch, noteInfo, nearestString, midiToFreq, centsBetween, TUNINGS, NOTE_NAMES } from "./tuner.js";
 
 // --- 1. FUNZIONI DI UTILITÀ ---
 function debounce(func, wait) {
@@ -3924,6 +3925,7 @@ function renderPerform(keepScroll = false) {
     document.getElementById("performPos").textContent = perform.list.length > 1 ? `${perform.index + 1} / ${perform.list.length}` : "";
     updateLiveUi();
     updatePerformScrollBtn();
+    if (!keepScroll) schedulePlayCount();   // statistiche: conta la canzone se resta aperta 30 secondi
 }
 
 function openPerform(list, index = 0, opts = {}) {
@@ -3959,6 +3961,7 @@ window.closePerform = (fromPop = false) => {
     if (!perform) return;
     if (!fromPop && history.state && history.state.perform) { history.back(); return; }   // il popstate richiama closePerform(true)
     clearTimeout(perform.timer);
+    clearTimeout(playTimer);
     if (autoScrollInterval) autoScrollInternal(false);
     if (perform.lead) pushLive(false);
     if (perform.unsub) try { perform.unsub(); } catch (e) {}
@@ -5293,3 +5296,285 @@ document.addEventListener("toggle", (e) => {
     const d = e.target;
     if (d && d.matches && d.matches("#logList details[data-diff]") && d.open) fillDiff(d, document.getElementById("logList")._groups || []);
 }, true);
+
+// =====================================================================================================
+// ACCORDATORE (microfono del telefono) E STATISTICHE (canzoni più suonate / non suonate da tanto)
+// =====================================================================================================
+
+// --- ACCORDATORE ------------------------------------------------------------------------------------
+let tuner = null;
+const median = (a) => { const s = a.slice().sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+
+window.openTuner = () => {
+    closeAllSheets();
+    const sheet = openSheet({ title: "Accordatore", onClose: stopTuner, html: `
+        <div class="tuner">
+            <div class="chord-tabs tuner-modes">
+                <button data-mode="guitar">Chitarra</button><button data-mode="uke">Ukulele</button><button data-mode="chromatic">Cromatico</button>
+            </div>
+            <div class="tuner-display">
+                <div class="tuner-note">–</div>
+                <div class="tuner-sub">Avvio il microfono…</div>
+                <div class="tuner-meter">
+                    <div class="tuner-scale">${[-50, -40, -30, -20, -10, 0, 10, 20, 30, 40, 50].map(c => `<span style="left:${50 + c}%" class="${c === 0 ? "zero" : ""}"></span>`).join("")}</div>
+                    <div class="tuner-zone"></div>
+                    <div class="tuner-needle"></div>
+                </div>
+                <div class="tuner-cents">&nbsp;</div>
+                <div class="tuner-hint">&nbsp;</div>
+            </div>
+            <div class="tuner-strings"></div>
+            <div class="tuner-foot">
+                <span class="tuner-freq">&nbsp;</span>
+                <span class="tuner-a4">La = <button type="button" data-a4="-1" aria-label="Più basso">−</button> <b class="tuner-a4-val"></b> Hz <button type="button" data-a4="1" aria-label="Più alto">+</button></span>
+            </div>
+            <p class="small text-muted mt-2 mb-0">Pizzica una corda alla volta vicino al telefono. Tocca una corda qui sopra per sentire la nota giusta.</p>
+        </div>` });
+    tuner = { sheet, mode: lsGet('tunerMode', 'guitar'), a4: lsGet('tunerA4', 440), hist: [], last: 0, lastTs: 0, muteUntil: 0, done: new Set() };
+    drawTunerControls();
+    sheet.body.addEventListener("click", (ev) => {
+        if (!tuner) return;
+        const m = ev.target.closest("[data-mode]"), a = ev.target.closest("[data-a4]"), st = ev.target.closest("[data-string]");
+        if (m) { tuner.mode = m.dataset.mode; lsSet('tunerMode', tuner.mode); tuner.hist = []; tuner.done.clear(); drawTunerControls(); showTuner(null); }
+        if (a) { tuner.a4 = Math.min(450, Math.max(430, tuner.a4 + +a.dataset.a4)); lsSet('tunerA4', tuner.a4); drawTunerControls(); }
+        if (st) playReference(+st.dataset.string);
+    });
+    startTunerMic();
+};
+
+function drawTunerControls() {
+    const body = tuner.sheet.body;
+    body.querySelectorAll(".tuner-modes [data-mode]").forEach(b => b.classList.toggle("active", b.dataset.mode === tuner.mode));
+    body.querySelector(".tuner-a4-val").textContent = tuner.a4;
+    const t = TUNINGS[tuner.mode];
+    body.querySelector(".tuner-strings").innerHTML = t ? t.strings.map(([midi, label], i) =>
+        `<button type="button" class="tuner-string ${tuner.done.has(i) ? "done" : ""}" data-string="${midi}" data-i="${i}" title="Senti la nota"><b>${NOTE_NAMES[midi % 12]}</b><small>${label}</small></button>`).join("") : "";
+}
+
+async function startTunerMic() {
+    const sub = () => tuner && tuner.sheet.body.querySelector(".tuner-sub");
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { if (sub()) sub().textContent = "Questo browser non può usare il microfono."; return; }
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+        if (!tuner) { stream.getTracks().forEach(t => t.stop()); return; }
+        const AC = window.AudioContext || window.webkitAudioContext;
+        const ctx = tuner.ctx || new AC();
+        if (ctx.state === "suspended") await ctx.resume().catch(() => {});
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 4096;
+        ctx.createMediaStreamSource(stream).connect(analyser);
+        Object.assign(tuner, { ctx, stream, analyser, buf: new Float32Array(analyser.fftSize) });
+        try { if ('wakeLock' in navigator) tuner.wake = await navigator.wakeLock.request('screen'); } catch (e) {}
+        showTuner(null);
+        tuner.raf = requestAnimationFrame(tunerLoop);
+    } catch (err) {
+        if (sub()) sub().textContent = err && err.name === "NotAllowedError"
+            ? "Serve il permesso per il microfono: consentilo nelle impostazioni del browser e riapri l'accordatore."
+            : "Microfono non disponibile" + (err && err.message ? ": " + err.message : "");
+    }
+}
+
+function tunerLoop(ts) {
+    if (!tuner || !tuner.analyser) return;
+    tuner.raf = requestAnimationFrame(tunerLoop);
+    if (ts - tuner.lastTs < 45) return;          // circa 20 letture al secondo bastano
+    tuner.lastTs = ts;
+    if (Date.now() < tuner.muteUntil) return;    // sta suonando la nota di riferimento
+    tuner.analyser.getFloatTimeDomainData(tuner.buf);
+    const r = detectPitch(tuner.buf, tuner.ctx.sampleRate);
+    if (!r) { if (tuner.last && Date.now() - tuner.last > 1500) { tuner.last = 0; tuner.hist = []; showTuner(null); } return; }
+    // media mobile (mediana) delle ultime letture; se cambia nota riparto da capo
+    if (tuner.hist.length && Math.abs(centsBetween(r.freq, median(tuner.hist))) > 60) tuner.hist = [];
+    tuner.hist.push(r.freq);
+    if (tuner.hist.length > 5) tuner.hist.shift();
+    tuner.last = Date.now();
+    showTuner(median(tuner.hist));
+}
+
+function showTuner(freq) {
+    if (!tuner) return;
+    const body = tuner.sheet.body, $ = (s) => body.querySelector(s);
+    const display = $(".tuner-display");
+    body.querySelectorAll(".tuner-string").forEach(b => b.classList.remove("active"));
+    if (!freq) {
+        display.className = "tuner-display idle";
+        $(".tuner-note").textContent = "–";
+        $(".tuner-sub").textContent = tuner.analyser ? "Pizzica una corda" : $(".tuner-sub").textContent;
+        $(".tuner-needle").style.transform = "translateX(-50%) rotate(0deg)";
+        $(".tuner-cents").innerHTML = "&nbsp;"; $(".tuner-hint").innerHTML = "&nbsp;"; $(".tuner-freq").innerHTML = "&nbsp;";
+        return;
+    }
+    let name, sub, cents, idx = -1;
+    const near = tuner.mode !== "chromatic" ? nearestString(freq, tuner.mode, tuner.a4) : null;
+    if (near && Math.abs(near.cents) <= 350) {
+        name = near.name; sub = `${near.label} corda`; cents = near.cents; idx = near.index;
+    } else {
+        const ni = noteInfo(freq, tuner.a4);
+        name = ni.name; cents = ni.cents;
+        sub = near ? "nessuna corda vicina: è questa nota" : `ottava ${ni.octave}`;
+    }
+    const abs = Math.abs(cents);
+    const state = abs <= 5 ? "ok" : abs <= 20 ? "near" : "far";
+    display.className = "tuner-display " + state;
+    $(".tuner-note").textContent = name;
+    $(".tuner-sub").textContent = sub;
+    $(".tuner-needle").style.transform = `translateX(-50%) rotate(${Math.max(-50, Math.min(50, cents)) * 0.9}deg)`;
+    const rc = Math.round(cents);
+    $(".tuner-cents").textContent = `${rc > 0 ? "+" : rc < 0 ? "−" : ""}${Math.abs(rc)} cent`;
+    $(".tuner-hint").textContent = state === "ok" ? "Intonata ✓"
+        : cents < 0 ? (abs > 100 ? "Molto bassa: tendi la corda" : "Un po' bassa: tendi la corda")
+        : (abs > 100 ? "Molto alta: allenta la corda" : "Un po' alta: allenta la corda");
+    $(".tuner-freq").textContent = `${freq.toFixed(1).replace(".", ",")} Hz`;
+    if (idx >= 0) {
+        const btn = body.querySelector(`.tuner-string[data-i="${idx}"]`);
+        if (btn) { btn.classList.add("active"); if (state === "ok") { tuner.done.add(idx); btn.classList.add("done"); } }
+    }
+}
+
+// Nota di riferimento (per accordare a orecchio)
+function playReference(midi) {
+    try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        const ctx = tuner.ctx || (tuner.ctx = new AC());
+        if (ctx.state === "suspended") ctx.resume();
+        const t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = "triangle";
+        o.frequency.value = midiToFreq(midi, tuner.a4);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.4, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
+        o.connect(g).connect(ctx.destination);
+        o.start(t); o.stop(t + 2.3);
+        tuner.muteUntil = Date.now() + 2300;   // il microfono sentirebbe la nota del telefono
+        tuner.hist = [];
+    } catch (e) { console.warn(e); }
+}
+
+function stopTuner() {
+    if (!tuner) return;
+    cancelAnimationFrame(tuner.raf);
+    try { if (tuner.stream) tuner.stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+    try { if (tuner.ctx) tuner.ctx.close(); } catch (e) {}
+    try { if (tuner.wake) tuner.wake.release(); } catch (e) {}
+    tuner = null;
+}
+
+// --- STATISTICHE ------------------------------------------------------------------------------------
+// Una canzone conta come "suonata" se resta aperta almeno 30 secondi in modalità esibizione.
+// Una volta per serata: se un altro telefono l'ha già contata nelle ultime 2 ore non si conta di nuovo
+// (e chi segue la diretta non conta), così 10 telefoni al fuoco non fanno 10 volte.
+const PLAY_AFTER_MS = 30000, SAME_EVENING_MS = 2 * 3600 * 1000;
+const STATS_RULES = `match /stats/{songId} {\n  allow read: if true;\n  allow create, update: if true;\n  allow delete: if isAdmin();\n}`;
+let playTimer = null, allStats = null, statsBlocked = false, statsPeriod = "all", statsSection = "";
+
+function schedulePlayCount() {
+    clearTimeout(playTimer);
+    if (!perform || perform.follow) return;
+    const id = perform.list[perform.index].id;
+    playTimer = setTimeout(() => { if (perform && !perform.follow && perform.list[perform.index].id === id) countPlay(id); }, PLAY_AFTER_MS);
+}
+
+async function countPlay(id) {
+    perform.counted = perform.counted || new Set();
+    if (perform.counted.has(id)) return;
+    perform.counted.add(id);
+    const ref = doc(db, "stats", id);
+    try {
+        let last = 0;
+        try { const snap = await getDoc(ref); if (snap.exists()) last = snap.data().last || 0; } catch (e) { /* offline: conto lo stesso */ }
+        if (Date.now() - last < SAME_EVENING_MS) return;
+        const now = Date.now(), year = new Date().getFullYear();
+        if (allStats) {   // aggiorno subito anche la pagina delle statistiche
+            const s = allStats.get(id) || {};
+            allStats.set(id, { ...s, count: (s.count || 0) + 1, last: now, [`y${year}`]: (s[`y${year}`] || 0) + 1 });
+        }
+        await setDoc(ref, { count: increment(1), last: now, [`y${year}`]: increment(1) }, { merge: true });
+    } catch (err) { console.warn("Statistiche non salvate:", err); }
+}
+
+window.openStats = async () => {
+    switchView("view-stats");
+    renderStats();
+    await loadStats();
+    renderStats();
+};
+
+async function loadStats() {
+    try {
+        const snap = await getDocs(collection(db, "stats"));
+        allStats = new Map();
+        snap.forEach(d => allStats.set(d.id, d.data()));
+        statsBlocked = false;
+    } catch (err) {
+        statsBlocked = isPermissionError(err);
+        if (!statsBlocked) console.warn("Statistiche non caricate:", err);
+        if (!allStats) allStats = new Map();
+    }
+}
+
+function agoText(ms) {
+    const d = Math.floor((Date.now() - ms) / 86400000);
+    if (d <= 0) return "oggi";
+    if (d === 1) return "ieri";
+    if (d < 14) return `${d} giorni fa`;
+    if (d < 60) return `${Math.round(d / 7)} settimane fa`;
+    if (d < 365) return `${Math.round(d / 30)} mesi fa`;
+    return "più di un anno fa";
+}
+
+function renderStats() {
+    const box = document.getElementById("statsBody");
+    if (!box) return;
+    if (!allStats) { box.innerHTML = `<div class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm me-2"></span>Carico le statistiche…</div>`; return; }
+    if (statsBlocked) {
+        box.innerHTML = isAdmin
+            ? `<div class="tags-summary"><p class="mb-2">Per le statistiche serve una regola in <b>Firestore → Regole</b> (dentro <code>match /databases/{database}/documents</code>):</p><pre class="rules-snippet">${escapeHtml(STATS_RULES)}</pre><button class="app-btn app-btn-primary btn-sm" data-act="copyrules">Copia la regola</button></div>`
+            : `<div class="text-center text-muted mt-5">Le statistiche non sono ancora attive: chiedi a un capo.</div>`;
+        return;
+    }
+    const year = new Date().getFullYear(), key = statsPeriod === "year" ? `y${year}` : "count";
+    const rows = allSongs.filter(s => !statsSection || s.category === statsSection).map(s => {
+        const st = allStats.get(s.id) || {};
+        return { s, n: st[key] || 0, last: st.last || 0 };
+    });
+    const played = rows.filter(r => r.n > 0).sort((a, b) => b.n - a.n || b.last - a.last);
+    const total = played.reduce((t, r) => t + r.n, 0);
+    const forgotten = rows.filter(r => r.last && Date.now() - r.last > 90 * 86400000).sort((a, b) => a.last - b.last);
+    const never = rows.filter(r => !r.last).sort((a, b) => a.s.title.localeCompare(b.s.title));
+    const max = played.length ? played[0].n : 1;
+    const item = (r, extra) => `<button type="button" class="stats-row" data-open="${r.s.id}">
+        <div class="stats-title"><b>${escapeHtml(r.s.title)}</b> <small class="text-muted">${escapeHtml(r.s.author || "")}</small>${songTagsHtml(r.s)}</div>${extra}</button>`;
+    const sections = allSections.map(s => `<option value="${escapeHtml(s.name)}" ${s.name === statsSection ? "selected" : ""}>${escapeHtml(s.name)}</option>`).join("");
+    box.innerHTML = `
+        <div class="stats-filters">
+            <div class="search-modes m-0" id="statsPeriod"><button data-p="all" class="${statsPeriod === "all" ? "active" : ""}">Sempre</button><button data-p="year" class="${statsPeriod === "year" ? "active" : ""}">Quest'anno</button></div>
+            <select class="form-select form-select-sm" id="statsSection"><option value="">Tutte le sezioni</option>${sections}</select>
+        </div>
+        <div class="stats-tiles">
+            <div><b>${total}</b><span>volte suonate</span></div>
+            <div><b>${played.length}</b><span>canzoni diverse</span></div>
+            <div><b>${never.length}</b><span>mai suonate</span></div>
+        </div>
+        <p class="small text-muted">Conta le canzoni rimaste aperte almeno 30 secondi in modalità esibizione, una volta per serata anche se le aprite in tanti.</p>
+        <h6 class="stats-h"><i class="bi bi-trophy-fill text-warning me-1"></i> Le più suonate</h6>
+        ${played.length ? played.slice(0, 15).map(r => item(r, `<div class="stats-bar"><span style="width:${Math.max(6, Math.round(100 * r.n / max))}%"></span></div><div class="stats-num">${r.n}× <small>${agoText(r.last)}</small></div>`)).join("")
+            : `<div class="text-muted small mb-3">Ancora niente: le canzoni si contano quando le usate in modalità esibizione.</div>`}
+        <h6 class="stats-h"><i class="bi bi-hourglass-split text-info me-1"></i> Non le suonate da più di 3 mesi</h6>
+        ${forgotten.length ? forgotten.slice(0, 15).map(r => item(r, `<div class="stats-num">${agoText(r.last)}</div>`)).join("") : `<div class="text-muted small mb-3">Nessuna.</div>`}
+        <h6 class="stats-h"><i class="bi bi-stars text-success me-1"></i> Mai suonate (${never.length})</h6>
+        <p class="small text-muted mb-1">Idee per variare: mettetene qualcuna nella prossima scaletta.</p>
+        ${never.slice(0, 20).map(r => item(r, "")).join("")}
+        ${never.length > 20 ? `<details class="log-details"><summary>Altre ${never.length - 20}</summary>${never.slice(20).map(r => item(r, "")).join("")}</details>` : ""}`;
+}
+
+document.addEventListener("click", (e) => {
+    if (!e.target.closest("#statsBody")) return;
+    const p = e.target.closest("#statsPeriod [data-p]");
+    if (p) { statsPeriod = p.dataset.p; return renderStats(); }
+    if (e.target.closest("[data-act='copyrules']")) return copyText(STATS_RULES).then(() => notify("Regola copiata", "success"));
+    const r = e.target.closest("[data-open]");
+    if (r) window.openEditor(r.dataset.open);
+});
+document.addEventListener("change", (e) => {
+    if (e.target && e.target.id === "statsSection") { statsSection = e.target.value; renderStats(); }
+});
