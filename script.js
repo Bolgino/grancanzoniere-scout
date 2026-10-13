@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getFirestore, collection, getDocs, getDocsFromCache, doc, updateDoc, addDoc, deleteDoc, writeBatch, arrayUnion, arrayRemove, enableMultiTabIndexedDbPersistence, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+import { getFirestore, collection, getDocs, getDocsFromCache, doc, updateDoc as fsUpdateDoc, addDoc as fsAddDoc, deleteDoc as fsDeleteDoc, writeBatch as fsWriteBatch, deleteField, where, arrayUnion, arrayRemove, enableMultiTabIndexedDbPersistence, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, setPersistence, inMemoryPersistence } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 import { extractChords, normalizeChord, transposeChord } from "./music-utils.js";
 import { scanSongs, fixLyrics, describeChanges, isAutoFixable, ISSUES, suspiciousChords, analyzeKey, tidyChord, layoutLine, chordDisplay, lineWithoutChords, classifyBracket, isSameSong, parseChordLine, parseBracketChordLine } from "./song-doctor.js";
@@ -101,6 +101,90 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+
+// --- REGISTRO DELLE MODIFICHE: tutte le scritture sul database passano da qui -----------------------------
+// Prima di ogni modifica si tiene com'era (per canzoni, sezioni, scalette e proposte), così il registro
+// mostra chi ha cambiato cosa e la modifica si può annullare entro 10 minuti. Le funzioni hanno lo stesso
+// nome e lo stesso comportamento di quelle di Firebase: il resto dell'app non cambia.
+const shadow = new Map();   // "songs/abc" -> dati come sono sul database
+const LOGGED_COLS = ["songs", "sections", "setlists", "proposals"];
+const deepCopy = (v) => { if (v === undefined) return undefined; try { return structuredClone(v); } catch (e) { return JSON.parse(JSON.stringify(v)); } };
+const isPlainValue = (v) => v === null || typeof v !== "object" || Array.isArray(v) || Object.getPrototypeOf(v) === Object.prototype;
+const sameValue = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+function refPath(ref) { const p = ref.path || `${ref.col}/${ref.id}`; const i = p.lastIndexOf("/"); return { col: p.slice(0, i), id: p.slice(i + 1) }; }
+const colPath = (c) => c.path || c.name;
+function shadowFill(col, snap) { snap.forEach(d => shadow.set(`${col}/${d.id}`, deepCopy(d.data()))); }
+const localList = (col) => ({ songs: allSongs, sections: allSections, setlists: allSetlists, proposals: allProposals })[col] || null;
+function knownData(col, id) {
+    const s = shadow.get(`${col}/${id}`);
+    if (s) return s;
+    const list = localList(col), o = list && list.find(x => x.id === id);
+    if (!o) return null;
+    const out = {};
+    Object.keys(o).forEach(k => { if (k !== "id" && !k.startsWith("_")) out[k] = deepCopy(o[k]); });
+    return out;
+}
+// Valori speciali (arrayUnion, deleteField...): dopo la scrittura prendo il valore che l'app ha nella sua lista
+function resolvedData(col, id, data) {
+    const out = {}, local = (localList(col) || []).find(x => x.id === id);
+    Object.keys(data || {}).forEach(k => {
+        const v = data[k];
+        if (isPlainValue(v)) out[k] = deepCopy(v);
+        else out[k] = local && local[k] !== undefined ? deepCopy(local[k]) : null;
+    });
+    return out;
+}
+
+async function updateDoc(ref, data) {
+    const t0 = Date.now(), r = refPath(ref), before = deepCopy(knownData(r.col, r.id));
+    const res = await fsUpdateDoc(ref, data);
+    afterWrite(t0, [{ op: "update", ...r, data, before }]);
+    return res;
+}
+async function addDoc(colRef, data) {
+    const t0 = Date.now();
+    const ref = await fsAddDoc(colRef, data);
+    afterWrite(t0, [{ op: "create", col: colPath(colRef), id: ref.id, data, before: null }]);
+    return ref;
+}
+async function deleteDoc(ref) {
+    const t0 = Date.now(), r = refPath(ref), before = deepCopy(knownData(r.col, r.id));
+    const res = await fsDeleteDoc(ref);
+    afterWrite(t0, [{ op: "delete", ...r, data: null, before }]);
+    return res;
+}
+function writeBatch(dbRef) {
+    const b = fsWriteBatch(dbRef), ops = [];
+    const rec = (op, ref, data) => { const r = refPath(ref); ops.push({ op, ...r, data, before: deepCopy(knownData(r.col, r.id)) }); };
+    const api = {
+        update(ref, data) { rec("update", ref, data); b.update(ref, data); return api; },
+        set(ref, data, opts) { rec("set", ref, data); if (opts) b.set(ref, data, opts); else b.set(ref, data); return api; },
+        delete(ref) { rec("delete", ref, null); b.delete(ref); return api; },
+        async commit() { const t0 = Date.now(); const res = await b.commit(); afterWrite(t0, ops); return res; },
+    };
+    return api;
+}
+
+// Scritture fatte una dopo l'altra (entro 2 secondi) sono una sola azione: es. sezione + le sue canzoni
+let lastLoggedEnd = 0, lastLoggedGroup = null;
+function afterWrite(t0, ops) {
+    const logged = ops.some(o => LOGGED_COLS.includes(o.col));
+    let group = null;
+    if (logged) {
+        group = t0 - lastLoggedEnd < 2000 && lastLoggedGroup ? lastLoggedGroup : Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        lastLoggedEnd = Date.now(); lastLoggedGroup = group;
+    }
+    // dopo che il codice che ha scritto ha aggiornato le sue liste
+    setTimeout(() => {
+        try { if (logged) logChanges(group, ops.filter(o => LOGGED_COLS.includes(o.col))); } catch (e) { console.warn("Registro modifiche:", e); }
+        ops.forEach(o => {
+            const key = `${o.col}/${o.id}`;
+            if (o.op === "delete") shadow.delete(key);
+            else if (o.op === "create" || o.op === "set") shadow.set(key, resolvedData(o.col, o.id, o.data));
+            else shadow.set(key, { ...(shadow.get(key) || {}), ...resolvedData(o.col, o.id, o.data) });
+        });
+    }, 0);
+}
 
 // --- VARIABILI GLOBALI ---
 let isAdmin = false;
@@ -319,6 +403,7 @@ async function loadData() {
             readCol("setlists")
         ]);
         allSections = [];
+        shadowFill("sections", secSnap); shadowFill("songs", songSnap); shadowFill("setlists", setlistSnap);   // per il registro delle modifiche
         secSnap.forEach(d => { const data = d.data(); data.name = String(data.name ?? ""); allSections.push({id: d.id, ...data}); });
 
         allSongs = [];
@@ -394,6 +479,7 @@ async function loadData() {
 async function loadProposals() {
     if(!isAdmin) return;
     const snap = await getDocs(collection(db, "proposals"));
+    shadowFill("proposals", snap);
     allProposals=[]; 
     snap.forEach(d=>allProposals.push({id:d.id, _isProposal: true, ...d.data()}));
     
@@ -4833,3 +4919,377 @@ window.saveSong = async () => {
     if (list.length) notify(list.length === 1 ? `Hai sistemato la segnalazione («${REPORT_LABEL[list[0].type] || list[0].type}»)?` : `Hai sistemato le ${list.length} segnalazioni di questa canzone?`, "info",
         { duration: 10000, actions: [{ label: list.length === 1 ? "Sì, risolta" : "Sì, tutte risolte", onClick: () => resolveReports(list.map(r => r.id)) }] });
 };
+
+// =====================================================================================================
+// REGISTRO DELLE MODIFICHE E ANNULLA (entro 10 minuti)
+// =====================================================================================================
+const UNDO_MS = 10 * 60 * 1000;
+const LOG_RULES = `match /changelog/{entryId} {\n  allow create: if true;\n  allow read, delete: if isAdmin();\n  allow update: if isAdmin()\n    || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['undoneAt', 'undoneBy']);\n}`;
+let serverLog = [], logBlocked = false, logFilter = "all", logTimer = null, logWarned = false;
+const whoAmI = () => (auth.currentUser && auth.currentUser.email) || (isAdmin ? "capo" : "ospite");
+const shortWho = (by) => !by ? "?" : by === "ospite" ? "ospite" : String(by).split("@")[0];
+const titleOf = (it) => it.title || "";
+
+// Le mie modifiche recenti (su questo telefono): servono anche a chi non è capo per annullare le sue
+const myLog = () => lsGet('myChanges', []).filter(e => Date.now() - e.at < 24 * 3600 * 1000);
+function saveMyLog(list) {
+    const keep = list.filter(e => Date.now() - e.at < 24 * 3600 * 1000).slice(-60);
+    const recent = (e) => Date.now() - e.at < UNDO_MS;
+    // se lo spazio del telefono non basta tengo complete solo quelle ancora annullabili
+    const tries = [keep, keep.map(e => recent(e) ? e : { ...e, items: [], tooBig: true }), keep.filter(recent)];
+    for (const l of tries) { try { localStorage.setItem('myChanges', JSON.stringify(l)); break; } catch (err) { /* prova la successiva */ } }
+    updateLogBadge();
+}
+
+// --- Cosa è cambiato, in parole ---
+function describeItem(it) {
+    const t = titleOf(it), q = t ? ` «${t}»` : "";
+    const keys = Object.keys(it.after || {}).concat(it.missing || []);
+    if (it.col === "songs") {
+        if (it.op === "create") return `Canzone aggiunta:${q}`;
+        if (it.op === "delete") return `Canzone eliminata:${q}`;
+        if (keys.includes("lyrics")) return `Testo modificato:${q}`;
+        if (keys.includes("category") && it.after && it.before) return `Canzone spostata in «${it.after.category}»:${q}`;
+        if (keys.some(k => ["title", "author", "year", "description"].includes(k))) return `Dati modificati:${q}`;
+        if (keys.includes("tags") || keys.includes("tagsNo")) return `Etichette:${q}`;
+        if (keys.includes("chordOk")) return `Accordo segnato come giusto:${q}`;
+        if (keys.includes("savedTranspose")) return `Tonalità salvata:${q}`;
+        if (keys.includes("needsSuperAdminReview")) return `Canzone confermata:${q}`;
+        return `Canzone modificata:${q}`;
+    }
+    if (it.col === "sections") {
+        if (it.op === "create") return `Sezione creata:${q}`;
+        if (it.op === "delete") return `Sezione eliminata:${q}`;
+        if (keys.includes("name")) return `Sezione rinominata: «${(it.before || {}).name || "?"}» → «${(it.after || {}).name || "?"}»`;
+        if (keys.includes("coverUrl")) return `Copertina cambiata:${q}`;
+        if (keys.includes("order")) return `Ordine delle sezioni`;
+        return `Sezione modificata:${q}`;
+    }
+    if (it.col === "setlists") {
+        if (it.op === "create") return `Scaletta creata:${q}`;
+        if (it.op === "delete") return `Scaletta eliminata:${q}`;
+        if (keys.includes("name")) return `Scaletta rinominata:${q}`;
+        if (keys.includes("songs")) {
+            const a = ((it.before || {}).songs || []).length, b = ((it.after || {}).songs || []).length;
+            return `${b > a ? "Canzone aggiunta alla scaletta" : b < a ? "Canzone tolta dalla scaletta" : "Ordine o tonalità della scaletta"}:${q}`;
+        }
+        return `Scaletta modificata:${q}`;
+    }
+    if (it.col === "proposals") return it.op === "delete" ? `Proposta tolta (approvata o rifiutata):${q}` : `Proposta:${q}`;
+    return `Modifica in ${it.col}`;
+}
+function describeItems(items) {
+    if (items.length === 1) return describeItem(items[0]);
+    // più scritture sullo stesso documento (es. scaletta creata e subito la canzone aggiunta)
+    if (items.every(i => i.col === items[0].col && i.id === items[0].id)) {
+        return describeItem(items.find(i => i.op === "create") || items.find(i => i.op === "delete") || items[items.length - 1]);
+    }
+    const sections = items.filter(i => i.col === "sections"), songs = items.filter(i => i.col === "songs");
+    const sec = sections.find(i => i.op === "delete" || (i.after && "name" in i.after));
+    if (sec) return `${describeItem(sec)} (con ${songs.length} canzoni)`;
+    if (sections.length === items.length && sections.every(i => i.after && "order" in i.after)) return "Ordine delle sezioni";
+    const same = items.every(i => i.col === items[0].col && describeItem(i).split(":")[0] === describeItem(items[0]).split(":")[0]);
+    if (same && items[0].col === "songs") {
+        const what = describeItem(items[0]).split(":")[0];
+        return { "Canzone aggiunta": `Aggiunte ${items.length} canzoni`, "Canzone eliminata": `Eliminate ${items.length} canzoni`,
+                 "Testo modificato": `Testo corretto in ${items.length} canzoni`, "Etichette": `Etichette in ${items.length} canzoni` }[what] || `${what} (${items.length} canzoni)`;
+    }
+    return `${describeItem(items[0])} e altre ${items.length - 1} modifiche`;
+}
+
+// --- Scrive la voce nel registro (sul database e sul telefono) ---
+function logChanges(group, ops) {
+    const items = [];
+    ops.forEach(o => {
+        if (o.col === "setlists" && o.op === "update" && Object.keys(o.data || {}).every(k => k === "live")) return;   // diretta: non è una modifica
+        if (o.col === "proposals" && o.op === "create") return;                                                     // proposte degli ospiti: hanno la loro pagina
+        const op = o.op === "set" ? (o.before ? "replace" : "create") : o.op;
+        const after = o.data ? resolvedData(o.col, o.id, o.data) : null;
+        const it = { op, col: o.col, id: o.id, title: String((o.before && (o.before.title || o.before.name)) || (after && (after.title || after.name)) || "") };
+        if (op === "update") {
+            it.before = {}; it.after = {}; it.missing = [];
+            Object.keys(after).forEach(k => {
+                const was = o.before ? o.before[k] : undefined;
+                if (sameValue(was, after[k])) return;
+                if (was === undefined) it.missing.push(k); else it.before[k] = was;
+                it.after[k] = after[k];
+            });
+            if (!Object.keys(it.after).length) return;    // niente di cambiato
+            if (!o.before) it.noUndo = true;
+        } else if (op === "create") {
+            it.after = { title: it.title };
+        } else {
+            it.before = o.before;
+            if (!o.before) it.noUndo = true;
+        }
+        items.push(it);
+    });
+    if (!items.length) return;
+    // voci divise in parti se sono tante (es. correzione automatica su 300 canzoni)
+    const parts = [];
+    let cur = [], size = 0;
+    items.forEach(it => {
+        let s = JSON.stringify(it).length;
+        if (s > 700000) { delete it.after; s = JSON.stringify(it).length; }
+        if (s > 700000) { delete it.before; it.noUndo = true; s = JSON.stringify(it).length; }
+        if (cur.length && (cur.length >= 100 || size + s > 700000)) { parts.push(cur); cur = []; size = 0; }
+        cur.push(it); size += s;
+    });
+    if (cur.length) parts.push(cur);
+    const at = Date.now(), by = whoAmI(), label = describeItems(items);
+    parts.forEach((partItems, i) => {
+        const entry = { at, by, device: deviceId, group, label, part: i, parts: parts.length, items: partItems };
+        const local = { ...entry, localId: group + ":" + i };
+        saveMyLog(myLog().concat([JSON.stringify(local).length < 400000 ? local : { ...local, items: [], tooBig: true }]));
+        fsAddDoc(collection(db, "changelog"), entry).then(ref => {
+            saveMyLog(myLog().map(e => e.localId === local.localId ? { ...e, id: ref.id } : e));
+            if (isAdmin) { serverLog.unshift({ id: ref.id, ...entry }); if (activeViewId() === "view-log") renderLog(); }
+        }).catch(err => {
+            console.warn("Registro non salvato:", err);
+            if (isAdmin && !logWarned && isPermissionError(err)) {
+                logWarned = true;
+                notify("La modifica è salvata, ma il registro delle modifiche no: nelle regole di Firestore manca «changelog».", "warning",
+                    { duration: 12000, actions: [{ label: "Copia la regola", onClick: () => copyText(LOG_RULES).then(() => notify("Regola copiata", "success")) }] });
+            }
+        });
+    });
+    if (activeViewId() === "view-log") renderLog();
+}
+const activeViewId = () => { const v = document.querySelector(".view-screen.active"); return v ? v.id : ""; };
+
+// --- Gruppi (un'azione = una o più scritture) ---
+function logGroups(entries) {
+    const map = new Map();
+    entries.forEach(e => {
+        const g = map.get(e.group) || { group: e.group, entries: [], at: 0, first: Infinity, by: e.by };
+        g.entries.push(e); g.at = Math.max(g.at, e.at); g.first = Math.min(g.first, e.at);
+        map.set(e.group, g);
+    });
+    return [...map.values()].map(g => {
+        g.entries.sort((a, b) => a.at - b.at || (a.part || 0) - (b.part || 0));
+        g.items = g.entries.flatMap(e => e.items || []);
+        const labels = [...new Set(g.entries.map(e => e.label))];
+        g.label = g.items.length ? describeItems(g.items) : labels[0] + (labels.length > 1 ? ` e altre ${labels.length - 1} modifiche` : "");
+        g.labels = labels;
+        g.undone = g.entries.some(e => e.undoneAt);
+        g.undoneBy = (g.entries.find(e => e.undoneAt) || {}).undoneBy;
+        g.undoneAt = (g.entries.find(e => e.undoneAt) || {}).undoneAt;
+        g.canUndo = !g.undone && Date.now() - g.at < UNDO_MS && g.items.length > 0 && !g.items.some(i => i.noUndo) && !g.entries.some(e => e.tooBig);
+        g.cols = [...new Set(g.items.map(i => i.col))];
+        return g;
+    }).sort((a, b) => b.at - a.at);
+}
+
+function updateLogBadge() {
+    const n = logGroups(myLog()).filter(g => g.canUndo).length;
+    const b = document.getElementById("logBadge");
+    if (b) { b.textContent = n; b.style.display = n ? "inline-block" : "none"; }
+}
+setInterval(updateLogBadge, 30000);
+setTimeout(updateLogBadge, 0);
+
+// --- Annulla: rimette com'era prima ---
+async function undoGroup(g) {
+    if (!g.canUndo) return notify("Questa modifica non si può più annullare (sono passati più di 10 minuti).", "info");
+    const items = g.items;
+    // nel frattempo qualcuno ha cambiato di nuovo le stesse cose?
+    const changedAgain = items.filter(it => {
+        const now = knownData(it.col, it.id);
+        if (it.op === "update") return !now || Object.keys(it.after || {}).some(k => !sameValue(now[k], it.after[k]));
+        if (it.op === "create") return !now;
+        return !!now;
+    });
+    const msg = changedAgain.length
+        ? `Dopo questa modifica ${changedAgain.length === 1 ? `«${titleOf(changedAgain[0]) || "un elemento"}» è stato cambiato di nuovo` : `${changedAgain.length} elementi sono stati cambiati di nuovo`}: annullando tornano comunque com'erano prima. Continuo?`
+        : `Annullo «${g.label}»? Tutto torna com'era prima di questa modifica.`;
+    const ok = await appConfirm(msg, { title: "Annulla modifica", okText: "Annulla la modifica", cancelText: "Lascia così", danger: changedAgain.length > 0, icon: "bi-arrow-counterclockwise" });
+    if (!ok) return;
+    const rev = items.slice().reverse().filter(it => !(it.op === "update" && !knownData(it.col, it.id)));   // documento sparito: niente da rimettere
+    try {
+        for (let i = 0; i < rev.length; i += 400) {
+            const b = fsWriteBatch(db);
+            rev.slice(i, i + 400).forEach(it => {
+                const ref = doc(db, it.col, it.id);
+                if (it.op === "update") {
+                    const data = deepCopy(it.before || {});
+                    (it.missing || []).forEach(k => { data[k] = deleteField(); });
+                    b.update(ref, data);
+                } else if (it.op === "create") b.delete(ref);
+                else b.set(ref, deepCopy(it.before));
+            });
+            await b.commit();
+        }
+    } catch (err) {
+        return notify("Non sono riuscito ad annullare: " + err.message, "danger");
+    }
+    rev.forEach(applyUndoLocally);
+    const mark = { undoneAt: Date.now(), undoneBy: whoAmI() };
+    g.entries.forEach(e => {
+        Object.assign(e, mark);
+        if (e.id) fsUpdateDoc(doc(db, "changelog", e.id), mark).catch(err => console.warn("Registro:", err));
+    });
+    saveMyLog(myLog().map(e => e.group === g.group ? { ...e, ...mark } : e));
+    serverLog.forEach(e => { if (e.group === g.group) Object.assign(e, mark); });
+    afterUndoRefresh(rev);
+    notify(`Annullato: ${g.label}`, "success");
+}
+
+function applyUndoLocally(it) {
+    const key = `${it.col}/${it.id}`, list = localList(it.col);
+    const idx = list ? list.findIndex(x => x.id === it.id) : -1;
+    if (it.op === "update") {
+        const next = { ...(shadow.get(key) || {}), ...deepCopy(it.before || {}) };
+        (it.missing || []).forEach(k => delete next[k]);
+        shadow.set(key, next);
+        if (idx >= 0) { Object.assign(list[idx], deepCopy(it.before || {})); (it.missing || []).forEach(k => delete list[idx][k]); }
+    } else if (it.op === "create") {
+        shadow.delete(key);
+        if (idx >= 0) list.splice(idx, 1);
+    } else {
+        shadow.set(key, deepCopy(it.before));
+        const obj = { id: it.id, ...deepCopy(it.before) };
+        if (it.col === "songs") obj.title = String(obj.title ?? "");
+        if (it.col === "sections" || it.col === "setlists") obj.name = String(obj.name ?? "");
+        if (it.col === "setlists" && !Array.isArray(obj.songs)) obj.songs = [];
+        if (it.col === "proposals") obj._isProposal = true;
+        if (!list) return;
+        if (idx >= 0) list[idx] = obj;
+        else if (!(it.col === "songs" && obj.title.startsWith("Info"))) list.push(obj);
+    }
+}
+
+function afterUndoRefresh(items) {
+    const cols = new Set(items.map(i => i.col));
+    if (cols.has("sections")) {
+        allSections.sort((a, b) => {
+            const oa = a.order ?? 9999, ob = b.order ?? 9999;
+            return oa !== ob ? oa - ob : a.name.localeCompare(b.name);
+        });
+        sectionOrder = allSections.map(s => s.name);
+    }
+    if (cols.has("setlists")) allSetlists.sort((a, b) => a.name.localeCompare(b.name));
+    if (cols.has("proposals") && isAdmin) loadProposals();
+    window.updateTotalSongsCounter();
+    refreshTagsUi();
+    // canzone aperta nell'editor: la aggiorno (altrimenti un "Salva" rimetterebbe la versione annullata)
+    if (currentSongId && items.some(i => i.col === "songs" && i.id === currentSongId)) {
+        const s = allSongs.find(x => x.id === currentSongId);
+        if (s) {
+            document.getElementById("editorTitle").innerText = s.title;
+            document.getElementById("editorAuthor").innerText = s.author || "";
+            document.getElementById("editorMeta").innerText = [s.description, s.year ? `(${s.year})` : ""].filter(Boolean).join(" - ");
+            document.getElementById("lyricsEditor").value = s.lyrics || "";
+            hasUnsavedChanges = false;
+            renderEditorTags(s);
+            window.renderPreview();
+        }
+    }
+    if (activeViewId() === "view-log") renderLog();
+}
+
+// --- Pagina "Ultime modifiche" ---
+window.openChangeLog = () => {
+    switchView("view-log");
+    renderLog();
+    if (isAdmin) loadServerLog();
+    clearInterval(logTimer);
+    logTimer = setInterval(() => { if (activeViewId() === "view-log") renderLog(); else clearInterval(logTimer); }, 20000);
+};
+
+async function loadServerLog() {
+    try {
+        const snap = await getDocs(query(collection(db, "changelog"), orderBy("at", "desc"), limit(250)));
+        serverLog = [];
+        snap.forEach(d => serverLog.push({ id: d.id, ...d.data() }));
+        logBlocked = false;
+        cleanOldLog();
+    } catch (err) {
+        logBlocked = isPermissionError(err);
+        if (!logBlocked) console.warn("Registro non caricato:", err);
+    }
+    if (activeViewId() === "view-log") renderLog();
+}
+// le voci più vecchie di 60 giorni si cancellano da sole (una volta per apertura, poche alla volta)
+async function cleanOldLog() {
+    try {
+        const cutoff = Date.now() - 60 * 24 * 3600 * 1000;
+        const snap = await getDocs(query(collection(db, "changelog"), where("at", "<", cutoff), limit(100)));
+        if (!snap.docs.length) return;
+        const b = fsWriteBatch(db);
+        snap.docs.forEach(d => b.delete(doc(db, "changelog", d.id)));
+        await b.commit();
+    } catch (e) { /* non importante */ }
+}
+
+const LOG_ICON = { songs: "bi-music-note-beamed", sections: "bi-grid-3x3-gap", setlists: "bi-list-check", proposals: "bi-inbox" };
+function relTime(ms) {
+    const d = Date.now() - ms;
+    if (d < 60000) return "adesso";
+    if (d < 3600000) return `${Math.floor(d / 60000)} min fa`;
+    const t = new Date(ms), today = new Date();
+    const hm = t.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+    if (t.toDateString() === today.toDateString()) return `oggi alle ${hm}`;
+    const y = new Date(Date.now() - 86400000);
+    if (t.toDateString() === y.toDateString()) return `ieri alle ${hm}`;
+    return fmtDate(ms);
+}
+
+function renderLog() {
+    const box = document.getElementById("logList");
+    if (!box) return;
+    const useServer = isAdmin && !logBlocked;
+    const groups = logGroups(useServer ? serverLog : myLog());
+    const filtered = groups.filter(g => logFilter === "all" || g.cols.includes(logFilter));
+    const filters = [["all", "Tutte"], ["songs", "Canzoni"], ["sections", "Sezioni"], ["setlists", "Scalette"], ["proposals", "Proposte"]]
+        .filter(([k]) => k === "all" || isAdmin || k === "setlists");
+    let html = `<div class="small text-muted mb-2">${useServer
+        ? "Tutte le modifiche al canzoniere, le più recenti prima. Ogni modifica si può annullare entro <b>10 minuti</b>; per le versioni più vecchie di una canzone c'è la cronologia (🕘 nell'editor)."
+        : "Le modifiche fatte da questo telefono nelle ultime 24 ore. Si possono annullare entro <b>10 minuti</b>."}</div>`;
+    if (isAdmin && logBlocked) html += `<div class="tags-summary mb-2"><p class="mb-2 small">Per vedere le modifiche di tutti serve una regola in <b>Firestore → Regole</b> (dentro <code>match /databases/{database}/documents</code>). Intanto vedi quelle fatte da questo telefono.</p><pre class="rules-snippet">${escapeHtml(LOG_RULES)}</pre><button class="app-btn app-btn-primary btn-sm" data-act="copyrules">Copia la regola</button></div>`;
+    if (filters.length > 2) html += `<div class="search-modes m-0 mb-2 justify-content-start" id="logFilters">${filters.map(([k, l]) => `<button data-f="${k}" class="${logFilter === k ? "active" : ""}">${l}</button>`).join("")}</div>`;
+    if (!filtered.length) html += `<div class="text-center text-muted mt-5"><i class="bi bi-clock-history fs-3 d-block mb-2"></i>Nessuna modifica${logFilter !== "all" ? " di questo tipo" : ""}.</div>`;
+    html += filtered.slice(0, 150).map(g => {
+        const left = Math.max(0, Math.ceil((UNDO_MS - (Date.now() - g.at)) / 60000));
+        const action = g.undone ? `<span class="log-state undone"><i class="bi bi-arrow-counterclockwise"></i> annullata${g.undoneBy ? ` da ${escapeHtml(shortWho(g.undoneBy))}` : ""}</span>`
+            : g.canUndo ? `<button class="btn btn-sm btn-outline-warning log-undo" data-undo="${escapeHtml(g.group)}"><i class="bi bi-arrow-counterclockwise me-1"></i>Annulla <small>${left} min</small></button>`
+            : `<span class="log-state expired">${Date.now() - g.at >= UNDO_MS ? "oltre 10 min" : "non annullabile"}</span>`;
+        const lyricItem = g.items.find(i => i.op === "update" && i.before && "lyrics" in i.before && i.after && "lyrics" in i.after);
+        const details = g.labels.length > 1 || g.items.length > 1
+            ? `<details class="log-details" data-key="${escapeHtml(g.group)}"><summary>${g.items.length} elementi</summary><ul>${g.items.slice(0, 40).map(i => `<li>${escapeHtml(describeItem(i))}</li>`).join("")}${g.items.length > 40 ? `<li>… e altri ${g.items.length - 40}</li>` : ""}</ul></details>`
+            : lyricItem ? `<details class="log-details" data-key="${escapeHtml(g.group)}" data-diff="${escapeHtml(g.group)}"><summary>Cosa è cambiato</summary><div class="diff-box"></div></details>` : "";
+        return `<div class="log-item ${g.undone ? "is-undone" : ""}">
+            <i class="bi ${LOG_ICON[g.cols[0]] || "bi-pencil"} log-icon"></i>
+            <div class="log-body"><div class="log-label">${escapeHtml(g.label)}</div>
+                <div class="log-meta">${escapeHtml(shortWho(g.by))} · ${escapeHtml(relTime(g.at))}</div>${details}</div>
+            <div class="log-action">${action}</div>
+        </div>`;
+    }).join("");
+    const openKeys = [...box.querySelectorAll("details[open]")].map(d => d.dataset.key);
+    box.innerHTML = html;
+    box.querySelectorAll("details").forEach(d => { if (openKeys.includes(d.dataset.key)) { d.open = true; fillDiff(d, groups); } });
+    box._groups = groups;
+    updateLogBadge();
+}
+function fillDiff(det, groups) {
+    if (!det.dataset.diff) return;
+    const g = groups.find(x => x.group === det.dataset.diff);
+    const it = g && g.items.find(i => i.op === "update" && i.before && "lyrics" in i.before);
+    const box = det.querySelector(".diff-box");
+    if (it && box && !box.innerHTML) box.innerHTML = diffHtml(diffLines(it.before.lyrics, it.after.lyrics));
+}
+
+document.addEventListener("click", (e) => {
+    if (!e.target.closest("#logList")) return;
+    const f = e.target.closest("#logFilters [data-f]");
+    if (f) { logFilter = f.dataset.f; return renderLog(); }
+    if (e.target.closest("[data-act='copyrules']")) return copyText(LOG_RULES).then(() => notify("Regola copiata", "success"));
+    const u = e.target.closest("[data-undo]");
+    if (u) {
+        const g = (document.getElementById("logList")._groups || []).find(x => x.group === u.dataset.undo);
+        if (g) undoGroup(g);
+    }
+});
+document.addEventListener("toggle", (e) => {
+    const d = e.target;
+    if (d && d.matches && d.matches("#logList details[data-diff]") && d.open) fillDiff(d, document.getElementById("logList")._groups || []);
+}, true);
