@@ -429,7 +429,7 @@ window.renderDashboard = () => {
         const favs=allSongs.filter(s=>favorites.includes(s.id));
         if(favs.length>0){
             favS.style.display='block';
-            favC.innerHTML=favs.map(s=>`<button class="list-group-item list-group-item-action border-0 d-flex justify-content-between align-items-center" onclick="window.openEditor('${s.id}')"><div><i class="bi bi-star-fill text-warning me-2"></i> <strong>${escapeHtml(s.title)}</strong></div><small class="text-muted">${escapeHtml(s.author || '')}</small></button>`).join('');
+            favC.innerHTML=favs.map(s=>`<button class="list-group-item list-group-item-action border-0 d-flex justify-content-between align-items-center" onclick="window.openEditor('${s.id}')"><div><i class="bi bi-star-fill text-warning me-2"></i> <strong>${escapeHtml(s.title)}</strong>${songTagsHtml(s)}</div><small class="text-muted">${escapeHtml(s.author || '')}</small></button>`).join('');
         } else favS.style.display='none';
 
         const c = document.getElementById("categoriesContainer"); 
@@ -628,6 +628,7 @@ window.performGlobalSearch = () => {
                 <div class="search-hit" style="min-width:0">
                     <h6 class="fw-bold mb-0">${titleHtml} ${badgeHtml} ${transBadge}</h6>
                     <small>${authorHtml} <span class="badge bg-light text-dark ms-2">${escapeHtml(s.category)}</span></small>
+                    ${songTagsHtml(s)}
                     ${snippet}
                 </div>
                 <i class="bi bi-chevron-right text-muted"></i>
@@ -717,7 +718,7 @@ window.renderList = (songs, isAppending = false) => {
         htmlContent += `
             <button class="list-group-item list-group-item-action p-3 border-0 mb-1 rounded shadow-sm" onclick="window.openEditor('${s.id}')">
                 <div class="d-flex w-100 justify-content-between align-items-center">
-                    <div><h6 class="mb-1 fw-bold">${escapeHtml(s.title)} ${badgeHtml} ${transBadge}</h6></div>
+                    <div><h6 class="mb-1 fw-bold">${escapeHtml(s.title)} ${badgeHtml} ${transBadge}</h6>${songTagsHtml(s)}</div>
                     <small class="text-muted">${escapeHtml(s.author || '')}</small>
                 </div>
             </button>`;
@@ -1641,7 +1642,7 @@ window.openProposalsView = () => {
             <div class="card mb-3 shadow-sm border-secondary" style="background: #222;">
                 <div class="card-body d-flex justify-content-between align-items-center">
                     <div class="overflow-hidden">
-                        <h5 class="fw-bold mb-1 text-white">${escapeHtml(p.title)} ${badge}</h5>
+                        <h5 class="fw-bold mb-1 text-white">${escapeHtml(p.title)} ${badge}</h5>${songTagsHtml(p)}
                         <small class="text-muted d-block text-truncate">
                             ${escapeHtml(authorText)} &bull; ${escapeHtml(p.category)}
                         </small>
@@ -1931,6 +1932,7 @@ window.renderActiveSetlistSongs = () => {
                     <div class="small text-muted">${escapeHtml(song.author || '')} 
                         <span class="badge bg-light text-dark border ms-2" id="badge-trans-${idx}" data-val="${savedTrans}">Tono: ${savedTrans > 0 ? '+'+savedTrans : savedTrans}</span>
                     </div>
+                    ${songTagsHtml(song)}
                 </div>
                 
                 <div class="btn-group btn-group-sm ms-2 setlist-item-controls">
@@ -2294,6 +2296,7 @@ window.performSetlistSearch = () => {
             <div class="text-truncate" style="max-width: 80%;">
                 <div class="fw-bold text-truncate">${escapeHtml(s.title)}</div>
                 <small class="text-muted text-truncate">${escapeHtml(s.author || '')}</small>
+                ${songTagsHtml(s)}
             </div>
             <button class="btn btn-sm ${btnClass} rounded-circle" ${action} style="width: 32px; height: 32px; padding: 0;">${icon}</button>
         </div>`;
@@ -3429,7 +3432,7 @@ function renderSongDoctor() {
             <button class="list-group-item list-group-item-action p-3 border-0 mb-1 rounded" onclick="window.openEditor('${song.id}')">
                 <div class="d-flex justify-content-between align-items-center gap-2">
                     <div class="text-truncate"><strong>${escapeHtml(song.title)}</strong>
-                        <small class="text-muted ms-1">${escapeHtml(song.category || "")}</small></div>
+                        <small class="text-muted ms-1">${escapeHtml(song.category || "")}</small>${songTagsHtml(song)}</div>
                     <small class="text-warning text-nowrap">${escapeHtml(detail)}</small>
                 </div>
             </button>`).join("");
@@ -3821,6 +3824,7 @@ function renderPerform(keepScroll = false) {
         s.author,
         key ? `Tonalità ${key}${trans ? ` (${signed(trans)})` : ""}` : trans ? `Tono ${signed(trans)}` : "",
         capo ? `Capo ${capo}` : "",
+        songTagLabels(s).join(", "),
     ].filter(Boolean).join(" · ");
     const prevEl = document.getElementById("performPrev"), nextEl = document.getElementById("performNext");
     prevEl.textContent = prevSong ? prevSong.title : "";
@@ -4105,6 +4109,15 @@ function handleStartupLink() {
 // --- ETICHETTE (momento e branca) ----------------------------------------------------------------------
 let activeTags = new Set();
 let filtersOpen = false;
+
+// Etichette sotto il nome della canzone negli elenchi, colorate per gruppo (Messa / momento / branca)
+const TAG_GROUP_OF = Object.fromEntries(TAG_GROUPS.flatMap(g => g.tags.map(([k]) => [k, g.id])));
+const songTagLabels = (s) => (s && Array.isArray(s.tags) ? s.tags : []).filter(t => TAG_LABEL[t]).map(t => TAG_LABEL[t]);
+function songTagsHtml(s) {
+    const tags = (s && Array.isArray(s.tags) ? s.tags : []).filter(t => TAG_LABEL[t]);
+    if (!tags.length) return "";
+    return `<div class="song-tags">${tags.map(t => `<span class="song-tag tg-${TAG_GROUP_OF[t]}">${escapeHtml(TAG_LABEL[t])}</span>`).join("")}</div>`;
+}
 const tagLabel = (t) => TAG_LABEL[t] || t;
 // Le proposte si calcolano una volta per canzone (finché non cambiano titolo, autore, sezione o testo)
 const tagSuggCache = new WeakMap();

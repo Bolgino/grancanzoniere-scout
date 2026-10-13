@@ -960,3 +960,13 @@ body.performing .autoscroll-bar { bottom: calc(66px + env(safe-area-inset-bottom
 .diff-line.new { background: rgba(46, 204, 113, 0.15); color: #bff5d6; }
 .diff-skip { text-align: center; color: #6c7a99; font-size: .75rem; font-style: italic; padding: 2px 0; }
 .rules-snippet { background: rgba(0, 0, 0, 0.4); color: #bff5d6; padding: 10px; border-radius: 8px; font-size: .8rem; white-space: pre-wrap; }
+
+/* Etichette sotto il nome della canzone negli elenchi: colore per gruppo, si leggono al volo */
+.song-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.song-tag {
+    font-size: .68rem; line-height: 1.55; padding: 0 7px; border-radius: 999px; font-weight: 600;
+    white-space: nowrap; border: 1px solid; letter-spacing: .2px;
+}
+.song-tag.tg-messa   { color: #ffd76a; background: rgba(255, 193, 7, 0.12);  border-color: rgba(255, 193, 7, 0.35); }
+.song-tag.tg-momento { color: #7ee3f7; background: rgba(13, 202, 240, 0.12); border-color: rgba(13, 202, 240, 0.35); }
+.song-tag.tg-branca  { color: #8ef0b5; background: rgba(46, 204, 113, 0.12); border-color: rgba(46, 204, 113, 0.35); }
