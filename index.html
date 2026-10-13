@@ -183,13 +183,6 @@
                 </button>
 
                 <button class="btn btn-outline-light text-start py-2 px-3 w-100 d-flex align-items-center rounded-3 border-secondary" 
-                        onclick="window.openChangeLog(); document.querySelector('.btn-close').click()">
-                    <i class="bi bi-clock-history text-info fs-5 me-3"></i> 
-                    <span>Ultime modifiche</span>
-                    <span class="badge rounded-pill bg-info text-dark ms-auto" id="logBadge" style="display:none" title="Modifiche tue ancora annullabili">0</span>
-                </button>
-
-                <button class="btn btn-outline-light text-start py-2 px-3 w-100 d-flex align-items-center rounded-3 border-secondary" 
                         onclick="window.openTuner(); document.querySelector('.btn-close').click()">
                     <i class="bi bi-soundwave text-success fs-5 me-3"></i> 
                     <span>Accordatore</span>
@@ -224,6 +217,11 @@
                             onclick="window.openReportsView(); document.querySelector('.btn-close').click()">
                         <i class="bi bi-flag-fill me-3 fs-5 text-danger"></i> Segnalazioni
                         <span class="badge rounded-pill bg-danger ms-auto" id="reportsBadge" style="display:none">0</span>
+                    </button>
+        
+                    <button class="btn btn-link text-white text-decoration-none text-start p-2 d-flex align-items-center" 
+                            onclick="window.openChangeLog(); document.querySelector('.btn-close').click()">
+                        <i class="bi bi-clock-history me-3 fs-5 text-info"></i> Ultime modifiche
                     </button>
         
                     <button class="btn btn-link text-white text-decoration-none text-start p-2 d-flex align-items-center" 
@@ -1129,7 +1127,7 @@
         <button onclick="window.toggleAutoScroll()" aria-label="Ferma lo scorrimento" title="Ferma"><i class="bi bi-x-lg"></i></button>
     </div>
 
-    <script type="module" src="script.js?v=11"></script>
+    <script type="module" src="script.js?v=12"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./service-worker.js')

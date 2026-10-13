@@ -4927,22 +4927,14 @@ window.saveSong = async () => {
 // REGISTRO DELLE MODIFICHE E ANNULLA (entro 10 minuti)
 // =====================================================================================================
 const UNDO_MS = 10 * 60 * 1000;
-const LOG_RULES = `match /changelog/{entryId} {\n  allow create: if true;\n  allow read, delete: if isAdmin();\n  allow update: if isAdmin()\n    || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['undoneAt', 'undoneBy']);\n}`;
-let serverLog = [], logBlocked = false, logFilter = "all", logTimer = null, logWarned = false;
+const LOG_RULES = `match /changelog/{entryId} {\n  allow create: if true;\n  allow read, update, delete: if isAdmin();\n}`;
+// Il registro è solo per i capi: mostra le modifiche di tutti (da qualsiasi telefono), aggiornato in diretta
+let serverLog = [], logBlocked = false, logFilter = "all", logTimer = null, logWarned = false, logUnsub = null;
 const whoAmI = () => (auth.currentUser && auth.currentUser.email) || (isAdmin ? "capo" : "ospite");
 const shortWho = (by) => !by ? "?" : by === "ospite" ? "ospite" : String(by).split("@")[0];
 const titleOf = (it) => it.title || "";
 
-// Le mie modifiche recenti (su questo telefono): servono anche a chi non è capo per annullare le sue
-const myLog = () => lsGet('myChanges', []).filter(e => Date.now() - e.at < 24 * 3600 * 1000);
-function saveMyLog(list) {
-    const keep = list.filter(e => Date.now() - e.at < 24 * 3600 * 1000).slice(-60);
-    const recent = (e) => Date.now() - e.at < UNDO_MS;
-    // se lo spazio del telefono non basta tengo complete solo quelle ancora annullabili
-    const tries = [keep, keep.map(e => recent(e) ? e : { ...e, items: [], tooBig: true }), keep.filter(recent)];
-    for (const l of tries) { try { localStorage.setItem('myChanges', JSON.stringify(l)); break; } catch (err) { /* prova la successiva */ } }
-    updateLogBadge();
-}
+try { localStorage.removeItem('myChanges'); } catch (e) {}   // prima il registro si teneva anche sul telefono
 
 // --- Cosa è cambiato, in parole ---
 function describeItem(it) {
@@ -5042,11 +5034,8 @@ function logChanges(group, ops) {
     const at = Date.now(), by = whoAmI(), label = describeItems(items);
     parts.forEach((partItems, i) => {
         const entry = { at, by, device: deviceId, group, label, part: i, parts: parts.length, items: partItems };
-        const local = { ...entry, localId: group + ":" + i };
-        saveMyLog(myLog().concat([JSON.stringify(local).length < 400000 ? local : { ...local, items: [], tooBig: true }]));
         fsAddDoc(collection(db, "changelog"), entry).then(ref => {
-            saveMyLog(myLog().map(e => e.localId === local.localId ? { ...e, id: ref.id } : e));
-            if (isAdmin) { serverLog.unshift({ id: ref.id, ...entry }); if (activeViewId() === "view-log") renderLog(); }
+            if (isAdmin && !serverLog.some(e => e.id === ref.id)) { serverLog.unshift({ id: ref.id, ...entry }); if (activeViewId() === "view-log") renderLog(); }
         }).catch(err => {
             console.warn("Registro non salvato:", err);
             if (isAdmin && !logWarned && isPermissionError(err)) {
@@ -5056,7 +5045,6 @@ function logChanges(group, ops) {
             }
         });
     });
-    if (activeViewId() === "view-log") renderLog();
 }
 const activeViewId = () => { const v = document.querySelector(".view-screen.active"); return v ? v.id : ""; };
 
@@ -5082,14 +5070,6 @@ function logGroups(entries) {
         return g;
     }).sort((a, b) => b.at - a.at);
 }
-
-function updateLogBadge() {
-    const n = logGroups(myLog()).filter(g => g.canUndo).length;
-    const b = document.getElementById("logBadge");
-    if (b) { b.textContent = n; b.style.display = n ? "inline-block" : "none"; }
-}
-setInterval(updateLogBadge, 30000);
-setTimeout(updateLogBadge, 0);
 
 // --- Annulla: rimette com'era prima ---
 async function undoGroup(g) {
@@ -5131,7 +5111,6 @@ async function undoGroup(g) {
         Object.assign(e, mark);
         if (e.id) fsUpdateDoc(doc(db, "changelog", e.id), mark).catch(err => console.warn("Registro:", err));
     });
-    saveMyLog(myLog().map(e => e.group === g.group ? { ...e, ...mark } : e));
     serverLog.forEach(e => { if (e.group === g.group) Object.assign(e, mark); });
     afterUndoRefresh(rev);
     notify(`Annullato: ${g.label}`, "success");
@@ -5192,26 +5171,42 @@ function afterUndoRefresh(items) {
 
 // --- Pagina "Ultime modifiche" ---
 window.openChangeLog = () => {
+    if (!isAdmin) return;
     switchView("view-log");
     renderLog();
-    if (isAdmin) loadServerLog();
+    stopWatchingLog();
+    watchServerLog();
     clearInterval(logTimer);
-    logTimer = setInterval(() => { if (activeViewId() === "view-log") renderLog(); else clearInterval(logTimer); }, 20000);
+    logTimer = setInterval(() => {
+        if (activeViewId() === "view-log") renderLog();          // aggiorna i minuti rimasti per annullare
+        else { clearInterval(logTimer); stopWatchingLog(); }
+    }, 20000);
 };
 
-async function loadServerLog() {
+// In diretta: una modifica fatta da un altro telefono compare subito
+function watchServerLog() {
+    if (logUnsub) return;
+    let first = true;
     try {
-        const snap = await getDocs(query(collection(db, "changelog"), orderBy("at", "desc"), limit(250)));
-        serverLog = [];
-        snap.forEach(d => serverLog.push({ id: d.id, ...d.data() }));
-        logBlocked = false;
-        cleanOldLog();
-    } catch (err) {
-        logBlocked = isPermissionError(err);
-        if (!logBlocked) console.warn("Registro non caricato:", err);
-    }
-    if (activeViewId() === "view-log") renderLog();
+        logUnsub = onSnapshot(query(collection(db, "changelog"), orderBy("at", "desc"), limit(250)), (snap) => {
+            serverLog = [];
+            snap.forEach(d => serverLog.push({ id: d.id, ...d.data() }));
+            logBlocked = false;
+            if (first) { first = false; cleanOldLog(); }
+            if (activeViewId() === "view-log") renderLog();
+        }, (err) => {
+            logBlocked = isPermissionError(err);
+            if (!logBlocked) console.warn("Registro non caricato:", err);
+            stopWatchingLog();
+            if (activeViewId() === "view-log") renderLog();
+        });
+    } catch (e) { console.warn(e); }
 }
+function stopWatchingLog() { if (logUnsub) { try { logUnsub(); } catch (e) {} logUnsub = null; } }
+// uscendo dalla pagina smetto di ascoltare (meno letture sul database)
+const switchViewBeforeLog = window.switchView;
+window.switchView = (id) => { if (id !== "view-log") stopWatchingLog(); return switchViewBeforeLog(id); };
+
 // le voci più vecchie di 60 giorni si cancellano da sole (una volta per apertura, poche alla volta)
 async function cleanOldLog() {
     try {
@@ -5240,16 +5235,16 @@ function relTime(ms) {
 function renderLog() {
     const box = document.getElementById("logList");
     if (!box) return;
-    const useServer = isAdmin && !logBlocked;
-    const groups = logGroups(useServer ? serverLog : myLog());
+    if (!isAdmin) { box.innerHTML = ""; return; }
+    if (logBlocked) {
+        box.innerHTML = `<div class="tags-summary"><p class="mb-2">Per vedere tutte le modifiche (fatte da qualsiasi telefono) serve una regola in <b>Firestore → Regole</b>, dentro <code>match /databases/{database}/documents</code>:</p><pre class="rules-snippet">${escapeHtml(LOG_RULES)}</pre><button class="app-btn app-btn-primary btn-sm" data-act="copyrules">Copia la regola</button></div>`;
+        return;
+    }
+    const groups = logGroups(serverLog.filter((e, k, all) => all.findIndex(x => x.id === e.id) === k));
     const filtered = groups.filter(g => logFilter === "all" || g.cols.includes(logFilter));
-    const filters = [["all", "Tutte"], ["songs", "Canzoni"], ["sections", "Sezioni"], ["setlists", "Scalette"], ["proposals", "Proposte"]]
-        .filter(([k]) => k === "all" || isAdmin || k === "setlists");
-    let html = `<div class="small text-muted mb-2">${useServer
-        ? "Tutte le modifiche al canzoniere, le più recenti prima. Ogni modifica si può annullare entro <b>10 minuti</b>; per le versioni più vecchie di una canzone c'è la cronologia (🕘 nell'editor)."
-        : "Le modifiche fatte da questo telefono nelle ultime 24 ore. Si possono annullare entro <b>10 minuti</b>."}</div>`;
-    if (isAdmin && logBlocked) html += `<div class="tags-summary mb-2"><p class="mb-2 small">Per vedere le modifiche di tutti serve una regola in <b>Firestore → Regole</b> (dentro <code>match /databases/{database}/documents</code>). Intanto vedi quelle fatte da questo telefono.</p><pre class="rules-snippet">${escapeHtml(LOG_RULES)}</pre><button class="app-btn app-btn-primary btn-sm" data-act="copyrules">Copia la regola</button></div>`;
-    if (filters.length > 2) html += `<div class="search-modes m-0 mb-2 justify-content-start" id="logFilters">${filters.map(([k, l]) => `<button data-f="${k}" class="${logFilter === k ? "active" : ""}">${l}</button>`).join("")}</div>`;
+    const filters = [["all", "Tutte"], ["songs", "Canzoni"], ["sections", "Sezioni"], ["setlists", "Scalette"], ["proposals", "Proposte"]];
+    let html = `<div class="small text-muted mb-2">Tutte le modifiche al canzoniere fatte da chiunque e da qualsiasi telefono (anche le scalette degli ospiti), le più recenti prima, aggiornate in diretta. Ogni modifica si può annullare entro <b>10 minuti</b>; per le versioni più vecchie di una canzone c'è la cronologia (🕘 nell'editor).</div>`;
+    html += `<div class="search-modes m-0 mb-2 justify-content-start" id="logFilters">${filters.map(([k, l]) => `<button data-f="${k}" class="${logFilter === k ? "active" : ""}">${l}</button>`).join("")}</div>`;
     if (!filtered.length) html += `<div class="text-center text-muted mt-5"><i class="bi bi-clock-history fs-3 d-block mb-2"></i>Nessuna modifica${logFilter !== "all" ? " di questo tipo" : ""}.</div>`;
     html += filtered.slice(0, 150).map(g => {
         const left = Math.max(0, Math.ceil((UNDO_MS - (Date.now() - g.at)) / 60000));
@@ -5271,7 +5266,6 @@ function renderLog() {
     box.innerHTML = html;
     box.querySelectorAll("details").forEach(d => { if (openKeys.includes(d.dataset.key)) { d.open = true; fillDiff(d, groups); } });
     box._groups = groups;
-    updateLogBadge();
 }
 function fillDiff(det, groups) {
     if (!det.dataset.diff) return;
