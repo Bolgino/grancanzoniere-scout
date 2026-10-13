@@ -970,3 +970,34 @@ body.performing .autoscroll-bar { bottom: calc(66px + env(safe-area-inset-bottom
 .song-tag.tg-messa   { color: #ffd76a; background: rgba(255, 193, 7, 0.12);  border-color: rgba(255, 193, 7, 0.35); }
 .song-tag.tg-momento { color: #7ee3f7; background: rgba(13, 202, 240, 0.12); border-color: rgba(13, 202, 240, 0.35); }
 .song-tag.tg-branca  { color: #8ef0b5; background: rgba(46, 204, 113, 0.12); border-color: rgba(46, 204, 113, 0.35); }
+
+/* Preferiti nei filtri */
+.tag-chip.fav i { color: #ffc107; }
+.tag-chip.fav.on { background: rgba(255, 193, 7, 0.16); border-color: #ffc107; color: #fff; }
+
+/* ============================================================
+   SEGNALA UN ERRORE
+   ============================================================ */
+.report-types { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.report-type {
+    display: flex; align-items: center; gap: 8px; text-align: left; padding: 8px 10px; border-radius: 12px; font-size: .85rem; line-height: 1.25;
+    background: rgba(255, 255, 255, 0.04); color: #c9d1e0; border: 1px solid #2a3350;
+}
+.report-type i { color: #ff8a8a; font-size: 1rem; flex-shrink: 0; }
+.report-type.on { background: rgba(255, 107, 107, 0.14); border-color: #ff6b6b; color: #fff; }
+.report-note, .report-name {
+    width: 100%; padding: 8px 10px; border-radius: 10px; font-size: .9rem;
+    background: rgba(0, 0, 0, 0.35); color: #fff; border: 1px solid #3a4560; outline: none;
+}
+.report-note:focus, .report-name:focus { border-color: #6ea8fe; }
+.chord-report { display: block; margin: 12px auto 0; background: none; border: 0; color: #ff8a8a; font-size: .85rem; text-decoration: underline; }
+.report-card { background: var(--card-bg); border: 1px solid var(--border-color); border-left: 4px solid #ff6b6b; border-radius: 12px; padding: 10px 12px; }
+.report-badge { font-size: .72rem; font-weight: 600; white-space: nowrap; padding: 1px 8px; border-radius: 999px; color: #ffb3b3; background: rgba(255, 107, 107, 0.14); border: 1px solid rgba(255, 107, 107, 0.4); }
+.report-note-text { margin-top: 6px; color: #e9ecef; white-space: pre-wrap; font-size: .92rem; }
+.report-meta { font-size: .74rem; color: #8a93a6; margin-top: 3px; }
+.editor-reports {
+    margin-bottom: 12px; padding: 10px 12px; border-radius: 12px; color: #ffd6d6;
+    background: rgba(255, 107, 107, 0.1); border: 1px solid rgba(255, 107, 107, 0.4);
+}
+.editor-reports > div > .bi-flag-fill { color: #ff6b6b; }
+.editor-report { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding-top: 6px; margin-top: 6px; border-top: 1px solid rgba(255, 107, 107, 0.2); font-size: .9rem; }
