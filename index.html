@@ -183,6 +183,13 @@
                 </button>
 
                 <button class="btn btn-outline-light text-start py-2 px-3 w-100 d-flex align-items-center rounded-3 border-secondary" 
+                        onclick="window.openChangeLog(); document.querySelector('.btn-close').click()">
+                    <i class="bi bi-clock-history text-info fs-5 me-3"></i> 
+                    <span>Ultime modifiche</span>
+                    <span class="badge rounded-pill bg-info text-dark ms-auto" id="logBadge" style="display:none" title="Modifiche tue ancora annullabili">0</span>
+                </button>
+
+                <button class="btn btn-outline-light text-start py-2 px-3 w-100 d-flex align-items-center rounded-3 border-secondary" 
                         onclick="window.openOfflineSheet(); document.querySelector('.btn-close').click()">
                     <i class="bi bi-cloud-arrow-down text-success fs-5 me-3"></i> 
                     <span>Uso offline</span>
@@ -661,6 +668,17 @@
             <div id="tagsList" class="d-flex flex-column gap-2"></div>
         </div>
 
+        <div id="view-log" class="view-screen">
+            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom border-secondary">
+                <button class="btn btn-outline-secondary btn-sm" onclick="window.goHome()">
+                    <i class="bi bi-arrow-left"></i> Home
+                </button>
+                <h3 class="fw-bold m-0 text-white">Ultime modifiche</h3>
+                <div style="width:70px"></div>
+            </div>
+            <div id="logList" class="d-flex flex-column gap-2"></div>
+        </div>
+
         <div id="view-reports" class="view-screen">
             <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom border-secondary">
                 <button class="btn btn-outline-secondary btn-sm" onclick="window.goHome()">
@@ -1088,7 +1106,7 @@
         <button onclick="window.toggleAutoScroll()" aria-label="Ferma lo scorrimento" title="Ferma"><i class="bi bi-x-lg"></i></button>
     </div>
 
-    <script type="module" src="script.js?v=9"></script>
+    <script type="module" src="script.js?v=10"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./service-worker.js')
