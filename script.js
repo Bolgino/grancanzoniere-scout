@@ -872,7 +872,7 @@ window.openEditor = (id) => {
         // Se la canzone ha accordi/testo da sistemare, il bottone Auto-correggi diventa giallo
         const btnFix = document.getElementById("btnAutoFix");
         if (btnFix) {
-            const needsFix = isAdmin && isAutoFixable(s, { typos: true, merge: true });
+            const needsFix = isAdmin && isAutoFixable(s, { typos: true, merge: true, fill: true });
             btnFix.classList.toggle("btn-warning", needsFix);
             btnFix.classList.toggle("btn-outline-dark", !needsFix);
         }
@@ -3573,8 +3573,9 @@ window.compressSectionCovers = () => {
 // Bottone "Auto-correggi" nell'editor: corregge il testo aperto, NON salva (controlli l'anteprima e premi Salva)
 window.autoFixCurrentSong = () => {
     const ta = document.getElementById("lyricsEditor");
-    // la bacchetta dell'editor mette anche gli accordi scritti sopra il testo dentro la riga, sulla sillaba giusta
-    const { text, changes } = fixLyrics(ta.value, { typos: true, merge: true });
+    // la bacchetta dell'editor mette anche gli accordi scritti sopra il testo dentro la riga, sulla sillaba giusta,
+    // e copia gli accordi nelle strofe che non li hanno dalla strofa sopra con la stessa musica
+    const { text, changes } = fixLyrics(ta.value, { typos: true, merge: true, fill: true });
     if (text === ta.value) {
         if (changes.review.length) return showToast("Da controllare a mano: riga " + changes.review.map(r => r.line).join(", "), "warning");
         return showToast("Niente da correggere in questa canzone", "info");

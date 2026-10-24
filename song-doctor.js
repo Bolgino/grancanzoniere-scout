@@ -422,11 +422,164 @@ function fixBracketsInLine(line, opts, changes) {
 }
 
 
+// --- STROFE SENZA ACCORDI: accordi copiati dalla strofa sopra (bacchetta dell'editor) -------------
+// Spesso gli accordi sono scritti solo nella prima strofa (e nel primo ritornello): le altre strofe
+// hanno la stessa musica. Con opts.fill la bacchetta copia gli accordi sulle stesse sillabe:
+//   [Do]Quando la [Sol]sera scende          Quando la sera scende      ->  [Do]Quando la [Sol]sera scende   (ritornello uguale)
+//   [Do]Quando la [Sol]sera scende          Ecco il mattino arriva      ->  [Do]Ecco il [Sol]mattino arriva (stessa sillaba: 4ª)
+// Una strofa (righe tra due righe vuote) senza nessun accordo prende gli accordi da una strofa sopra
+// con lo stesso numero di righe: prima di tutto una con le stesse parole (ritornello ripetuto), altrimenti
+// quella con il numero di sillabe più simile riga per riga (escludendo i ritornelli). Se nessuna è
+// abbastanza simile la strofa resta com'è.
+
+// Sillabe italiane (abbastanza precise per sapere su quale sillaba cade un accordo): [{ start, end }]
+const VOWEL = /[aeiouyàèéìíòóùúAEIOUYÀÈÉÌÍÒÓÙÚ]/;
+const STRONG = "aeoàèéòóìíùú";
+export function syllables(text) {
+    const out = [];
+    const re = /[A-Za-zÀ-ÖØ-öø-ÿ'’]+/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+        const w = m[0], base = m.index, lw = w.toLowerCase();
+        const nuclei = [];
+        for (let i = 0; i < w.length;) {
+            if (!VOWEL.test(w[i])) { i++; continue; }
+            let j = i + 1;
+            while (j < w.length && VOWEL.test(w[j])) j++;
+            let s = i;   // due vocali "forti" vicine sono due sillabe (pa-e-se), i/u fanno dittongo (pia-no, quan-do)
+            for (let k = i + 1; k < j; k++) if (STRONG.includes(lw[k - 1]) && STRONG.includes(lw[k])) { nuclei.push([s, k]); s = k; }
+            nuclei.push([s, j]);
+            i = j;
+        }
+        if (!nuclei.length) continue;
+        const starts = [0];
+        for (let n = 1; n < nuclei.length; n++) {
+            const cs = nuclei[n - 1][1], ce = nuclei[n][0], C = lw.slice(cs, ce).replace(/’/g, "'");
+            let cut;
+            if (C.length === 0) cut = ce;                                   // pa-e-se
+            else if (C.length === 1) cut = cs;                              // se-ra
+            else if (C[0] === C[1]) cut = cs + 1;                           // not-te, del-l'a-mo-re
+            else if (C.includes("'")) cut = cs + C.indexOf("'") + 1;
+            else if (C[0] === "s") cut = cs;                                // pa-sta, no-stro
+            else if (C.length === 2 && (("bcdfgptv".includes(C[0]) && "lr".includes(C[1])) || ["ch", "gh", "gn", "gl", "sc", "qu", "gu"].includes(C))) cut = cs;   // a-pri, o-gni
+            else cut = cs + 1;                                              // can-to, den-tro
+            starts.push(cut);
+        }
+        starts.forEach((st, k) => out.push({ start: base + st, end: base + (k + 1 < starts.length ? starts[k + 1] : w.length) }));
+    }
+    return out;
+}
+
+const isNoteOnly = (line) => {
+    const t = line.trim();
+    if (!t) return false;
+    const words = t.replace(/\[([^\[\]]*)\]/g, (w, inner) => classifyBracket(inner).kind === "note" ? " " : w).trim();
+    if (!words) return true;                                                   // solo [Rit.]
+    return !t.includes("[") && t.split(/\s+/).length <= 2 && (RE_LABEL.test(t.split(/\s+/)[0]) || RE_LABEL_COLON.test(t.split(/\s+/)[0]));   // Rit: / Strofa 2:
+};
+const hasChordBracket = (line) => [...line.matchAll(/\[([^\[\]]*)\]/g)].some(m => { const k = classifyBracket(m[1]).kind; return k === "chord" || k === "typo" || k === "multi"; });
+const blockType = (label) => /^(\(?\s*)?(rit|ritornello|coro|chorus|refrain)/i.test(label || "") ? "rit" : /^(\(?\s*)?(strofa|verse)/i.test(label || "") ? "strofa" : null;
+const normWords = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\[[^\[\]]*\]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+// Testo di una riga senza gli accordi (le annotazioni diventano spazi) e dove stavano gli accordi
+function chordsAndText(line) {
+    let text = "", last = 0;
+    const chords = [];
+    for (const m of line.matchAll(/\[([^\[\]]*)\]/g)) {
+        text += line.slice(last, m.index);
+        const k = classifyBracket(m[1]).kind;
+        if (k === "chord" || k === "typo") chords.push({ pos: text.length, name: m[0] });
+        else if (k === "multi") chords.push({ pos: text.length, name: m[0] });
+        else text += " ".repeat(m[0].length);
+        last = m.index + m[0].length;
+    }
+    return { text: text + line.slice(last), chords };
+}
+
+function splitBlocks(lines) {
+    const blocks = [];
+    let cur = null;
+    lines.forEach((l, i) => {
+        if (!l.trim()) { cur = null; return; }
+        if (!cur) { cur = { lines: [], lyric: [], label: null, chordRows: 0 }; blocks.push(cur); }
+        cur.lines.push(i);
+        if (parseBracketChordLine(l) || parseChordLine(l)) { cur.chordRows++; return; }
+        if (isNoteOnly(l)) { if (!cur.label) cur.label = l.trim().replace(/^\[|\]$/g, ""); return; }
+        if (!cur.label) { const m = l.match(/^\s*\[([^\[\]]*)\]/); if (m && classifyBracket(m[1]).kind === "note") cur.label = m[1]; }
+        cur.lyric.push(i);
+    });
+    // anche "Rit:" da solo sulla riga prima della strofa (staccato da una riga vuota) vale come etichetta
+    blocks.forEach((b, n) => {
+        b.type = blockType(b.label);
+        if (!b.type && n > 0 && !blocks[n - 1].lyric.length && blocks[n - 1].label) b.type = blockType(blocks[n - 1].label);
+        b.withChords = b.lyric.filter(i => hasChordBracket(lines[i])).length;
+        b.text = b.lyric.map(i => normWords(chordsAndText(lines[i]).text)).join(" / ");
+        b.syl = b.lyric.map(i => syllables(chordsAndText(lines[i]).text).length);
+    });
+    return blocks.filter(b => b.lyric.length);
+}
+
+// Accordi della riga "src" messi sulle stesse sillabe della riga "dst" (che non ha accordi)
+function copyChordsToLine(src, dst) {
+    const { text: st, chords } = chordsAndText(src);
+    if (!chords.length) return dst;
+    const ss = syllables(st);
+    const masked = dst.replace(/\[[^\[\]]*\]/g, (w) => " ".repeat(w.length));
+    const ds = syllables(masked);
+    if (!ss.length || !ds.length) return dst;
+    const inserts = [];
+    let endGap = 0;
+    chords.forEach(c => {
+        let k = ss.findIndex(x => c.pos < x.end);
+        if (k < 0) {   // dopo l'ultima sillaba: in fondo alla riga
+            endGap = /\s/.test(st.slice(ss[ss.length - 1].end, c.pos)) ? 1 : 0;
+            inserts.push({ at: dst.replace(/\s+$/, "").length, text: (endGap ? " " : "") + c.name, end: true });
+            return;
+        }
+        const kk = ss.length === ds.length ? k : Math.round(k * (ds.length - 1) / Math.max(1, ss.length - 1));
+        inserts.push({ at: ds[Math.min(ds.length - 1, Math.max(0, kk))].start, text: c.name });
+    });
+    let out = dst.replace(/\s+$/, "");
+    inserts.map((x, i) => ({ ...x, i })).sort((a, b) => b.at - a.at || b.i - a.i).forEach(x => { out = out.slice(0, x.at) + x.text + out.slice(x.at); });
+    return out;
+}
+
+function fillVersesFromAbove(lines, changes) {
+    const blocks = splitBlocks(lines);
+    const sources = blocks.filter(b => b.withChords * 2 >= b.lyric.length && b.withChords > 0);
+    // un blocco con accordi le cui parole si ripetono più avanti è un ritornello
+    sources.forEach(s => { s.chorus = s.type === "rit" || blocks.some(o => o !== s && o.text === s.text); });
+    blocks.forEach((t, n) => {
+        if (t.withChords || t.chordRows) return;
+        const above = sources.filter(s => blocks.indexOf(s) < n && s.lyric.length === t.lyric.length);
+        if (!above.length) return;
+        let best = above.find(s => s.text === t.text);                 // stesse parole (ritornello ripetuto)
+        if (!best) {
+            // strofa da strofa, ritornello da ritornello (etichette diverse: mai)
+            let pool = above.filter(s => !(t.type && s.type && t.type !== s.type));
+            const pref = pool.filter(s => t.type === "rit" ? s.chorus : !s.chorus);
+            if (pref.length || t.type !== "rit") pool = pref;
+            const scored = pool.map(s => {
+                    const tot = s.syl.reduce((a, b) => a + b, 0) || 1;
+                    const diff = s.syl.reduce((a, v, i) => a + Math.abs(v - t.syl[i]), 0);
+                    const ok = s.syl.every((v, i) => Math.abs(v - t.syl[i]) <= Math.max(3, Math.ceil(v * 0.4)));
+                    return { s, d: diff / tot, ok };
+                }).filter(x => x.ok && x.d <= 0.35).sort((a, b) => a.d - b.d || blocks.indexOf(a.s) - blocks.indexOf(b.s));
+            best = scored.length ? scored[0].s : null;
+        }
+        if (!best) return;
+        t.lyric.forEach((li, k) => { lines[li] = copyChordsToLine(lines[best.lyric[k]], lines[li]); });
+        const firstWords = (b) => chordsAndText(lines[b.lyric[0]]).text.trim().split(/\s+/).slice(0, 3).join(" ") + "…";
+        changes.filled.push({ to: firstWords(t), from: firstWords(best) });
+    });
+    return lines;
+}
+
 // Correzione completa del testo. opts.typos = correggi anche i refusi negli accordi.
 // Restituisce il testo nuovo, cosa è stato cambiato e le righe da controllare a mano.
 export function fixLyrics(input, opts = {}) {
     const changes = { chordLines: 0, bracketLines: 0, duplicateLines: 0, spacing: 0, chordsTidied: 0,
-                      encoding: 0, splitBrackets: 0, dupChords: 0, merged: 0, typos: [], review: [] };
+                      encoding: 0, splitBrackets: 0, dupChords: 0, merged: 0, filled: [], typos: [], review: [] };
     let text = (input || "").replace(/\r\n?/g, "\n");
 
     let lines = text.split("\n").map(l => {
@@ -462,6 +615,9 @@ export function fixLyrics(input, opts = {}) {
     // 2. Parentesi dentro le righe di testo
     lines = lines.map(l => l.includes("[") ? fixBracketsInLine(l, opts, changes) : l);
 
+    // 2b. Strofe senza accordi: accordi copiati dalla strofa sopra con la stessa musica (bacchetta dell'editor)
+    if (opts.fill) lines = fillVersesFromAbove(lines, changes);
+
     // 3. Righe in cui ogni accordo compare esattamente due volte, fitte fitte (tipico di una riga di accordi
     //    unita due volte allo stesso testo): da controllare a mano
     lines.forEach((l, i) => {
@@ -485,6 +641,7 @@ export function fixLyrics(input, opts = {}) {
 const plural = (n, uno, tanti) => `${n} ${n === 1 ? uno : tanti}`;
 export function describeChanges(c) {
     const parts = [];
+    if (c.filled && c.filled.length) parts.push(`accordi copiati ${c.filled.length === 1 ? "nella strofa" : "nelle strofe"} ${c.filled.map(f => `«${f.to}» (da «${f.from}»)`).join(", ")}`);
     if (c.merged) parts.push(plural(c.merged, "riga di accordi messa dentro il testo", "righe di accordi messe dentro il testo"));
     if (c.chordLines) parts.push(plural(c.chordLines, "riga di accordi messa tra [ ] (ora si traspone)", "righe di accordi messe tra [ ] (ora si traspongono)"));
     if (c.spacing) parts.push(plural(c.spacing, "riga di accordi distanziata", "righe di accordi distanziate"));
@@ -776,5 +933,5 @@ export function scanSongs(songs) {
 export function isAutoFixable(song, opts = {}) {
     const { changes: c } = fixLyrics(song.lyrics || "", opts);
     return c.chordLines + c.bracketLines + c.duplicateLines + c.spacing + c.chordsTidied + c.encoding
-         + c.splitBrackets + c.dupChords + c.merged + c.typos.length > 0;
+         + c.splitBrackets + c.dupChords + c.merged + (c.filled ? c.filled.length : 0) + c.typos.length > 0;
 }
