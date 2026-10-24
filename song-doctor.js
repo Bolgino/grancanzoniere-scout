@@ -292,6 +292,83 @@ function formatStandalone(parsed, opts, changes) {
     return out.replace(/\s+$/, "");
 }
 
+// --- RIGA DI ACCORDI SOPRA IL TESTO -> ACCORDI DENTRO IL TESTO (bacchetta dell'editor) -----------
+// Nelle canzoni incollate da internet gli accordi sono su una riga a sé, sopra la sillaba su cui si cambia:
+//     Do          Sol
+//     Quando la sera scende        ->   [Do]Quando la se[Sol]ra scende
+// Si unisce solo una riga di accordi che ha SUBITO SOTTO una riga di testo senza accordi.
+// Restano righe a sé (parti strumentali): una riga seguita da una riga vuota, da un'altra riga di accordi
+// o dalla fine; una riga con etichette o battute (Intro:, |, x2); una riga con gli accordi quasi tutti
+// oltre la fine del testo.
+
+// Colonne di una riga di testo: per ogni colonna, dove inserire un accordo nella stringa.
+//   raw = true  -> colonne come nell'editor (riga di accordi senza parentesi scritta o incollata sopra il testo)
+//   raw = false -> colonne come nell'anteprima (riga di [accordi]: le parentesi hanno larghezza zero,
+//                  ** e __ non si vedono, un'annotazione [Rit.] si vede come "Rit.")
+// Un accordo non va mai dentro un'annotazione o in mezzo a ** e __: lo metto subito dopo.
+function columnSlots(line, raw) {
+    const slots = [], chars = [];
+    let i = 0;
+    while (i < line.length) {
+        if (line.startsWith("**", i) || line.startsWith("__", i)) {
+            if (raw) { slots.push(i + 2, i + 2); chars.push(line[i], line[i]); }
+            i += 2; continue;
+        }
+        if (line[i] === "[") {
+            const end = line.indexOf("]", i);
+            const after = end > i ? end + 1 : line.length;
+            const shown = raw ? line.slice(i, after) : line.slice(i + 1, Math.max(i + 1, end)).trim();
+            for (let k = 0; k < shown.length; k++) { slots.push(!raw && k === 0 ? i : after); chars.push(shown[k]); }
+            i = after;
+            continue;
+        }
+        slots.push(i); chars.push(line[i]); i++;
+    }
+    return { slots, chars, width: slots.length };
+}
+
+function canMergeInto(parsed, next) {
+    if (!parsed || parsed.hasExtras || next === undefined || !next.trim()) return false;
+    if (parseChordLine(next) || parseBracketChordLine(next)) return false;
+    // la riga sotto non deve avere già accordi (solo annotazioni tipo [Rit.])
+    for (const m of next.matchAll(/\[([^\[\]]*)\]/g)) { const k = classifyBracket(m[1]).kind; if (k !== "note" && k !== "empty") return false; }
+    const words = next.trim().split(/\s+/);
+    if (words.length === 1 && (RE_LABEL.test(words[0]) || RE_LABEL_COLON.test(words[0]))) return false;   // "Rit:" non è testo
+    const chords = parsed.tokens.filter(t => t.kind === "chord");
+    const width = columnSlots(next, !parsed.bracket).width;
+    const inside = chords.filter(t => t.col <= width + 1).length;
+    return inside * 2 >= chords.length;
+}
+
+function mergeChordRow(parsed, next, opts, changes) {
+    const { slots, chars, width } = columnSlots(next, !parsed.bracket);
+    const inserts = [];   // { at: indice nella stringa, text }
+    let tail = "", tailCol = width;
+    const chords = parsed.tokens.filter(t => t.kind === "chord");
+    chords.forEach((t, k) => {
+        const name = `[${chordName(t.text, opts, changes)}]`;
+        if (t.col >= width) {   // dopo la fine del testo: alla stessa colonna, con gli spazi che servono
+            tail += " ".repeat(Math.max(0, t.col - tailCol)) + name;
+            tailCol = Math.max(tailCol, t.col);
+            return;
+        }
+        let col = t.col;
+        // accordo sopra uno spazio: va all'inizio della parola dopo (se non c'è già il prossimo accordo)
+        if (/\s/.test(chars[col])) {
+            let c = col;
+            while (c < width && /\s/.test(chars[c])) c++;
+            const nextCol = k + 1 < chords.length ? chords[k + 1].col : Infinity;
+            if (c < width && c < nextCol) col = c;
+        }
+        inserts.push({ at: slots[col], text: name });
+    });
+    let out = next;
+    // da destra a sinistra (a parità di posto, nell'ordine in cui erano scritti)
+    inserts.map((x, i) => ({ ...x, i })).sort((a, b) => b.at - a.at || b.i - a.i)
+        .forEach(x => { out = out.slice(0, x.at) + x.text + out.slice(x.at); });
+    return out + tail;
+}
+
 // Accordi (tra parentesi) presenti in una riga di testo, in notazione confrontabile
 function lineChordKeys(line) {
     const keys = [];
@@ -349,7 +426,7 @@ function fixBracketsInLine(line, opts, changes) {
 // Restituisce il testo nuovo, cosa è stato cambiato e le righe da controllare a mano.
 export function fixLyrics(input, opts = {}) {
     const changes = { chordLines: 0, bracketLines: 0, duplicateLines: 0, spacing: 0, chordsTidied: 0,
-                      encoding: 0, splitBrackets: 0, dupChords: 0, typos: [], review: [] };
+                      encoding: 0, splitBrackets: 0, dupChords: 0, merged: 0, typos: [], review: [] };
     let text = (input || "").replace(/\r\n?/g, "\n");
 
     let lines = text.split("\n").map(l => {
@@ -358,18 +435,29 @@ export function fixLyrics(input, opts = {}) {
         return expandTabs(fixed.replace(/\u00A0/g, " "));
     });
 
-    // 1. Righe di soli accordi (intro, parti strumentali, giri): restano righe a sé.
-    //    Senza parentesi vengono messe tra [ ] alle stesse colonne (così si traspongono);
-    //    se due accordi si toccano vengono distanziati. Non vengono mai unite al testo né tolte.
-    lines = lines.map(line => {
+    // 1. Righe di soli accordi.
+    //    Con opts.merge (bacchetta dell'editor) una riga di accordi che ha subito sotto il testo viene messa
+    //    DENTRO il testo: ogni accordo tra [ ] sulla sillaba che aveva sotto.
+    //    Le altre (intro, parti strumentali, giri) restano righe a sé: senza parentesi vengono messe tra [ ]
+    //    alle stesse colonne (così si traspongono) e se due accordi si toccano vengono distanziati.
+    const out = [];
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
         const parsed = parseChordLine(line) || parseBracketChordLine(line);
-        if (!parsed) return line;
+        if (!parsed) { out.push(line); continue; }
+        if (opts.merge && canMergeInto(parsed, lines[i + 1])) {
+            out.push(mergeChordRow(parsed, lines[i + 1], opts, changes));
+            changes.merged++;
+            i++;            // la riga di testo è già stata usata
+            continue;
+        }
         const formatted = formatStandalone(parsed, opts, changes);
         if (formatted !== line.replace(/\s+$/, "")) {
             if (parsed.bracket) changes.spacing++; else changes.chordLines++;
         }
-        return formatted;
-    });
+        out.push(formatted);
+    }
+    lines = out;
 
     // 2. Parentesi dentro le righe di testo
     lines = lines.map(l => l.includes("[") ? fixBracketsInLine(l, opts, changes) : l);
@@ -397,6 +485,7 @@ export function fixLyrics(input, opts = {}) {
 const plural = (n, uno, tanti) => `${n} ${n === 1 ? uno : tanti}`;
 export function describeChanges(c) {
     const parts = [];
+    if (c.merged) parts.push(plural(c.merged, "riga di accordi messa dentro il testo", "righe di accordi messe dentro il testo"));
     if (c.chordLines) parts.push(plural(c.chordLines, "riga di accordi messa tra [ ] (ora si traspone)", "righe di accordi messe tra [ ] (ora si traspongono)"));
     if (c.spacing) parts.push(plural(c.spacing, "riga di accordi distanziata", "righe di accordi distanziate"));
     if (c.dupChords) parts.push(plural(c.dupChords, "accordo ripetuto tolto", "accordi ripetuti tolti"));
@@ -592,6 +681,7 @@ export function suspiciousChords(lyrics, okChords = []) {
 
 export const ISSUES = {
     "typo":          { label: "Accordi con refusi", hint: "Quasi accordi con una correzione sicura: [Miaj7] → Mimaj7, [Fasos2] → Fasus2, [H7] → Si7. Correggibile in automatico.", fixable: true, opts: { typos: true } },
+    "chords-above":  { label: "Accordi sopra il testo", hint: "Righe di accordi scritte sopra il testo (tipico delle canzoni incollate da internet): la bacchetta mette ogni accordo tra [ ] dentro la riga, sulla sillaba che aveva sotto. Le righe di soli accordi senza testo subito sotto (intro, parti strumentali) restano dove sono.", fixable: true, opts: { merge: true } },
     "unknown-chord": { label: "Accordi non riconosciuti", hint: "Contenuto tra [ ] che non è né un accordo né un'annotazione. Da correggere a mano.", fixable: false },
     "brackets":      { label: "Parentesi [ ] non chiuse", hint: "Una [ senza ] (o viceversa) sulla stessa riga. Da correggere a mano.", fixable: false },
     "encoding":      { label: "Caratteri strani (Ã¨, â€™…)", hint: "Accenti rovinati da un import. Correggibile in automatico.", fixable: true },
@@ -622,7 +712,7 @@ export function diagnoseSong(song) {
     if (lyrics.trim().length <= 5) { issues.push({ code: "empty", detail: "" }); return issues; }
 
     const lines = lyrics.split("\n");
-    const { changes } = fixLyrics(lyrics, { typos: false });
+    const { changes } = fixLyrics(lyrics, { typos: false, merge: true });
 
     // nome -> righe in cui compare (per dire dove andare a correggere)
     const unknown = new Map(), typos = new Map(), badBrackets = [];
@@ -639,6 +729,7 @@ export function diagnoseSong(song) {
     const where = (rows) => ` (riga ${rows.slice(0, 4).join(", ")}${rows.length > 4 ? "…" : ""})`;
     const list = (map, max) => [...map.entries()].slice(0, max).map(([k, rows]) => k + where(rows)).join("  ");
     if (typos.size) issues.push({ code: "typo", detail: list(typos, 4) });
+    if (changes.merged) issues.push({ code: "chords-above", detail: changes.merged === 1 ? "1 riga" : `${changes.merged} righe` });
     if (unknown.size) issues.push({ code: "unknown-chord", detail: list(unknown, 6) });
     if (badBrackets.length) issues.push({ code: "brackets", detail: "riga " + badBrackets.slice(0, 6).join(", ") });
     if (hasBrokenEncoding(lyrics)) issues.push({ code: "encoding", detail: "" });
@@ -685,5 +776,5 @@ export function scanSongs(songs) {
 export function isAutoFixable(song, opts = {}) {
     const { changes: c } = fixLyrics(song.lyrics || "", opts);
     return c.chordLines + c.bracketLines + c.duplicateLines + c.spacing + c.chordsTidied + c.encoding
-         + c.splitBrackets + c.dupChords + c.typos.length > 0;
+         + c.splitBrackets + c.dupChords + c.merged + c.typos.length > 0;
 }
