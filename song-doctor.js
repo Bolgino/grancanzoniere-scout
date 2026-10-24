@@ -470,6 +470,21 @@ export function syllables(text) {
     return out;
 }
 
+// Sillabe come si cantano: tra due parole una vocale finale e una iniziale si uniscono in una sillaba sola
+// (sinalefe: "fuoco_e", "terrore_e_il" = un solo colpo). L'accordo va all'inizio del gruppo.
+export function sungSyllables(text) {
+    const syl = syllables(text), out = [];
+    const isVowel = (ch) => !!ch && VOWEL.test(ch);
+    syl.forEach(x => {
+        const prev = out[out.length - 1];
+        const gap = prev ? text.slice(prev.end, x.start) : "";
+        const first = text[x.start] === "h" || text[x.start] === "H" ? text[x.start + 1] : text[x.start];
+        if (prev && gap.length && !/[\n]/.test(gap) && /^[\s,;:.!?«»"“”…-]*$/.test(gap) && /\s/.test(gap) && isVowel(text[prev.end - 1]) && isVowel(first)) prev.end = x.end;
+        else out.push({ ...x });
+    });
+    return out;
+}
+
 const isNoteOnly = (line) => {
     const t = line.trim();
     if (!t) return false;
@@ -501,10 +516,13 @@ function splitBlocks(lines) {
     let cur = null;
     lines.forEach((l, i) => {
         if (!l.trim()) { cur = null; return; }
+        const noteOnly = isNoteOnly(l);
+        // "RIT." in mezzo alle strofe (anche senza righe vuote) separa una strofa dall'altra
+        if (noteOnly && cur && cur.lyric.length) cur = null;
         if (!cur) { cur = { lines: [], lyric: [], label: null, chordRows: 0 }; blocks.push(cur); }
         cur.lines.push(i);
         if (parseBracketChordLine(l) || parseChordLine(l)) { cur.chordRows++; return; }
-        if (isNoteOnly(l)) { if (!cur.label) cur.label = l.trim().replace(/^\[|\]$/g, ""); return; }
+        if (noteOnly) { if (!cur.label) cur.label = l.trim().replace(/^\[|\]$/g, ""); return; }
         if (!cur.label) { const m = l.match(/^\s*\[([^\[\]]*)\]/); if (m && classifyBracket(m[1]).kind === "note") cur.label = m[1]; }
         cur.lyric.push(i);
     });
@@ -514,7 +532,7 @@ function splitBlocks(lines) {
         if (!b.type && n > 0 && !blocks[n - 1].lyric.length && blocks[n - 1].label) b.type = blockType(blocks[n - 1].label);
         b.withChords = b.lyric.filter(i => hasChordBracket(lines[i])).length;
         b.text = b.lyric.map(i => normWords(chordsAndText(lines[i]).text)).join(" / ");
-        b.syl = b.lyric.map(i => syllables(chordsAndText(lines[i]).text).length);
+        b.syl = b.lyric.map(i => sungSyllables(chordsAndText(lines[i]).text).length);
     });
     return blocks.filter(b => b.lyric.length);
 }
@@ -523,12 +541,12 @@ function splitBlocks(lines) {
 function copyChordsToLine(src, dst) {
     const { text: st, chords } = chordsAndText(src);
     if (!chords.length) return dst;
-    const ss = syllables(st);
+    const ss = sungSyllables(st);
     const masked = dst.replace(/\[[^\[\]]*\]/g, (w) => " ".repeat(w.length));
-    const ds = syllables(masked);
+    const ds = sungSyllables(masked);
     if (!ss.length || !ds.length) return dst;
     const inserts = [];
-    let endGap = 0;
+    let endGap = 0, lastK = 0;
     chords.forEach(c => {
         let k = ss.findIndex(x => c.pos < x.end);
         if (k < 0) {   // dopo l'ultima sillaba: in fondo alla riga
@@ -536,8 +554,10 @@ function copyChordsToLine(src, dst) {
             inserts.push({ at: dst.replace(/\s+$/, "").length, text: (endGap ? " " : "") + c.name, end: true });
             return;
         }
-        const kk = ss.length === ds.length ? k : Math.round(k * (ds.length - 1) / Math.max(1, ss.length - 1));
-        inserts.push({ at: ds[Math.min(ds.length - 1, Math.max(0, kk))].start, text: c.name });
+        let kk = ss.length === ds.length || k <= ss.length - 1 - k ? k : ds.length - (ss.length - k);
+        kk = Math.min(ds.length - 1, Math.max(0, kk, lastK));   // mai prima dell'accordo precedente
+        lastK = kk;
+        inserts.push({ at: ds[kk].start, text: c.name });
     });
     let out = dst.replace(/\s+$/, "");
     inserts.map((x, i) => ({ ...x, i })).sort((a, b) => b.at - a.at || b.i - a.i).forEach(x => { out = out.slice(0, x.at) + x.text + out.slice(x.at); });
@@ -549,28 +569,47 @@ function fillVersesFromAbove(lines, changes) {
     const sources = blocks.filter(b => b.withChords * 2 >= b.lyric.length && b.withChords > 0);
     // un blocco con accordi le cui parole si ripetono più avanti è un ritornello
     sources.forEach(s => { s.chorus = s.type === "rit" || blocks.some(o => o !== s && o.text === s.text); });
+    const firstWords = (i) => chordsAndText(lines[i]).text.trim().split(/\s+/).slice(0, 3).join(" ") + "…";
+
+    // Strofa (righe "rows", con testo, sillabe ed etichetta) -> strofa sopra da cui copiare
+    const findSource = (rows, type, text, before) => {
+        const syl = rows.map(i => sungSyllables(chordsAndText(lines[i]).text).length);
+        const above = sources.filter(s => blocks.indexOf(s) < before && s.lyric.length === rows.length);
+        if (!above.length) return null;
+        const same = above.find(s => s.text === text);                 // stesse parole (ritornello ripetuto)
+        if (same) return same;
+        const score = (pool) => pool.map(s => {
+            const tot = s.syl.reduce((a, b) => a + b, 0) || 1;
+            const diff = s.syl.reduce((a, v, i) => a + Math.abs(v - syl[i]), 0);
+            const ok = s.syl.every((v, i) => Math.abs(v - syl[i]) <= Math.max(3, Math.ceil(v * 0.4)));
+            return { s, d: diff / tot, ok };
+        }).filter(x => x.ok && x.d <= 0.35).sort((a, b) => a.d - b.d || blocks.indexOf(a.s) - blocks.indexOf(b.s));
+        // un ritornello prende da un ritornello; se non ce n'è uno simile (es. "RIT." che vuol dire solo
+        // "qui si canta il ritornello" e sotto c'è la strofa dopo) prova con le strofe
+        const tries = type === "rit" ? [above.filter(s => s.chorus), above.filter(s => !s.chorus)] : [above.filter(s => !s.chorus && !(type && s.type && type !== s.type))];
+        for (const pool of tries) { const r = score(pool); if (r.length) return r[0].s; }
+        return null;
+    };
+    const copy = (rows, src) => {
+        rows.forEach((li, k) => { lines[li] = copyChordsToLine(lines[src.lyric[k]], lines[li]); });
+        changes.filled.push({ to: firstWords(rows[0]), from: firstWords(src.lyric[0]) });
+    };
+
     blocks.forEach((t, n) => {
         if (t.withChords || t.chordRows) return;
-        const above = sources.filter(s => blocks.indexOf(s) < n && s.lyric.length === t.lyric.length);
-        if (!above.length) return;
-        let best = above.find(s => s.text === t.text);                 // stesse parole (ritornello ripetuto)
-        if (!best) {
-            // strofa da strofa, ritornello da ritornello (etichette diverse: mai)
-            let pool = above.filter(s => !(t.type && s.type && t.type !== s.type));
-            const pref = pool.filter(s => t.type === "rit" ? s.chorus : !s.chorus);
-            if (pref.length || t.type !== "rit") pool = pref;
-            const scored = pool.map(s => {
-                    const tot = s.syl.reduce((a, b) => a + b, 0) || 1;
-                    const diff = s.syl.reduce((a, v, i) => a + Math.abs(v - t.syl[i]), 0);
-                    const ok = s.syl.every((v, i) => Math.abs(v - t.syl[i]) <= Math.max(3, Math.ceil(v * 0.4)));
-                    return { s, d: diff / tot, ok };
-                }).filter(x => x.ok && x.d <= 0.35).sort((a, b) => a.d - b.d || blocks.indexOf(a.s) - blocks.indexOf(b.s));
-            best = scored.length ? scored[0].s : null;
+        const whole = findSource(t.lyric, t.type, t.text, n);
+        if (whole) return copy(t.lyric, whole);
+        // tante strofe scritte di seguito senza righe vuote: le divido in pezzi lunghi come le strofe sopra
+        const sizes = [...new Set(sources.filter(s => blocks.indexOf(s) < n).map(s => s.lyric.length))]
+            .filter(l => l < t.lyric.length && t.lyric.length % l === 0).sort((a, b) => b - a);
+        for (const l of sizes) {
+            const parts = [];
+            for (let i = 0; i < t.lyric.length; i += l) {
+                const rows = t.lyric.slice(i, i + l);
+                parts.push({ rows, src: findSource(rows, i === 0 ? t.type : null, rows.map(r => normWords(chordsAndText(lines[r]).text)).join(" / "), n) });
+            }
+            if (parts.every(p => p.src)) { parts.forEach(p => copy(p.rows, p.src)); return; }
         }
-        if (!best) return;
-        t.lyric.forEach((li, k) => { lines[li] = copyChordsToLine(lines[best.lyric[k]], lines[li]); });
-        const firstWords = (b) => chordsAndText(lines[b.lyric[0]]).text.trim().split(/\s+/).slice(0, 3).join(" ") + "…";
-        changes.filled.push({ to: firstWords(t), from: firstWords(best) });
     });
     return lines;
 }
