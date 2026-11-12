@@ -478,6 +478,20 @@
 
                     <div class="card bg-dark border-secondary p-3 flex-grow-1">
                         <h6 class="text-muted mb-2">Testo e Accordi</h6>
+                        <div class="import-song mb-2">
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold" onclick="document.getElementById('propImportCamera').click()">
+                                    <i class="bi bi-camera-fill me-1"></i>Scatta foto
+                                </button>
+                                <button type="button" class="btn btn-outline-info btn-sm flex-fill fw-bold" onclick="document.getElementById('propImportFile').click()">
+                                    <i class="bi bi-file-earmark-arrow-up me-1"></i>Foto o PDF
+                                </button>
+                            </div>
+                            <input type="file" id="propImportCamera" class="d-none" accept="image/*" capture="environment" onchange="window.importSongFile(this)">
+                            <input type="file" id="propImportFile" class="d-none" accept="image/*,application/pdf,.pdf" multiple onchange="window.importSongFile(this)">
+                            <div id="propImportStatus" class="import-status d-none" aria-live="polite"></div>
+                            <small class="text-muted d-block mt-1" style="font-size: 0.75rem;">Foto o PDF di un foglio con gli accordi sopra il testo: li metto io tra [ ] sulla sillaba giusta.</small>
+                        </div>
                         <small class="text-muted d-block mb-2" style="font-size: 0.8rem;">Usa il formato [Do] per gli accordi.</small>
                         <textarea id="propLyrics" class="form-control font-monospace border-0" 
                                   style="flex-grow: 1; min-height: 300px; resize: none; background: #222; color: #fff;" 
@@ -500,58 +514,6 @@
             </div>
         </div>
 
-        <div id="view-propose" class="view-screen">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <button class="btn btn-outline-secondary btn-sm" onclick="window.goHome()">
-                    <i class="bi bi-arrow-left"></i> Home
-                </button>
-                <h4 class="fw-bold m-0 text-white">Nuova Proposta</h4>
-                <button class="btn btn-primary btn-sm fw-bold" onclick="window.handleSongSubmission()">
-                    Invia <i class="bi bi-send-fill ms-1"></i>
-                </button>
-            </div>
-
-            <div class="row g-3 h-100">
-                <div class="col-lg-5 col-md-6 d-flex flex-column gap-2" style="max-height: 80vh; overflow-y: auto;">
-                    <div class="card bg-dark border-secondary p-3">
-                        <h6 class="text-muted mb-3">Dati Canzone</h6>
-                        <input type="text" id="propTitle" class="form-control mb-2" placeholder="Titolo (Obbligatorio)">
-                        <input type="text" id="propAuthor" class="form-control mb-2" placeholder="Autore">
-                        <select id="propCategory" class="form-select mb-2"></select>
-                        <div class="row g-2">
-                            <div class="col-6">
-                                <input type="number" id="propYear" class="form-control" placeholder="Anno">
-                            </div>
-                            <div class="col-6">
-                                <input type="text" id="propUser" class="form-control" placeholder="Il tuo nome *">
-                            </div>
-                        </div>
-                        <input type="text" id="propDesc" class="form-control mt-2" placeholder="Nota (es. Lento)">
-                    </div>
-
-                    <div class="card bg-dark border-secondary p-3 flex-grow-1">
-                        <h6 class="text-muted mb-2">Testo e Accordi</h6>
-                        <small class="text-muted d-block mb-2" style="font-size: 0.8rem;">Usa il formato [Do] per gli accordi.</small>
-                        <textarea id="propLyrics" class="form-control font-monospace border-0" 
-                                  style="flex-grow: 1; min-height: 300px; resize: none; background: #222; color: #fff;" 
-                                  placeholder="Esempio formato:&#10;[Do] Respiri piano per non far rumore&#10;[Sol] Ti addormenti di sera&#10;[Lam] Ti risvegli col sole&#10;&#10;Inserisci gli accordi tra parentesi quadre prima della sillaba." 
-                                  oninput="window.renderProposePreview()"></textarea>
-                    </div>
-                </div>
-
-                <div class="col-lg-7 col-md-6">
-                    <div class="card bg-dark border-secondary h-100">
-                        <div class="card-header border-bottom border-secondary d-flex justify-content-between">
-                            <span class="text-white">Anteprima</span>
-                            <span class="badge bg-secondary">Come apparirà</span>
-                        </div>
-                        <div class="card-body p-0" style="background: #121212; overflow: hidden;">
-                            <div id="propPreviewArea" class="preview-area h-100 overflow-auto p-3" style="font-size: 16px;"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
         <div id="view-list" class="view-screen">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <button class="btn btn-outline-secondary btn-sm" onclick="window.goHome()"><i class="bi bi-arrow-left"></i> Sezioni</button>
@@ -1127,7 +1089,7 @@
         <button onclick="window.toggleAutoScroll()" aria-label="Ferma lo scorrimento" title="Ferma"><i class="bi bi-x-lg"></i></button>
     </div>
 
-    <script type="module" src="script.js?v=14"></script>
+    <script type="module" src="script.js?v=15"></script>
     <script>
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./service-worker.js')

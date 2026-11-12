@@ -991,7 +991,14 @@ window.handleSongSubmission = async () => {
             mAddSong.hide();
             window.openEditor(r.id); 
         } else { 
-            await addDoc(collection(db,"proposals"), {...songData, proposer: p}); 
+            if (propImport.from) {
+                // "letta da foto/PDF" è solo un'informazione per l'admin: se il database non accetta il campo, si invia senza
+                try { await addDoc(collection(db,"proposals"), {...songData, proposer: p, importedFrom: propImport.from}); }
+                catch (err) { if (err && err.code === "permission-denied") await addDoc(collection(db,"proposals"), {...songData, proposer: p}); else throw err; }
+                propImport = { from: null, undo: null, busy: false };
+            } else {
+                await addDoc(collection(db,"proposals"), {...songData, proposer: p}); 
+            }
             // 2. INVIA LA MAIL TRAMITE GOOGLE SCRIPT
             fetch("https://script.google.com/macros/s/AKfycbwW9pUYWHmbztTCdmlIVQB0IUJUNP4NZffp16ebjErdnNQklubxe94nbRPM8jeNV7Np/exec", {
                 method: "POST",
@@ -1703,6 +1710,8 @@ window.openProposalsView = () => {
             let actions = "";
             let authorText = p.author || 'Sconosciuto';
             
+            const importBadge = p.importedFrom
+                ? `<span class="badge bg-secondary ms-1" title="Testo e accordi letti in automatico: controllali"><i class="bi ${p.importedFrom === "foto" ? "bi-camera" : "bi-file-earmark-pdf"} me-1"></i>da ${p.importedFrom === "foto" ? "foto" : "PDF"}</span>` : "";
             if (p._isSongReview) {
                 // Layout per canzoni approvate dagli Admin (visto solo dal Superadmin)
                 badge = `<span class="badge bg-info text-dark ms-2">Da confermare (Admin)</span>`;
@@ -1730,7 +1739,7 @@ window.openProposalsView = () => {
             <div class="card mb-3 shadow-sm border-secondary" style="background: #222;">
                 <div class="card-body d-flex justify-content-between align-items-center">
                     <div class="overflow-hidden">
-                        <h5 class="fw-bold mb-1 text-white">${escapeHtml(p.title)} ${badge}</h5>${songTagsHtml(p)}
+                        <h5 class="fw-bold mb-1 text-white">${escapeHtml(p.title)} ${badge}${importBadge}</h5>${songTagsHtml(p)}
                         <small class="text-muted d-block text-truncate">
                             ${escapeHtml(authorText)} &bull; ${escapeHtml(p.category)}
                         </small>
@@ -2886,6 +2895,83 @@ window.createNewSetlistPrompt = () => {
 
 // --- NUOVE FUNZIONI PER LA TAB PROPONI ---
 
+// Proposta da foto o PDF: il file viene letto sul telefono (importer.js, caricato solo quando serve).
+// Gli accordi scritti sopra il testo finiscono tra [ ] sulla sillaba giusta, poi la stessa sistemazione
+// della bacchetta. La proposta arriva all'admin come sempre, segnata "da foto" / "da PDF".
+let propImport = { from: null, undo: null, busy: false };
+function setImportStatus(kind, html = "", progress = null) {
+    const box = document.getElementById("propImportStatus");
+    if (!box) return;
+    if (!kind) { box.className = "import-status d-none"; box.innerHTML = ""; return; }
+    box.className = `import-status import-${kind}`;
+    const icon = kind === "busy" ? '<span class="spinner-border spinner-border-sm flex-shrink-0"></span>'
+        : `<i class="bi ${kind === "ok" ? "bi-check-circle-fill" : "bi-exclamation-triangle-fill"} flex-shrink-0"></i>`;
+    const bar = kind !== "busy" ? "" : progress == null
+        ? '<div class="progress import-progress"><div class="progress-bar progress-bar-striped progress-bar-animated" style="width:100%"></div></div>'
+        : `<div class="progress import-progress"><div class="progress-bar" style="width:${Math.round(progress * 100)}%"></div></div>`;
+    box.innerHTML = `<div class="import-row">${icon}<div class="import-msg">${html}</div></div>${bar}`;
+}
+window.importSongFile = async (input) => {
+    const files = [...(input.files || [])];
+    input.value = "";   // così si può scegliere di nuovo lo stesso file
+    if (!files.length || propImport.busy) return;
+    const usable = files.filter(f => /^image\//.test(f.type) || f.type === "application/pdf" || /\.(pdf|jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(f.name || ""));
+    if (!usable.length) return showToast("Scegli una foto o un PDF", "warning");
+    if (usable.some(f => f.size > 30 * 1024 * 1024)) return showToast("File troppo grande (massimo 30 MB)", "warning");
+
+    const ta = document.getElementById("propLyrics");
+    const titleEl = document.getElementById("propTitle");
+    const before = { text: ta.value, title: titleEl.value };
+    let append = false;
+    if (before.text.trim()) {
+        // chiudere la finestra = aggiungere in fondo (non si perde niente)
+        append = !(await appConfirm("Nel testo c'è già qualcosa. Lo sostituisco con quello letto dal file o lo aggiungo in fondo (per esempio la seconda pagina)?",
+            { title: "Testo già scritto", okText: "Sostituisci", cancelText: "Aggiungi in fondo", icon: "bi-file-earmark-text" }));
+    }
+    propImport.busy = true;
+    setImportStatus("busy", "Preparo…");
+    try {
+        const { importSongFiles } = await import("./importer.js?v=1");
+        const res = await importSongFiles(usable, (msg, p) => setImportStatus("busy", escapeHtml(msg), p));
+        if (!res.text.trim() || (res.lines < 2 && !res.chords)) {
+            setImportStatus("err", "Non ho trovato il testo di una canzone. Con una foto: foglio dritto, ben illuminato e a fuoco, inquadrato da vicino (una colonna alla volta).");
+            return;
+        }
+        const fixed = fixLyrics(res.text, { typos: true, merge: true, fill: true });
+        // in fondo a un testo che ha già un altro titolo: il titolo letto resta come riga, così non si perde
+        const sameTitle = (a, b) => robustNormalize(a || "") === robustNormalize(b || "");
+        const head = append && res.title && !sameTitle(res.title, titleEl.value) ? res.title + "\n\n" : "";
+        ta.value = append ? before.text.replace(/\s+$/, "") + "\n\n" + head + fixed.text : fixed.text;
+        // titolo: se è vuoto, o se l'aveva messo la lettura precedente e il testo viene sostituito
+        const autoTitle = !titleEl.value.trim() || (!append && titleEl.value === propImport.autoTitle);
+        if (res.title && autoTitle) { titleEl.value = res.title; propImport.autoTitle = res.title; }
+        propImport.from = append && propImport.from && propImport.from !== res.method ? propImport.from : res.method;
+        propImport.undo = before;
+        window.renderProposePreview();
+        const what = usable.length > 1 ? "dai file" : res.method === "pdf" ? "dal PDF" : res.method === "scansione" ? "dal PDF (scansione)" : "dalla foto";
+        const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+        let msg = `Letto ${what}: ${n(res.lines, "riga", "righe")}, ${n(res.chords, "accordo", "accordi")}. <b>Controlla parole e accordi nell'anteprima</b> prima di inviare.`;
+        if (!res.chords) msg += " Non ho trovato accordi: se ci sono, devono essere scritti sopra il testo.";
+        if (fixed.changes.filled.length) msg += " Accordi copiati anche nelle strofe che non li avevano.";
+        if (res.truncated) msg += " Ho letto solo le prime 6 pagine.";
+        msg += ' <button type="button" class="btn btn-link btn-sm p-0 align-baseline import-undo" onclick="window.undoSongImport()">Annulla</button>';
+        setImportStatus("ok", msg);
+    } catch (e) {
+        console.error(e);
+        setImportStatus("err", "Non sono riuscito a leggere il file: " + escapeHtml((e && e.message) || String(e)));
+    } finally {
+        propImport.busy = false;
+    }
+};
+window.undoSongImport = () => {
+    if (!propImport.undo) return;
+    document.getElementById("propLyrics").value = propImport.undo.text;
+    document.getElementById("propTitle").value = propImport.undo.title;
+    propImport = { from: null, undo: null, busy: false };
+    window.renderProposePreview();
+    setImportStatus(null);
+};
+
 window.openProposeView = () => {
     // 1. Resetta i campi (come prima)
     document.getElementById("propTitle").value = "";
@@ -2895,6 +2981,7 @@ window.openProposeView = () => {
     document.getElementById("propDesc").value = "";
     document.getElementById("propUser").value = ""; 
     document.getElementById("propPreviewArea").innerHTML = "";
+    if (!propImport.busy) { propImport = { from: null, undo: null, busy: false }; setImportStatus(null); }
 
     // *** 2. NUOVO BLOCCO: CAMBIO INTERFACCIA SE ADMIN ***
     const titleEl = document.querySelector('#view-propose h4');

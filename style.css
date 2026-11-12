@@ -1073,3 +1073,14 @@ body.performing .autoscroll-bar { bottom: calc(66px + env(safe-area-inset-bottom
 .stats-bar span { display: block; height: 100%; background: linear-gradient(90deg, #ffc107, #ff85c0); border-radius: 4px; }
 .stats-num { grid-column: 2; grid-row: 1 / span 2; text-align: right; font-weight: 700; color: #ffc107; white-space: nowrap; }
 .stats-num small { display: block; font-weight: 400; color: #8a93a6; font-size: .72rem; }
+
+/* Proponi canzone: lettura da foto o PDF */
+.import-status { margin-top: 8px; padding: 8px 10px; border-radius: 10px; font-size: .82rem; line-height: 1.35;
+    background: rgba(110, 168, 254, 0.08); border: 1px solid rgba(110, 168, 254, 0.25); color: #cfe0ff; }
+.import-status.import-ok { background: rgba(25, 135, 84, 0.12); border-color: rgba(25, 135, 84, 0.45); color: #c9f0dc; }
+.import-status.import-err { background: rgba(220, 53, 69, 0.12); border-color: rgba(220, 53, 69, 0.45); color: #ffd3d8; }
+.import-status .import-row { display: flex; gap: 8px; align-items: flex-start; }
+.import-status .import-row > i, .import-status .import-row > .spinner-border { margin-top: 2px; }
+.import-status .import-msg { min-width: 0; overflow-wrap: anywhere; }
+.import-status .import-undo { color: inherit; text-decoration: underline; font-size: inherit; }
+.import-status .import-progress { height: 4px; margin-top: 6px; background: rgba(255, 255, 255, 0.08); }
