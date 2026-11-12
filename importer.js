@@ -7,7 +7,7 @@
 // Le due librerie si scaricano solo la prima volta che si usa la funzione (da cdnjs / jsdelivr).
 // La parte che ricostruisce righe, accordi e strofe (layoutToSong) è "pura": si prova senza browser.
 
-import { parseChordLine } from "./song-doctor.js";
+import { parseChordLine, syllables } from "./song-doctor.js";
 
 const PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
 const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
@@ -87,7 +87,8 @@ function groupLines(words) {
     });
     lines.forEach(l => {
         l.words.sort((a, b) => a.x0 - b.x0);
-        l.cy = (l.y0 + l.y1) / 2;
+        // centro della riga: mediana dei centri delle parole (il riconoscimento a volte dà riquadri troppo alti)
+        l.cy = median(l.words.map(w => (w.y0 + w.y1) / 2));
         l.hText = median(l.words.map(w => w.h));
     });
     return { lines: lines.sort((a, b) => a.cy - b.cy), h };
@@ -99,10 +100,21 @@ function asChordRow(line, h) {
     let fixed = line.words.map(w => ocrChordText(w.text) || w.text);
     let parsed = tryParse(fixed);
     if (!parsed) {
-        // "sol" letto minuscolo (succede con il grassetto): va bene solo se sulla riga c'è già un accordo scritto giusto
-        const cap = fixed.map(t => /^(do|re|mi|fa|sol|la|si)/.test(t) ? t[0].toUpperCase() + t.slice(1) : t);
+        // "sol", "soL", "sSoL", "Soi" letti male (succede con il grassetto o le maiuscole piccole). Si accettano se
+        // sulla riga c'è già un accordo scritto giusto, oppure se la parola ha maiuscole e minuscole mescolate
+        // (cosa che nel testo non succede).
+        const weird = (t) => /[a-z]/.test(t) && /[A-Z]/.test(t.slice(1));
+        const cap = fixed.map(t => {
+            const m = t.replace(/^[a-z](?=[A-Z])/, "").match(/^(do|re|mi|fa|so[l1i!|]|la|si)(.*)$/i);
+            if (!m) return t;
+            const root = m[1].toLowerCase().replace(/^so./, "sol");
+            return root[0].toUpperCase() + root.slice(1) + m[2];
+        });
+        // "po" da solo su una riga: è "DO" letto male
+        if (cap.length === 1 && /^[pP][oO0]$/.test(cap[0])) cap[0] = "Do";
         const p2 = tryParse(cap);
-        if (p2 && cap.some((t, i) => p2.tokens[i].kind === "chord" && t === fixed[i])) { parsed = p2; fixed = cap; }
+        const validBefore = (t) => { const p = tryParse([t]); return !!p && p.tokens[0].kind === "chord"; };
+        if (p2 && cap.some((t, i) => p2.tokens[i].kind === "chord" && (validBefore(fixed[i]) || weird(fixed[i]) || cap.length === 1 && /^[pP][oO0]$/.test(fixed[i])))) { parsed = p2; fixed = cap; }
     }
     if (!parsed) return null;
     const out = line.words.map((w, i) => parsed.tokens[i].kind === "chord" ? { ...w, chord: fixed[i] } : { ...w, deco: true });
@@ -130,19 +142,29 @@ function lyricLayout(line, mono) {
     return { text, xs, charW, x1: line.words[line.words.length - 1].x1 };
 }
 
-// Accordi della riga sopra messi dentro la riga di testo, sulla lettera sotto il loro inizio
+// Accordi della riga sopra messi dentro la riga di testo. Ogni accordo va all'inizio della sillaba più vicina al
+// suo bordo sinistro (misurato in pixel): sui fogli fatti con gli spazi gli accordi sono allineati "a occhio",
+// un po' prima o un po' dopo la sillaba giusta.
 function mergeRow(row, lyric, mono) {
     const { text, xs, charW, x1 } = lyricLayout(lyric, mono);
+    const starts = syllables(text).map(x => x.start);
     const inserts = [];
     let tail = "";
     row.forEach(w => {
         if (!w.chord) return;
-        const x = w.x0 + 0.3 * charW;   // l'accordo comincia sopra (o appena prima di) la sua lettera
-        if (x >= x1 + 0.5 * charW) { tail += ` [${w.chord}]`; return; }   // dopo la fine del testo
-        let i = 0;
-        while (i + 1 < xs.length && xs[i + 1] <= x) i++;
-        if (text[i] === " ") i++;                         // sopra lo spazio: inizio della parola dopo
-        inserts.push({ at: i, text: `[${w.chord}]` });
+        const ref = w.x0 + 0.2 * charW;
+        if (ref >= x1 + 0.5 * charW) { tail += ` [${w.chord}]`; return; }   // dopo la fine del testo
+        let at = -1, bd = Infinity;
+        starts.forEach(st => { const d = Math.abs(xs[st] - ref); if (d < bd) { bd = d; at = st; } });
+        if (at < 0 || bd > 2.5 * charW) {        // nessuna sillaba vicina: la lettera sotto
+            if (ref > x1 - charW) { tail += ` [${w.chord}]`; return; }   // sopra l'ultima lettera o oltre
+            at = 0;
+            while (at + 1 < xs.length && xs[at + 1] <= ref) at++;
+            if (text[at] === " ") at++;
+        }
+        // virgolette o parentesi attaccate alla parola: l'accordo va prima ("[Fa]“dai" e non "“[Fa]dai")
+        while (at > 0 && /[“"'«(‘]/.test(text[at - 1]) && (at === 1 || text[at - 2] === " ")) at--;
+        inserts.push({ at, text: `[${w.chord}]` });
     });
     let out = text;
     inserts.map((x, k) => ({ ...x, k })).sort((a, b) => b.at - a.at || b.k - a.k).forEach(x => { out = out.slice(0, x.at) + x.text + out.slice(x.at); });
@@ -162,24 +184,60 @@ function standaloneRow(row, charW) {
     return out;
 }
 
+// Pagina su due (o tre) colonne: c'è una striscia verticale senza parole che va da cima a fondo, con parecchio
+// testo da entrambe le parti. Le colonne si leggono una dopo l'altra, da sinistra a destra.
+export function splitColumns(words) {
+    const ws = words.filter(w => String(w.text || "").trim());
+    if (ws.length < 12) return [ws];
+    const h = median(ws.map(w => w.y1 - w.y0)) || 10;
+    const x0 = Math.min(...ws.map(w => w.x0)), x1 = Math.max(...ws.map(w => w.x1));
+    const bw = Math.max(1, h / 2), nb = Math.ceil((x1 - x0) / bw) + 1;
+    const cov = new Uint16Array(nb);
+    ws.forEach(w => { for (let b = Math.floor((w.x0 - x0) / bw); b <= Math.floor((w.x1 - x0) / bw); b++) cov[b]++; });
+    const thr = Math.max(1, Math.floor(ws.length * 0.01));
+    let best = null;
+    for (let b = 0; b < nb;) {
+        if (cov[b] > thr) { b++; continue; }
+        let e = b;
+        while (e + 1 < nb && cov[e + 1] <= thr) e++;
+        const gx0 = x0 + b * bw, gx1 = x0 + (e + 1) * bw;
+        const mid = (gx0 + gx1) / 2;
+        const left = ws.filter(w => (w.x0 + w.x1) / 2 < mid), right = ws.filter(w => (w.x0 + w.x1) / 2 >= mid);
+        if (b > 0 && e < nb - 1 && gx1 - gx0 >= 2 * h && left.length >= 0.2 * ws.length && right.length >= 0.2 * ws.length
+            && (!best || gx1 - gx0 > best.w)) best = { w: gx1 - gx0, left, right };
+        b = e + 1;
+    }
+    if (!best) return [ws];
+    return [...splitColumns(best.left), ...splitColumns(best.right)];
+}
+
 // Righe da buttare: indirizzi web, righe di soli trattini; numeri di pagina solo in cima o in fondo alla pagina
-const JUNK = [/(www\.|https?:|\.com\b|\.it\b|\.org\b|\.net\b)/i, /^\s*[-–—_=.·•*~]+\s*$/];
+const JUNK = [/(www\.|https?:|\.com\b|\.it\b|\.org\b|\.net\b)/i, /^[\s\-–—_=.·•*~|'"‘’“”]+$/,
+    // scritta che alcuni telefoni stampano sulla foto (modello e data/ora)
+    /\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b.*\b\d{1,2}[:.]\d{2}\b/, /\b(redmi|xiaomi|samsung|galaxy|iphone|huawei|oppo|honor|realme|poco|oneplus|shot on|scattata con)\b/i];
 const PAGE_NUM = /^\s*(pag(ina)?\.?\s*)?\d{1,3}(\s*(\/|di)\s*\d{1,3})?\s*$/i;
 
 export function layoutToSong(pages) {
     const out = [];
     let title = "", lines = 0, merged = 0, chordCount = 0;
-    pages.forEach((page, pi) => {
+    const parts = [];
+    pages.forEach(page => splitColumns(page.words || []).forEach(words => parts.push({ words, mono: page.mono })));
+    let carry = null;
+    parts.forEach((page, pi) => {
         const { lines: pl, h } = groupLines(page.words || []);
         const units = pl.filter((l, i) => {
             const s = l.words.map(w => w.text).join(" ");
             if (JUNK.some(re => re.test(s))) return false;
+            if (s.replace(/[^A-Za-zÀ-ÿ0-9]/g, "").length < 2 && !asChordRow(l, 10)) return false;
+            // una sola parola letta con poca sicurezza (pezzo di un altro foglio, piega): via
+            if (l.words.length === 1 && (l.words[0].conf ?? 100) < 50 && !asChordRow(l, 10)) return false;
             return !((i === 0 || i === pl.length - 1) && PAGE_NUM.test(s));
         });
         if (!units.length) return;
         // titolo: prima riga della prima pagina scritta più grande
         const bodyH = median(units.map(l => l.hText)) || h;
-        const isTitle = (l) => l && l.hText >= 1.25 * bodyH && !asChordRow(l, h);
+        const caps = (l) => { const t = l.words.map(w => w.text).join(" "), let_ = t.replace(/[^A-Za-zÀ-ÿ]/g, ""); return let_.length >= 6 && let_ === let_.toUpperCase() && l.words.length <= 10; };
+        const isTitle = (l) => l && (l.hText >= 1.25 * bodyH || caps(l)) && !asChordRow(l, h);
         if (pi === 0 && !title && units.length > 2) {
             // sopra il titolo di una foto ci può essere un segno letto per sbaglio (bordo del foglio)
             if (!isTitle(units[0]) && isTitle(units[1]) && units[0].words.map(w => w.text).join("").length <= 3) units.shift();
@@ -193,32 +251,61 @@ export function layoutToSong(pages) {
         const lyricUnits = units.filter(l => !asChordRow(l, h));
         const mono = page.mono ?? isMonospace(lyricUnits.flatMap(l => l.words));
         const charW = median(lyricUnits.map(l => lyricLayout(l, mono).charW)) || h * 0.5;
+        const left = Math.min(...lyricUnits.map(l => l.words[0].x0), Infinity);
+        // passo solito tra due righe stampate, da centro a centro (alcuni fogli lasciano una riga vuota anche tra
+        // accordi e testo): una riga di accordi va con il testo sotto se non è più lontano del solito
+        const usualPitch = median(units.slice(1).map((l, i) => l.cy - units[i].cy).filter(g => g > 0)) || 2 * h;
+        const closeEnough = (a, b) => b.cy - a.cy <= Math.max(1.8 * h, 1.35 * usualPitch);
         // righe della canzone: una riga di accordi si unisce al testo subito sotto
         const blocks = [];
-        for (let i = 0; i < units.length; i++) {
+        let start = 0;
+        // riga di accordi rimasta in fondo alla colonna (o pagina) prima: va sulla prima riga di questa
+        if (carry && units[0] && !asChordRow(units[0], h)) {
+            const k = charW / carry.charW;
+            const row = carry.row.map(w => ({ ...w, x0: left + (w.x0 - carry.left) * k, x1: left + (w.x1 - carry.left) * k }));
+            blocks.push({ text: mergeRow(row, units[0], mono), top: units[0].cy, bottom: units[0].cy });
+            merged++; lines++; start = 1;
+        } else if (carry) out.push(carry.text);
+        carry = null;
+        for (let i = start; i < units.length; i++) {
             const l = units[i];
             const row = asChordRow(l, h);
-            if (!row) { blocks.push({ text: l.words.map(w => w.text).join(" "), y0: l.y0, y1: l.y1 }); lines++; continue; }
+            if (!row) { blocks.push({ text: l.words.map(w => w.text).join(" "), top: l.cy, bottom: l.cy }); lines++; continue; }
             chordCount += row.filter(w => w.chord).length;
             const next = units[i + 1];
             const hasLabel = row.some(w => w.deco && LABEL.test(w.text));
-            if (next && !hasLabel && !asChordRow(next, h) && next.y0 - l.y1 < h
+            if (next && !hasLabel && !asChordRow(next, h) && closeEnough(l, next)
                 && row.some(w => w.chord && w.x0 < next.words[next.words.length - 1].x1 + charW)) {
-                blocks.push({ text: mergeRow(row, next, mono), y0: l.y0, y1: next.y1 });
+                blocks.push({ text: mergeRow(row, next, mono), top: l.cy, bottom: next.cy });
                 merged++; lines++; i++;
-            } else blocks.push({ text: standaloneRow(row, charW), y0: l.y0, y1: l.y1 });
+            } else if (!next && !hasLabel && pi < parts.length - 1) {
+                carry = { row, left, charW, text: standaloneRow(row, charW) };   // continua nella colonna dopo
+            } else blocks.push({ text: standaloneRow(row, charW), top: l.cy, bottom: l.cy });
         }
-        // righe vuote tra le strofe: dove lo spazio tra due righe della canzone è molto più grande del solito
-        const gaps = blocks.slice(1).map((b, i) => b.y0 - blocks[i].y1);
-        const usual = median(gaps.filter(g => g > 0)) || 0.3 * h;
+        // righe vuote tra le strofe: dove la distanza tra due righe della canzone è molto più grande del solito
+        const gaps = blocks.slice(1).map((b, i) => b.top - blocks[i].bottom);
+        const usual = median(gaps.filter(g => g > 0)) || 2 * h;
         if (pi > 0 && out.length && out[out.length - 1] !== "") out.push("");
         blocks.forEach((b, i) => {
-            if (i > 0 && gaps[i - 1] > Math.max(0.8 * h, 1.7 * usual) && out.length && out[out.length - 1] !== "") out.push("");
+            if (i > 0 && gaps[i - 1] > Math.max(1.8 * h, 1.5 * usual) && out.length && out[out.length - 1] !== "") out.push("");
             out.push(b.text);
         });
     });
+    if (carry) out.push(carry.text);
     while (out.length && out[out.length - 1] === "") out.pop();
-    return { title, text: out.join("\n"), lines, merged, chords: chordCount };
+    let text = out.join("\n");
+    // foglio con gli accordi all'italiana: una "A" isolata è "LA" letto senza la L
+    const all = [...text.matchAll(/\[([^\]]+)\]/g)].map(m => m[1]);
+    const ita = all.filter(c => /^(do|re|mi|fa|sol|la|si)/i.test(c)).length;
+    if (ita >= 6 && all.length - ita <= ita / 6) text = text.replace(/\[A(-|m|7|-7|m7)?\]/g, (m, suf) => `[La${suf || ""}]`);
+    // il "-" dei minori è piccolo e a volte non si legge: se nella canzone "LA-" c'è spesso e "LA" quasi mai,
+    // anche quei pochi "LA" sono "LA-" (lo stesso accordo maggiore e minore nella stessa canzone è raro)
+    ["Do", "Re", "Mi", "Fa", "Sol", "La", "Si"].forEach(root => {
+        const minor = new RegExp(`\\[${root}-\\]`, "gi"), bare = new RegExp(`\\[(${root})\\]`, "gi");
+        const nm = (text.match(minor) || []).length, nb = (text.match(bare) || []).length;
+        if (nm >= 3 && nb && nb <= nm / 2) text = text.replace(bare, "[$1-]");
+    });
+    return { title, text, lines, merged, chords: chordCount };
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -274,9 +361,12 @@ export function ocrToWords(data) {
     const push = (w, line) => {
         const bb = w.bbox || {};
         let text = String(w.text || "").trim();
-        if (!text || (w.confidence != null && w.confidence < 30)) return;   // macchie e bordi letti come segni
-        if (text === "ll") text = "Il";                                                                      // "Il" letto con due elle
-        words.push({ text, x0: bb.x0, x1: bb.x1, y0: bb.y0, y1: bb.y1, line });
+        const conf = w.confidence != null ? w.confidence : 100;
+        if (!text || conf < 30) return;                                                  // macchie e bordi letti come segni
+        // segni piccoli poco sicuri (bordo del foglio, piega, puntini): "|", "i", "4,"
+        if (conf < 65 && text.replace(/[^A-Za-zÀ-ÿ0-9]/g, "").length <= 1 && !/^[A-G]$/.test(text)) return;
+        if (text === "ll") text = "Il";                                                  // "Il" letto con due elle
+        words.push({ text, x0: bb.x0, x1: bb.x1, y0: bb.y0, y1: bb.y1, line, conf: Math.round(conf) });
     };
     if (data && Array.isArray(data.blocks) && data.blocks.length) {
         data.blocks.forEach(bl => (bl.paragraphs || []).forEach(p => (p.lines || []).forEach(l => { lineNo++; (l.words || []).forEach(w => push(w, lineNo)); })));
@@ -303,7 +393,7 @@ function loadScript(src, globalName) {
 
 // Foto: girata giusta (EXIF), ridimensionata, in grigio. Le ombre e la luce non uniforme si tolgono dividendo
 // per il "fondo" del foglio (stimato su una griglia: il punto più chiaro di ogni quadretto, poi sfumato).
-async function prepareImage(source) {
+export async function prepareImage(source) {
     let bmp = source;
     if (source instanceof Blob) {
         try { bmp = await createImageBitmap(source, { imageOrientation: "from-image" }); }
@@ -334,10 +424,20 @@ async function prepareImage(source) {
         const f = Math.max(8, Math.round(Math.max(W, H) / 100));
         const sw = Math.ceil(W / f), sh = Math.ceil(H / f);
         let bg = new Float32Array(sw * sh);
+        const sum = new Float32Array(sw * sh), cnt = new Uint32Array(sw * sh);
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
             const k = ((y / f) | 0) * sw + ((x / f) | 0), v = gray[y * W + x];
             if (v > bg[k]) bg[k] = v;
+            sum[k] += v; cnt[k]++;
         }
+        // fuori dal foglio (tavolo, coperta...): quadretti molto più scuri della carta. Si tolgono solo se la
+        // separazione è netta (pochi quadretti a metà strada), così un'ombra sul foglio non viene cancellata.
+        const means = Array.from(sum, (v, k) => v / Math.max(1, cnt[k]));
+        const paper = means.slice().sort((a, b) => a - b)[Math.floor(means.length * 0.9)] || 255;
+        const rel = means.map(m => m / paper);
+        const valley = rel.filter(r => r >= 0.38 && r < 0.58).length / rel.length;
+        const offPaper = valley < 0.06 && rel.filter(r => r < 0.38).length / rel.length > 0.05
+            ? rel.map(r => r < 0.45) : null;
         for (let pass = 0; pass < 2; pass++) {          // sfumatura 3x3
             const nb = new Float32Array(bg.length);
             for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
@@ -350,7 +450,7 @@ async function prepareImage(source) {
             }
             bg = nb;
         }
-        const hist = new Uint32Array(256), out = new Uint8ClampedArray(W * H);
+        const out = new Uint8ClampedArray(W * H);
         for (let y = 0; y < H; y++) {
             const gy = Math.min(sh - 1.001, Math.max(0, y / f - 0.5)), y0 = gy | 0, ty = gy - y0;
             for (let x = 0; x < W; x++) {
@@ -358,9 +458,11 @@ async function prepareImage(source) {
                 const i0 = y0 * sw + x0, i1 = Math.min(i0 + 1, y0 * sw + sw - 1), i2 = Math.min(i0 + sw, bg.length - 1), i3 = Math.min(i2 + 1, bg.length - 1);
                 const b = (bg[i0] * (1 - tx) + bg[i1] * tx) * (1 - ty) + (bg[i2] * (1 - tx) + bg[i3] * tx) * ty;
                 const v = 255 * gray[y * W + x] / Math.max(24, b);
-                out[y * W + x] = v; hist[out[y * W + x]]++;
+                out[y * W + x] = offPaper && offPaper[((y / f) | 0) * sw + ((x / f) | 0)] ? 255 : v;
             }
         }
+        const hist = new Uint32Array(256);
+        for (let j = 0; j < out.length; j++) hist[out[j]]++;
         // contrasto: l'1% più scuro diventa nero, il foglio bianco
         let acc = 0, lo = 0;
         while (lo < 200 && (acc += hist[lo]) < out.length * 0.01) lo++;
@@ -372,6 +474,20 @@ async function prepareImage(source) {
         ctx.putImageData(img, 0, 0);
     } catch (e) { /* senza correzione va bene lo stesso */ }
     return canvas;
+}
+
+// Gira il disegno di quarti di giro in senso antiorario (1 = 90°, 2 = 180°, 3 = 270°)
+function rotateCanvas(src, quarters) {
+    const q = ((quarters % 4) + 4) % 4;
+    if (!q) return src;
+    const c = document.createElement("canvas");
+    c.width = q % 2 ? src.height : src.width;
+    c.height = q % 2 ? src.width : src.height;
+    const x = c.getContext("2d");
+    x.translate(c.width / 2, c.height / 2);
+    x.rotate(-q * Math.PI / 2);
+    x.drawImage(src, -src.width / 2, -src.height / 2);
+    return c;
 }
 
 let tessWorker = null, ocrLabel = "", ocrProgress = () => {};
@@ -389,7 +505,36 @@ async function ocrCanvas(canvas, onProgress, label) {
     onProgress(`${label}: leggo il testo…`, 0);
     // rotateAuto: raddrizza le foto un po' storte prima di leggerle
     const { data } = await tessWorker.recognize(canvas, { rotateAuto: true }, { blocks: true, text: false, hocr: false, tsv: false });
-    return ocrToWords(data);
+    const words = ocrToWords(data);
+    console.debug(`[importer] ${label}: ${canvas.width}x${canvas.height}, sicurezza ${Math.round(data.confidence || 0)}, ${words.length} parole`);
+    return { words, conf: data.confidence || 0 };
+}
+
+// Copia rimpicciolita (lato lungo max px) per le prove veloci
+function shrinkCanvas(src, max) {
+    const k = Math.min(1, max / Math.max(src.width, src.height));
+    if (k >= 1) return src;
+    const c = document.createElement("canvas");
+    c.width = Math.round(src.width * k); c.height = Math.round(src.height * k);
+    c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
+    return c;
+}
+
+// Lettura di una pagina-immagine nel verso giusto. Prima com'è; se il testo letto non ha senso (sicurezza bassa:
+// foglio orizzontale fotografato in verticale, o capovolto) si prova velocemente il foglio girato di 90°, 270° e
+// 180° su una copia piccola, e si rilegge bene nel verso che dà il testo più sicuro.
+async function ocrOriented(canvas, onProgress, label) {
+    const first = await ocrCanvas(canvas, onProgress, label);
+    if (first.conf >= 70) return first.words;
+    const small = shrinkCanvas(canvas, 1400);
+    let bestQ = 0, bestConf = first.conf;
+    for (const q of [1, 3, 2]) {
+        const probe = await ocrCanvas(rotateCanvas(small, q), onProgress, `${label}: provo a girarla`);
+        if (probe.conf > bestConf + 10) { bestQ = q; bestConf = probe.conf; }
+        if (bestConf >= 70) break;
+    }
+    if (!bestQ) return first.words;
+    return (await ocrCanvas(rotateCanvas(canvas, bestQ), onProgress, label)).words;
 }
 
 async function pdfToPages(file, onProgress, label) {
@@ -426,7 +571,7 @@ async function pdfToPages(file, onProgress, label) {
             const cx = canvas.getContext("2d");
             cx.fillStyle = "#fff"; cx.fillRect(0, 0, canvas.width, canvas.height);
             await page.render({ canvasContext: cx, viewport: v2 }).promise;
-            words = await ocrCanvas(await prepareImage(canvas), onProgress, pl);
+            words = await ocrOriented(await prepareImage(canvas), onProgress, pl);
             usedOcr = true;
         }
         pages.push({ words });
@@ -438,9 +583,8 @@ async function pdfToPages(file, onProgress, label) {
 
 const isPdfFile = (f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name || "");
 
-// Punto d'ingresso: una o più foto / PDF (in ordine) -> { title, text, lines, merged, chords, method, truncated }
-// onProgress(messaggio, frazione 0..1 oppure null)
-export async function importSongFiles(files, onProgress = () => {}) {
+// Lettura dei file: una o più foto / PDF (in ordine) -> { pages: [{ words }], method, truncated }
+export async function readPages(files, onProgress = () => {}) {
     const list = [...files];
     const pages = [];
     const methods = new Set();
@@ -455,7 +599,7 @@ export async function importSongFiles(files, onProgress = () => {}) {
             } else {
                 onProgress(`${label}: preparo l'immagine…`, null);
                 const canvas = await prepareImage(file);
-                pages.push({ words: await ocrCanvas(canvas, onProgress, label) });
+                pages.push({ words: await ocrOriented(canvas, onProgress, label) });
                 methods.add("foto");
             }
         }
@@ -464,5 +608,12 @@ export async function importSongFiles(files, onProgress = () => {}) {
         if (tessWorker) { const w = tessWorker; tessWorker = null; w.terminate().catch(() => {}); }
     }
     const method = methods.has("foto") ? "foto" : methods.has("scansione") ? "scansione" : "pdf";
+    return { pages, method, truncated };
+}
+
+// Punto d'ingresso: file -> { title, text, lines, merged, chords, method, truncated }
+// onProgress(messaggio, frazione 0..1 oppure null)
+export async function importSongFiles(files, onProgress = () => {}) {
+    const { pages, method, truncated } = await readPages(files, onProgress);
     return { ...layoutToSong(pages), method, truncated };
 }
