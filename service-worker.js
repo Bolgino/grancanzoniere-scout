@@ -1,4 +1,4 @@
-const CACHE_NAME = "canzoniere-dynamic-v10";
+const CACHE_NAME = "canzoniere-dynamic-v11";
 
 // File dell'app (sempre aggiornati quando c'è rete)
 const APP_FILES = [

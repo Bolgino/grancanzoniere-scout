@@ -918,7 +918,7 @@ window.markChordOk = async (name, undo = false) => {
 // --- MAIL AL SUPERADMIN -----------------------------------------------------------------------------------------------
 // Proposte, segnalazioni e canzoni che un admin manda in conferma: parte una mail al superadmin tramite lo script Google
 // (Apps Script, il codice è in apps-script/Notifiche.gs). Senza rete la mail aspetta sul telefono e parte appena torna.
-const MAIL_HOOK = "https://script.google.com/macros/s/AKfycbwW9pUYWHmbztTCdmlIVQB0IUJUNP4NZffp16ebjErdnNQklubxe94nbRPM8jeNV7Np/exec";
+const MAIL_HOOK = "https://script.google.com/macros/s/AKfycbw1TocZsi7wb_3zu7QZcIM9-71Cng6sM78n_UdhOJVVI3Fw6pkp5yyyaYP9JKPlpyX8/exec";
 const MAIL_QUEUE = "pendingMails";
 const appLink = (params) => `${location.origin}${location.pathname}?${params}`;
 async function postMail(payload) {
