@@ -383,7 +383,7 @@ enableMultiTabIndexedDbPersistence(db)
           }
 
           // Le proposte dopo le canzoni: al superadmin servono le canzoni già caricate per il conteggio
-          loadData().then(() => { if (isAdmin) { loadProposals(); loadReports(); } handleStartupLink(); });
+          loadData().then(() => { if (isAdmin) { proposalsReady = loadProposals(); loadReports(); } handleStartupLink(); });
       });
   });
 window.loadData = loadData;
@@ -915,6 +915,51 @@ window.markChordOk = async (name, undo = false) => {
     }
 };
 
+// --- MAIL AL SUPERADMIN -----------------------------------------------------------------------------------------------
+// Proposte, segnalazioni e canzoni che un admin manda in conferma: parte una mail al superadmin tramite lo script Google
+// (Apps Script, il codice è in apps-script/Notifiche.gs). Senza rete la mail aspetta sul telefono e parte appena torna.
+const MAIL_HOOK = "https://script.google.com/macros/s/AKfycbwW9pUYWHmbztTCdmlIVQB0IUJUNP4NZffp16ebjErdnNQklubxe94nbRPM8jeNV7Np/exec";
+const MAIL_QUEUE = "pendingMails";
+const appLink = (params) => `${location.origin}${location.pathname}?${params}`;
+async function postMail(payload) {
+    // "no-cors": la risposta non si legge, ma la richiesta arriva; fallisce solo senza rete
+    await fetch(MAIL_HOOK, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload) });
+}
+function queueMail(payload) {
+    const q = lsGet(MAIL_QUEUE, []);
+    q.push(payload);
+    lsSet(MAIL_QUEUE, q.slice(-20));
+}
+let mailFlushing = false;
+async function flushMailQueue() {
+    if (mailFlushing || !navigator.onLine) return;
+    const q = lsGet(MAIL_QUEUE, []);
+    if (!q.length) return;
+    mailFlushing = true;
+    try {
+        while (q.length) {
+            try { await postMail(q[0]); } catch (e) { break; }
+            q.shift();
+            lsSet(MAIL_QUEUE, q);
+        }
+    } finally { mailFlushing = false; }
+}
+window.addEventListener("online", () => setTimeout(flushMailQueue, 2000));
+setTimeout(flushMailQueue, 8000);
+
+// tipo: "proposta" | "segnalazione" | "revisione". I campi titolo/autore/categoria servono anche allo script vecchio.
+function notifySuperadmin({ tipo, canzone = "", autoreCanzone = "", categoria = "", da = "", dettagli = "", link = "" }) {
+    if (isSuperAdmin) return;   // quello che fa il superadmin non gli arriva per mail
+    const head = { proposta: "", segnalazione: "Segnalazione: ", revisione: "Da confermare: " }[tipo] || "";
+    const payload = {
+        tipo, canzone, autoreCanzone, categoria, da, dettagli, link: link || appLink("apri=proposte"),
+        quando: new Date().toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" }),
+        titolo: head + canzone, autore: da, // compatibilità con lo script di prima
+    };
+    if (!navigator.onLine) return queueMail(payload);
+    postMail(payload).catch(() => queueMail(payload));
+}
+
 window.handleSongSubmission = async () => {
     // 1. RECUPERO DATI
     const t = document.getElementById("propTitle").value.trim() || document.getElementById("newSongTitle").value.trim();
@@ -986,11 +1031,14 @@ window.handleSongSubmission = async () => {
         if (isAdmin) {
             const r = await addDoc(collection(db,"songs"), {...songData, added:true}); 
             allSongs.push({ id: r.id, ...songData, added: true });
+            notifySuperadmin({ tipo: "revisione", canzone: t, autoreCanzone: a, categoria: c, da: (auth.currentUser && auth.currentUser.email) || "un admin",
+                dettagli: "Nuova canzone aggiunta da un admin", link: appLink("canzone=" + encodeURIComponent(r.id)) });
             window.updateTotalSongsCounter();
             showToast("Canzone Creata!", 'success'); 
             mAddSong.hide();
             window.openEditor(r.id); 
         } else { 
+            const propImportFromMail = propImport.from === "foto" ? "una foto" : propImport.from ? "un PDF" : "";
             if (propImport.from) {
                 // "letta da foto/PDF" è solo un'informazione per l'admin: se il database non accetta il campo, si invia senza
                 try { await addDoc(collection(db,"proposals"), {...songData, proposer: p, importedFrom: propImport.from}); }
@@ -999,18 +1047,10 @@ window.handleSongSubmission = async () => {
             } else {
                 await addDoc(collection(db,"proposals"), {...songData, proposer: p}); 
             }
-            // 2. INVIA LA MAIL TRAMITE GOOGLE SCRIPT
-            fetch("https://script.google.com/macros/s/AKfycbwW9pUYWHmbztTCdmlIVQB0IUJUNP4NZffp16ebjErdnNQklubxe94nbRPM8jeNV7Np/exec", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "text/plain;charset=utf-8",
-                },
-                body: JSON.stringify({
-                    titolo: t,
-                    autore: p,
-                    categoria: c
-                })
-            }).catch(err => console.error("Errore invio notifica:", err));
+            // 2. INVIA LA MAIL AL SUPERADMIN (tramite lo script Google)
+            notifySuperadmin({ tipo: "proposta", canzone: t, autoreCanzone: a, categoria: c, da: p,
+                dettagli: [existingSong ? `Aggiunge il testo a "${existingSong.title}", già nel canzoniere` : "", propImportFromMail ? `Testo letto in automatico da ${propImportFromMail}: da controllare` : ""].filter(Boolean).join(". "),
+                link: appLink("apri=proposte") });
             showToast("Proposta inviata!", 'success'); 
             mAddSong.hide();
             window.goHome();
@@ -1044,6 +1084,11 @@ window.executeMerge = async () => {
         }
         
         showToast("Canzone integrata con successo!", 'success');
+        if (pendingMergeData.newData.needsSuperAdminReview) {
+            notifySuperadmin({ tipo: "revisione", canzone: (loc && loc.title) || document.getElementById("propTitle").value.trim(), autoreCanzone: pendingMergeData.newData.author || "",
+                categoria: pendingMergeData.newData.category || "", da: (auth.currentUser && auth.currentUser.email) || "un admin",
+                dettagli: "Testo aggiunto a una canzone che era già nel canzoniere", link: appLink("canzone=" + encodeURIComponent(pendingMergeData.targetId)) });
+        }
         mAddSong.hide(); // Chiudi modale aggiunta se aperto
         window.openEditor(pendingMergeData.targetId); // Vai all'editor della canzone aggiornata
 
@@ -3133,6 +3178,13 @@ window.saveAndApproveProposal = async () => {
             showToast("Nuova canzone creata!", "success");
         }
 
+        if (finalData.needsSuperAdminReview) {
+            const approvedId = targetMergeSongId || (allSongs.find(x => x.createdAt === finalData.createdAt && x.title === finalData.title) || {}).id;
+            notifySuperadmin({ tipo: "revisione", canzone: finalData.title, autoreCanzone: finalData.author, categoria: finalData.category,
+                da: (auth.currentUser && auth.currentUser.email) || "un admin", dettagli: "Proposta approvata da un admin",
+                link: approvedId ? appLink("canzone=" + encodeURIComponent(approvedId)) : appLink("apri=proposte") });
+        }
+
         // In entrambi i casi, cancella la proposta perché è stata processata
         await deleteDoc(doc(db, "proposals", currentReviewId));
         allProposals = allProposals.filter(p => p.id !== currentReviewId);
@@ -4268,12 +4320,32 @@ window.openShareSetlist = (live = false) => {
 };
 
 // Link aperto da un QR: ?scaletta=ID (&vivo=1 per seguire la diretta)
+// Link delle mail al superadmin: ?apri=proposte, ?apri=segnalazioni, ?canzone=ID
 const startupParams = new URLSearchParams(location.search);
 let startupHandled = false;
+let proposalsReady = Promise.resolve();
+let startupLoginHinted = false;
 function handleStartupLink() {
     if (startupHandled) return;
     if (document.readyState !== "complete") { window.addEventListener("load", () => setTimeout(handleStartupLink, 0), { once: true }); return; }
     startupHandled = true;
+    const apri = startupParams.get("apri"), songLink = startupParams.get("canzone");
+    if (apri && !isAdmin) {
+        // non ancora entrato come admin: il link resta valido e si apre appena entra
+        if (!startupLoginHinted) notify("Per vedere proposte e segnalazioni accedi come admin.", "info", { duration: 6000 });
+        startupLoginHinted = true; startupHandled = false;
+        return;
+    }
+    if (apri || songLink) {
+        try { history.replaceState(history.state, "", location.pathname + (location.hash || "#home")); } catch (e) {}
+        if (songLink) {
+            if (!allSongs.some(s => s.id === songLink)) return notify("Canzone non trovata: forse è stata eliminata o unita a un'altra.", "warning");
+            return window.openEditor(songLink);
+        }
+        if (apri === "segnalazioni") return window.openReportsView();
+        proposalsReady.catch(() => {}).then(() => window.openProposalsView());
+        return;
+    }
     const id = startupParams.get("scaletta");
     if (!id) return;
     try { history.replaceState(history.state, "", location.pathname + (location.hash || "#home")); } catch (e) {}
@@ -4861,6 +4933,9 @@ window.openReportSheet = (prefill = {}) => {
                        trans: ctxR.trans || 0, capo: ctxR.capo || 0, at: Date.now(), device: deviceId };
         lsSet('reportName', data.name);
         const sending = addDoc(collection(db, "reports"), data);
+        notifySuperadmin({ tipo: "segnalazione", canzone: data.title, autoreCanzone: data.author, categoria: data.category, da: data.name || "anonimo",
+            dettagli: [REPORT_LABEL[type] || type, data.note, data.trans ? `la vedeva con il tono ${signed(data.trans)}` : "", data.capo ? `capotasto ${data.capo}` : ""].filter(Boolean).join(" · "),
+            link: appLink("canzone=" + encodeURIComponent(s.id)) });
         if (!navigator.onLine) {   // senza rete resta sul telefono e parte da sola appena torna la connessione
             sheet.close();
             notify("Segnalazione salvata: parte da sola appena torni online.", "info");
