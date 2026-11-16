@@ -11,13 +11,16 @@ Arriva una mail quando:
 
 Quello che fa il superadmin non gli arriva per mail. Il pulsante nella mail apre l'app sulle proposte o sulla canzone.
 
-## Aggiornare lo script (una volta sola)
+## Lo script (progetto «Notifiche canzoniere» su script.google.com, account del superadmin)
 
-1. Vai su [script.google.com](https://script.google.com) con l'account del superadmin e apri il progetto delle notifiche del canzoniere.
-2. Cancella il codice che c'è, incolla tutto `Notifiche.gs` e premi **Salva**.
-3. In alto scegli la funzione **prova** e premi **Esegui**. La prima volta Google chiede l'autorizzazione a mandare mail: accetta. Deve arrivare una mail di prova.
-4. **Esegui il deployment → Gestisci deployment →** icona della matita **→ Versione: Nuova versione → Esegui il deployment**.
-   Così l'indirizzo resta lo stesso e l'app non va cambiata.
+Per crearlo da capo: **Nuovo progetto** → incolla `Notifiche.gs` → **Salva** → esegui la funzione **prova** e autorizza
+(arriva una mail di prova) → **Esegui il deployment → Nuovo deployment →** ingranaggio → **App web**, Esegui come **Me**,
+Chi ha accesso **Chiunque** → copia l'URL che finisce con `/exec` in `MAIL_HOOK` dentro `script.js`.
+
+Per cambiare il codice senza cambiare indirizzo: incolla il codice nuovo → **Salva** →
+**Esegui il deployment → Gestisci deployment →** matita **→ Versione: Nuova versione → Esegui il deployment**.
+
+Controllo: aprendo l'indirizzo dello script in una finestra in incognito deve comparire «Notifiche del canzoniere attive».
 
 Le mail arrivano all'account che ha pubblicato lo script. Per mandarle a un altro indirizzo scrivilo in `DESTINATARIO` in cima al codice.
 Al massimo 30 mail all'ora (contro lo spam); Google permette circa 100 mail al giorno a un account normale.
