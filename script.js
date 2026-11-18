@@ -2966,7 +2966,8 @@ window.importSongFile = async (input) => {
 
     const ta = document.getElementById("propLyrics");
     const titleEl = document.getElementById("propTitle");
-    const before = { text: ta.value, title: titleEl.value };
+    const authorEl = document.getElementById("propAuthor"), descEl = document.getElementById("propDesc");
+    const before = { text: ta.value, title: titleEl.value, author: authorEl.value, desc: descEl.value };
     let append = false;
     if (before.text.trim()) {
         // chiudere la finestra = aggiungere in fondo (non si perde niente)
@@ -2976,7 +2977,7 @@ window.importSongFile = async (input) => {
     propImport.busy = true;
     setImportStatus("busy", "Preparo…");
     try {
-        const { importSongFiles } = await import("./importer.js?v=1");
+        const { importSongFiles, stitchSongs } = await import("./importer.js?v=2");
         const res = await importSongFiles(usable, (msg, p) => setImportStatus("busy", escapeHtml(msg), p));
         if (!res.text.trim() || (res.lines < 2 && !res.chords)) {
             setImportStatus("err", "Non ho trovato il testo di una canzone. Con una foto: foglio dritto, ben illuminato e a fuoco, inquadrato da vicino (una colonna alla volta).");
@@ -2986,7 +2987,11 @@ window.importSongFile = async (input) => {
         // in fondo a un testo che ha già un altro titolo: il titolo letto resta come riga, così non si perde
         const sameTitle = (a, b) => robustNormalize(a || "") === robustNormalize(b || "");
         const head = append && res.title && !sameTitle(res.title, titleEl.value) ? res.title + "\n\n" : "";
-        ta.value = append ? before.text.replace(/\s+$/, "") + "\n\n" + head + fixed.text : fixed.text;
+        // in fondo: se il file nuovo ripete le ultime righe (screenshot fatti scorrendo la pagina) le tengo una volta sola
+        ta.value = append ? stitchSongs([before.text, head + fixed.text]) : fixed.text;
+        // autore e capotasto letti dalla pagina (es. Ultimate Guitar), solo se i campi sono vuoti
+        if (res.author && !authorEl.value.trim()) authorEl.value = res.author;
+        if (res.notes && res.notes.length && !descEl.value.trim()) descEl.value = res.notes.join(" · ");
         // titolo: se è vuoto, o se l'aveva messo la lettura precedente e il testo viene sostituito
         const autoTitle = !titleEl.value.trim() || (!append && titleEl.value === propImport.autoTitle);
         if (res.title && autoTitle) { titleEl.value = res.title; propImport.autoTitle = res.title; }
@@ -3012,6 +3017,8 @@ window.undoSongImport = () => {
     if (!propImport.undo) return;
     document.getElementById("propLyrics").value = propImport.undo.text;
     document.getElementById("propTitle").value = propImport.undo.title;
+    document.getElementById("propAuthor").value = propImport.undo.author || "";
+    document.getElementById("propDesc").value = propImport.undo.desc || "";
     propImport = { from: null, undo: null, busy: false };
     window.renderProposePreview();
     setImportStatus(null);
