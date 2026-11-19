@@ -33,6 +33,27 @@ function ocrChordText(token) {
         .replace(/^([A-G])([a-g])$/, (m, a, b) => a.toLowerCase() === b ? a : m);
 }
 
+const isOneChord = (t) => { const p = t && parseChordLine(t); return !!p && p.tokens.length === 1 && p.tokens[0].kind === "chord"; };
+
+// Accordo letto male -> forma giusta, se una delle correzioni dà un accordo; altrimenti il testo ripulito
+function chordGuess(token) {
+    let raw = String(token).replace(/[.,;:'’"]+$/, "");
+    if (!/^\(.*\)$/.test(raw)) raw = raw.replace(/^[([{]+/, "").replace(/[)\]}]+$/, "");
+    const fixed = ocrChordText(token);
+    const cands = [
+        fixed,
+        raw.replace(/^([DS])[0O]{1,2}/, "$1O").replace(/^([ds])0/, "$1o"),   // D0Oadd9 -> DOadd9, S0L -> SOL
+        raw.replace(/^([A-Za-z]{1,3}[#b]?)77$/, "$1m7"),                       // RE77 -> REm7 ("m" letto come 7)
+        raw.replace(/^6(?=([#b])?(m|7|m7)?$)/, "G"),                            // 6 -> G, 6# -> G#
+        raw.replace(/^G6(?=[#b])/, "G"),                                        // G6# -> G#
+        raw.replace(/^[pP](?=m7?$)/, "D"),                                      // pm -> Dm
+        raw.replace(/^([A-G][#b]?)n(7?)$/, "$1m$2"),                            // An -> Am
+        raw.replace(/\/[^/]*$/, ""),                                            // DO/..I -> DO (basso illeggibile)
+    ];
+    if (/77$/.test(raw) && isOneChord(cands[2])) return cands[2];
+    return cands.find(isOneChord) || fixed;
+}
+
 // Larghezza delle lettere (Helvetica, millesimi di em): serve a stimare dove sta ogni lettera dentro una parola
 // (le posizioni delle singole lettere date dal riconoscimento del testo sono troppo imprecise)
 const CHAR_W = {};
@@ -95,9 +116,31 @@ function groupLines(words) {
 }
 
 // Una riga di soli accordi (con eventuali "Intro:", "|", "x2")? Stesse regole della bacchetta (parseChordLine).
+// Parole di una riga di accordi rimesse insieme: "SOL" + "/DO" -> "SOL/DO" (il riconoscimento le stacca),
+// "GC" o "Fc" -> "G" + "C" (due accordi vicini letti come una parola)
+function chordRowWords(words, h) {
+    const ws = [];
+    words.forEach(w => {
+        const prev = ws[ws.length - 1];
+        if (prev && w.x0 - prev.x1 < 0.8 * h && (/^\/[A-Za-z]/.test(w.text) || /\/$/.test(prev.text))) {
+            ws[ws.length - 1] = { ...prev, text: prev.text + w.text, x1: w.x1 };
+            return;
+        }
+        const two = !isOneChord(chordGuess(w.text)) && w.text.match(/^([A-G][#b]?)([A-Ga-g][#b]?)$/);
+        if (two && two[1][0] !== two[2][0].toUpperCase()) {
+            const cut = w.x0 + (w.x1 - w.x0) * two[1].length / w.text.length;
+            ws.push({ ...w, text: two[1], x1: cut }, { ...w, text: two[2].toUpperCase(), x0: cut });
+            return;
+        }
+        ws.push(w);
+    });
+    return ws;
+}
+
 function asChordRow(line, h) {
     const tryParse = (toks) => { const p = parseChordLine(toks.join(" ")); return p && p.tokens.length === toks.length ? p : null; };
-    let fixed = line.words.map(w => ocrChordText(w.text) || w.text);
+    const words = chordRowWords(line.words, h);
+    let fixed = words.map(w => chordGuess(w.text) || w.text);
     let parsed = tryParse(fixed);
     if (!parsed) {
         // "sol", "soL", "sSoL", "Soi" letti male (succede con il grassetto o le maiuscole piccole). Si accettano se
@@ -117,11 +160,11 @@ function asChordRow(line, h) {
         if (p2 && cap.some((t, i) => p2.tokens[i].kind === "chord" && (validBefore(fixed[i]) || weird(fixed[i]) || cap.length === 1 && /^[pP][oO0]$/.test(fixed[i])))) { parsed = p2; fixed = cap; }
     }
     if (!parsed) return null;
-    const out = line.words.map((w, i) => parsed.tokens[i].kind === "chord" ? { ...w, chord: fixed[i] } : { ...w, deco: true });
+    const out = words.map((w, i) => parsed.tokens[i].kind === "chord" ? { ...w, chord: fixed[i] } : { ...w, deco: true });
     // "Do Re Mi Fa" scritti vicini come parole normali: è testo cantato, non accordi
     const chords = out.filter(w => w.chord);
     if (chords.length >= 3 && chords.every(w => /^(Do|Re|Mi|Fa|Sol|La|Si)$/i.test(w.chord))) {
-        const gaps = line.words.slice(1).map((w, i) => w.x0 - line.words[i].x1);
+        const gaps = words.slice(1).map((w, i) => w.x0 - words[i].x1);
         if (median(gaps) < 0.6 * h) return null;
     }
     return out;
@@ -207,31 +250,83 @@ export function splitColumns(words) {
             && (!best || gx1 - gx0 > best.w)) best = { w: gx1 - gx0, left, right };
         b = e + 1;
     }
-    if (!best) return [ws];
-    return [...splitColumns(best.left), ...splitColumns(best.right)];
+    if (best) return [...splitColumns(best.left), ...splitColumns(best.right)];
+    // striscia stretta a lato con poche parole che non sono accordi (pannello del sito, menu): non è la canzone
+    for (let b = 1; b < nb - 1;) {
+        if (cov[b] > thr) { b++; continue; }
+        let e = b;
+        while (e + 1 < nb && cov[e + 1] <= thr) e++;
+        const gx0 = x0 + b * bw, gx1 = x0 + (e + 1) * bw, mid = (gx0 + gx1) / 2;
+        if (gx1 - gx0 >= 3 * h && e < nb - 1) {
+            const left = ws.filter(w => (w.x0 + w.x1) / 2 < mid), right = ws.filter(w => (w.x0 + w.x1) / 2 >= mid);
+            const small = left.length < right.length ? left : right, big = small === left ? right : left;
+            if (small.length <= 0.12 * ws.length && small.filter(w => isOneChord(chordGuess(w.text))).length < 0.5 * small.length)
+                return splitColumns(big);
+        }
+        b = e + 1;
+    }
+    return [ws];
 }
 
 // Righe da buttare: indirizzi web, righe di soli trattini; numeri di pagina solo in cima o in fondo alla pagina
 const JUNK = [/(www\.|https?:|\.com\b|\.it\b|\.org\b|\.net\b)/i, /^[\s\-–—_=.·•*~|'"‘’“”]+$/,
+    // pulsanti e scritte dei siti di accordi e del browser
+    /auto-?scroll/i, /^(transpose|trasponi|simplify|semplifica|print|stampa|download( pdf)?|scarica( pdf)?|paper size|meta info|font size|two columns|add to playlist|report bad tab|rate this( tab)?)\b.{0,12}$/i,
+    /^(pag(ina)?|page)\.?\s*\d{1,3}(\s*(\/|di|of)\s*\d{1,3})?$/i, /^\d{1,2}:\d{2}\b.{0,12}$/,
     // scritta che alcuni telefoni stampano sulla foto (modello e data/ora)
     /\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b.*\b\d{1,2}[:.]\d{2}\b/, /\b(redmi|xiaomi|samsung|galaxy|iphone|huawei|oppo|honor|realme|poco|oneplus|shot on|scattata con)\b/i];
 const PAGE_NUM = /^\s*(pag(ina)?\.?\s*)?\d{1,3}(\s*(\/|di)\s*\d{1,3})?\s*$/i;
 
+// Righe di informazioni dei siti di accordi: difficoltà, accordatura, tonalità... (il capotasto si tiene a parte)
+const META = /^(difficulty|difficolt[àa]|tuning|accordatura|key|tonalit[àa]|strumming|bpm|tempo|author|artist|album|level|livello)\b\s*:?/i;
+const CAPO = /^capo(tasto)?\s*:?\s*(al\s*)?(\d{1,2}|[ivx]{1,4})\s*(st|nd|rd|th|°|º|\.)?\s*(fret|tasto)?\.?$/i;
+const ROMAN = { i: 1, ii: 2, iii: 3, iv: 4, v: 5, vi: 6, vii: 7, viii: 8, ix: 9, x: 10 };
+// Intestazione dei disegni degli accordi (Ultimate Guitar e simili): da lì fino alla prima strofa niente testo
+const DIAGRAMS = /^(chords|accordi|chord diagrams|diagrammi( degli accordi)?|accordi usati)$/i;
+// Etichette tra parentesi quadre dei siti inglesi -> etichette del canzoniere
+const SECTION = /^\[\s*(chorus|refrain|pre-?chorus|verse|bridge|intro|outro|instrumental|interlude|solo|break|coda|ending|hook|tag)(\s*\d+)?\s*\]$/i;
+const SECTION_IT = { chorus: "RIT.", refrain: "RIT.", prechorus: "Pre-rit.", "pre-chorus": "Pre-rit.", verse: "", bridge: "Bridge:", intro: "Intro:",
+    outro: "Finale:", ending: "Finale:", coda: "Finale:", instrumental: "Strumentale:", interlude: "Strumentale:", solo: "Strumentale:", break: "Strumentale:", hook: "RIT.", tag: "Finale:" };
+
+// Titolo dei siti: "Tu Sei Chords by Gen Verde" -> titolo + autore, "TU SEI: ACCORDI" -> "Tu sei"
+export function parseTitle(raw) {
+    let t = String(raw || "").trim(), author = "", m;
+    if ((m = t.match(/^(.*?)\s+(chords|chord|tabs?|ukulele(\s+chords)?|bass(\s+tabs?)?|accordi|testo e accordi|lyrics)\s+(by|di)\s+(.+)$/i))) { t = m[1]; author = m[6]; }
+    else if ((m = t.match(/^(.*?)\s*[:\-–—|]\s*(accordi|testo e accordi|testo|chords|tabs?|lyrics)$/i))) t = m[1];
+    const sentence = (x) => x === x.toUpperCase() && /[A-ZÀ-Ý]/.test(x) ? x.charAt(0) + x.slice(1).toLowerCase() : x;
+    const words = (x) => x === x.toUpperCase() && /[A-ZÀ-Ý]/.test(x) ? x.toLowerCase().replace(/(^|\s)(\S)/g, (a, b, c) => b + c.toUpperCase()) : x;
+    return { title: sentence(t.trim()), author: words(author.trim()) };
+}
+
 export function layoutToSong(pages) {
     const out = [];
-    let title = "", lines = 0, merged = 0, chordCount = 0;
+    let title = "", author = "", lines = 0, merged = 0, chordCount = 0;
+    const notes = [];
     const parts = [];
     pages.forEach(page => splitColumns(page.words || []).forEach(words => parts.push({ words, mono: page.mono })));
     let carry = null;
     parts.forEach((page, pi) => {
         const { lines: pl, h } = groupLines(page.words || []);
+        let inDiagrams = false;
         const units = pl.filter((l, i) => {
             const s = l.words.map(w => w.text).join(" ");
+            // disegni degli accordi: si salta tutto fino alla prima etichetta o riga di testo vera
+            if (DIAGRAMS.test(s)) { inDiagrams = true; return false; }
+            if (inDiagrams) {
+                const lyric = !asChordRow(l, 10) && l.words.filter(w => /[A-Za-zÀ-ÿ]{3}/.test(w.text)).length >= 3;
+                if (!SECTION.test(s) && !LABEL.test(s) && !lyric) return false;
+                inDiagrams = false;
+            }
+            let cm;
+            if ((cm = s.match(CAPO))) { const n = +cm[3] || ROMAN[cm[3].toLowerCase()]; if (n) notes.push(`Capotasto al ${n}° tasto`); return false; }
+            if (META.test(s) && l.words.length <= 8) return false;
             if (JUNK.some(re => re.test(s))) return false;
             if (s.replace(/[^A-Za-zÀ-ÿ0-9]/g, "").length < 2 && !asChordRow(l, 10)) return false;
             // una sola parola letta con poca sicurezza (pezzo di un altro foglio, piega): via
             if (l.words.length === 1 && (l.words[0].conf ?? 100) < 50 && !asChordRow(l, 10)) return false;
-            return !((i === 0 || i === pl.length - 1) && PAGE_NUM.test(s));
+            // in cima o in fondo: numero di pagina, oppure un pezzetto di 1-2 lettere (icone, barra del telefono)
+            const edge = i === 0 || i === pl.length - 1;
+            return !(edge && (PAGE_NUM.test(s) || (l.words.length === 1 && s.replace(/[^A-Za-zÀ-ÿ0-9]/g, "").length <= 2 && !asChordRow(l, 10))));
         });
         if (!units.length) return;
         // titolo: prima riga della prima pagina scritta più grande
@@ -241,7 +336,10 @@ export function layoutToSong(pages) {
         if (pi === 0 && !title && units.length > 2) {
             // sopra il titolo di una foto ci può essere un segno letto per sbaglio (bordo del foglio)
             if (!isTitle(units[0]) && isTitle(units[1]) && units[0].words.map(w => w.text).join("").length <= 3) units.shift();
-            if (isTitle(units[0])) title = units.shift().words.map(w => w.text).join(" ");
+            if (isTitle(units[0])) {
+                const tt = parseTitle(units.shift().words.map(w => w.text).join(" "));
+                title = tt.title; author = tt.author;
+            }
         } else if (pi > 0 && title && isTitle(units[0])) {
             // seconda pagina (o seconda foto) con lo stesso titolo in cima: non lo ripeto nel testo
             const norm = (x) => x.toLowerCase().replace(/[^a-zà-ÿ0-9]/g, "");
@@ -270,7 +368,17 @@ export function layoutToSong(pages) {
         for (let i = start; i < units.length; i++) {
             const l = units[i];
             const row = asChordRow(l, h);
-            if (!row) { blocks.push({ text: l.words.map(w => w.text).join(" "), top: l.cy, bottom: l.cy }); lines++; continue; }
+            if (!row) {
+                let text = l.words.map(w => w.text).join(" ");
+                const sec = text.match(SECTION);
+                if (sec) {
+                    const it = SECTION_IT[sec[1].toLowerCase().replace(/\s+/g, "")] ?? "";
+                    // "[Verse]": nessuna etichetta, solo la riga vuota prima della strofa
+                    blocks.push({ text: it, top: l.cy, bottom: l.cy, label: true });
+                    continue;
+                }
+                blocks.push({ text, top: l.cy, bottom: l.cy }); lines++; continue;
+            }
             chordCount += row.filter(w => w.chord).length;
             const next = units[i + 1];
             const hasLabel = row.some(w => w.deco && LABEL.test(w.text));
@@ -284,11 +392,15 @@ export function layoutToSong(pages) {
         }
         // righe vuote tra le strofe: dove la distanza tra due righe della canzone è molto più grande del solito
         const gaps = blocks.slice(1).map((b, i) => b.top - blocks[i].bottom);
-        const usual = median(gaps.filter(g => g > 0)) || 2 * h;
+        // distanza solita = quella tra le righe di una stessa strofa: il quarto più piccolo delle distanze (con tante
+        // righe di soli accordi separate da righe vuote, la mediana sarebbe già una riga vuota)
+        const pos = gaps.filter(g => g > 0).sort((x, y) => x - y);
+        const usual = pos[Math.floor(pos.length / 4)] || 2 * h;
         if (pi > 0 && out.length && out[out.length - 1] !== "") out.push("");
         blocks.forEach((b, i) => {
-            if (i > 0 && gaps[i - 1] > Math.max(1.8 * h, 1.5 * usual) && out.length && out[out.length - 1] !== "") out.push("");
-            out.push(b.text);
+            const breakBefore = b.label || (i > 0 && gaps[i - 1] > Math.max(1.8 * h, 1.5 * usual));
+            if (breakBefore && out.length && out[out.length - 1] !== "") out.push("");
+            if (b.text) out.push(b.text);
         });
     });
     if (carry) out.push(carry.text);
@@ -305,7 +417,104 @@ export function layoutToSong(pages) {
         const nm = (text.match(minor) || []).length, nb = (text.match(bare) || []).length;
         if (nm >= 3 && nb && nb <= nm / 2) text = text.replace(bare, "[$1-]");
     });
-    return { title, text, lines, merged, chords: chordCount };
+    return { title, author, notes: [...new Set(notes)], text, lines, merged, chords: chordCount };
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Screenshot fatti scorrendo la pagina: ognuno ripete qualche riga del precedente. Si trova dove il fondo di uno
+// coincide con l'inizio del successivo e si tiene una sola copia (quella con più accordi). Le prime e ultime 2 righe
+// possono essere tagliate dal bordo dello schermo o coperte dai pulsanti del sito: si possono saltare.
+// ---------------------------------------------------------------------------------------------------
+
+const plainOf = (l) => l.replace(/\[[^\]]*\]/g, "").toLowerCase().replace(/[^a-zà-ÿ0-9]/g, "");
+const chordsOf = (l) => (l.match(/\[[^\]]*\]/g) || []).join("").toLowerCase();
+function similarity(a, b) {
+    if (a === b) return 1;
+    if (!a || !b) return 0;
+    let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+        const cur = [i];
+        for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        prev = cur;
+    }
+    return 1 - prev[b.length] / Math.max(a.length, b.length);
+}
+// Somiglianza di due sequenze di accordi: accordi in comune nello stesso ordine / accordi della riga più lunga
+function chordSim(x, y) {
+    const a = x.c ? x.c.slice(1, -1).split("][") : [], b = y.c ? y.c.slice(1, -1).split("][") : [];
+    if (!a.length || !b.length) return a.length === b.length ? 1 : 0;
+    let prev = new Array(b.length + 1).fill(0);
+    for (let i = 1; i <= a.length; i++) {
+        const cur = [0];
+        for (let j = 1; j <= b.length; j++) cur[j] = a[i - 1] === b[j - 1] ? prev[j - 1] + 1 : Math.max(prev[j], cur[j - 1]);
+        prev = cur;
+    }
+    return prev[b.length] / Math.max(a.length, b.length);
+}
+// Stessa riga? Il testo deve somigliare; se tutte e due hanno accordi, anche gli accordi (le strofe ripetute hanno
+// spesso le stesse parole ma accordi un po' diversi)
+function sameLine(x, y) {
+    if (!x.p && !y.p) return chordSim(x, y) >= 0.75;     // righe di soli accordi
+    if (x.p.length + y.p.length < 6 || similarity(x.p, y.p) < 0.75) return false;
+    return !x.c || !y.c || chordSim(x, y) >= 0.75;
+}
+function stitchTwo(A, B) {
+    const pick = (L) => L.map((l, i) => ({ l, i, p: plainOf(l), c: chordsOf(l) })).filter(x => x.l.trim());
+    const a = pick(A), b = pick(B);
+    // si possono saltare solo righe "deboli": tagliate dal bordo, coperte dai pulsanti, di soli accordi.
+    // Una riga di testo intera no: nelle canzoni le strofe si ripetono e si rischierebbe di perderne una.
+    const weak = (x) => x.p.length < 12;
+    // Ogni allineamento possibile riceve un punteggio: righe uguali, più le righe saltate che "tornano" (la riga tagliata
+    // in fondo al primo screenshot ha gli stessi accordi della riga che la segue nel secondo). Con strofe ripetute
+    // più allineamenti vanno bene a parole; gli accordi delle righe tagliate dicono qual è quello vero.
+    const chordMatch = (x, y) => !!(x && y && x.c && y.c && chordSim(x, y) >= 0.6);
+    let best = null;
+    for (let sa = 0; sa <= 2; sa++) for (let sb = 0; sb <= 2; sb++) {
+        if (a.slice(a.length - sa).some(x => !weak(x)) || b.slice(0, sb).some(x => !weak(x))) continue;
+        const end = a.length - sa;
+        for (let n = Math.min(end, b.length - sb); n >= 1; n--) {
+            let ok = true, chars = 0;
+            for (let j = 0; j < n && ok; j++) {
+                const x = a[end - n + j], y = b[sb + j];
+                ok = sameLine(x, y);
+                chars += Math.min(x.p.length, y.p.length) + Math.min(x.c.length, y.c.length) / 3;
+            }
+            if (!ok || chars < 18) continue;
+            let score = n - 0.2 * (sa + sb);
+            for (let k = 0; k < sa; k++) {          // righe tagliate in fondo ad A <-> righe di B dopo la parte uguale
+                const x = a[end + k], y = b[sb + n + k];
+                if (x.c) score += chordMatch(x, y) ? 2 : -3;
+            }
+            for (let k = 0; k < sb; k++) {          // righe tagliate in cima a B <-> righe di A prima della parte uguale
+                const y = b[k], x = a[end - n - sb + k];
+                if (y.c) score += chordMatch(x, y) ? 2 : -3;
+            }
+            if (!best || score > best.score) best = { n, sa, sb, end, score };
+        }
+    }
+    const trimEnd = (L) => { const c = L.slice(); while (c.length && !c[c.length - 1].trim()) c.pop(); return c; };
+    if (!best) {
+        // lo screenshot prima finisce con una riga di accordi il cui testo è stato tagliato: è la stessa riga che
+        // apre questo screenshot (con il testo)
+        const last = a[a.length - 1];
+        const j = last && !last.p ? b.slice(0, 3).findIndex(y => y.p && chordSim(last, y) >= 0.75) : -1;
+        if (j >= 0 && b.slice(0, j).every(weak)) return [...A.slice(0, last.i), ...B.slice(b[j].i)];
+        return [...trimEnd(A), "", ...B];
+    }
+    const res = A.slice(0, a[best.end - 1].i + 1);
+    for (let j = 0; j < best.n; j++) {               // della parte ripetuta tengo la riga con più accordi
+        const x = a[best.end - best.n + j], y = b[best.sb + j];
+        if (y.c.length > x.c.length) res[x.i] = y.l;
+    }
+    return [...res, ...B.slice(b[best.sb + best.n - 1].i + 1)];
+}
+export function stitchSongs(texts) {
+    const list = texts.map(t => String(t || "")).filter(t => t.trim());
+    if (!list.length) return "";
+    let acc = list[0].split("\n");
+    list.slice(1).forEach(t => { acc = stitchTwo(acc, t.split("\n")); });
+    while (acc.length && !acc[acc.length - 1].trim()) acc.pop();
+    return acc.join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -362,9 +571,11 @@ export function ocrToWords(data) {
         const bb = w.bbox || {};
         let text = String(w.text || "").trim();
         const conf = w.confidence != null ? w.confidence : 100;
-        if (!text || conf < 30) return;                                                  // macchie e bordi letti come segni
+        // gli accordi (parole corte, spesso in grassetto) vengono letti con poca sicurezza anche quando sono giusti
+        const chordLike = conf >= 15 && text.length <= 9 && isOneChord(chordGuess(text));
+        if (!text || (conf < 30 && !chordLike)) return;                                  // macchie e bordi letti come segni
         // segni piccoli poco sicuri (bordo del foglio, piega, puntini): "|", "i", "4,"
-        if (conf < 65 && text.replace(/[^A-Za-zÀ-ÿ0-9]/g, "").length <= 1 && !/^[A-G]$/.test(text)) return;
+        if (conf < 65 && !chordLike && text.replace(/[^A-Za-zÀ-ÿ0-9]/g, "").length <= 1 && !/^[A-G]$/.test(text)) return;
         if (text === "ll") text = "Il";                                                  // "Il" letto con due elle
         words.push({ text, x0: bb.x0, x1: bb.x1, y0: bb.y0, y1: bb.y1, line, conf: Math.round(conf) });
     };
@@ -393,7 +604,8 @@ function loadScript(src, globalName) {
 
 // Foto: girata giusta (EXIF), ridimensionata, in grigio. Le ombre e la luce non uniforme si tolgono dividendo
 // per il "fondo" del foglio (stimato su una griglia: il punto più chiaro di ogni quadretto, poi sfumato).
-export async function prepareImage(source) {
+// zoom: ingrandimento in più rispetto alla misura normale (per rileggere le scritte piccole)
+export async function prepareImage(source, zoom = 1) {
     let bmp = source;
     if (source instanceof Blob) {
         try { bmp = await createImageBitmap(source, { imageOrientation: "from-image" }); }
@@ -408,7 +620,7 @@ export async function prepareImage(source) {
     }
     const w0 = bmp.width, h0 = bmp.height;
     if (!w0 || !h0) throw new Error("immagine vuota");
-    const scale = Math.min(2600 / Math.max(w0, h0), Math.max(1, 1600 / Math.min(w0, h0)));
+    const scale = zoom * Math.min(2600 / Math.max(w0, h0), Math.max(1, 1600 / Math.min(w0, h0)));
     const canvas = document.createElement("canvas");
     const W = canvas.width = Math.round(w0 * scale), H = canvas.height = Math.round(h0 * scale);
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -467,8 +679,15 @@ export async function prepareImage(source) {
         let acc = 0, lo = 0;
         while (lo < 200 && (acc += hist[lo]) < out.length * 0.01) lo++;
         const hi = 235, span = Math.max(20, hi - lo);
+        // screenshot del telefono (molto più alto che largo): la barra in alto con ora e icone non è la canzone,
+        // e le scritte grigie dei siti (titoli, accordi chiari) si scuriscono, se no il lettore le prende per sfondo.
+        // Sulle foto di carta no: le lettere diventerebbero troppo grosse.
+        const screenshot = H / W >= 1.9;
+        const statusBar = screenshot ? Math.round(H * 0.036) : 0;
+        const lut = new Uint8ClampedArray(256);
+        for (let v = 0; v < 256; v++) { const x = Math.min(1, Math.max(0, (v - lo) / span)); lut[v] = 255 * Math.pow(x, screenshot ? 1.8 : 1); }
         for (let i = 0, j = 0; j < out.length; i += 4, j++) {
-            const v = (out[j] - lo) * 255 / span;
+            const v = j < statusBar * W ? 255 : lut[out[j]];
             px[i] = px[i + 1] = px[i + 2] = v; px[i + 3] = 255;
         }
         ctx.putImageData(img, 0, 0);
@@ -523,18 +742,40 @@ function shrinkCanvas(src, max) {
 // Lettura di una pagina-immagine nel verso giusto. Prima com'è; se il testo letto non ha senso (sicurezza bassa:
 // foglio orizzontale fotografato in verticale, o capovolto) si prova velocemente il foglio girato di 90°, 270° e
 // 180° su una copia piccola, e si rilegge bene nel verso che dà il testo più sicuro.
-async function ocrOriented(canvas, onProgress, label) {
-    const first = await ocrCanvas(canvas, onProgress, label);
-    if (first.conf >= 70) return first.words;
-    const small = shrinkCanvas(canvas, 1400);
-    let bestQ = 0, bestConf = first.conf;
-    for (const q of [1, 3, 2]) {
-        const probe = await ocrCanvas(rotateCanvas(small, q), onProgress, `${label}: provo a girarla`);
-        if (probe.conf > bestConf + 10) { bestQ = q; bestConf = probe.conf; }
-        if (bestConf >= 70) break;
+// remake(zoom): rifà l'immagine dall'originale più grande (meglio che ingrandire quella già preparata)
+async function ocrOriented(canvas, onProgress, label, remake) {
+    let best = await ocrCanvas(canvas, onProgress, label);
+    let page = canvas, turn = 0;
+    if (best.conf < 70) {
+        const small = shrinkCanvas(canvas, 1400);
+        let bestQ = 0, bestConf = best.conf;
+        for (const q of [1, 3, 2]) {
+            const probe = await ocrCanvas(rotateCanvas(small, q), onProgress, `${label}: provo a girarla`);
+            if (probe.conf > bestConf + 10) { bestQ = q; bestConf = probe.conf; }
+            if (bestConf >= 70) break;
+        }
+        if (bestQ) { turn = bestQ; page = rotateCanvas(canvas, bestQ); best = await ocrCanvas(page, onProgress, label); }
     }
-    if (!bestQ) return first.words;
-    return (await ocrCanvas(rotateCanvas(canvas, bestQ), onProgress, label)).words;
+    // scritte piccole (screenshot di una pagina intera, foto da lontano): il lettore sbaglia molto sotto i 20 pixel
+    // di altezza. Si ingrandisce l'immagine (al massimo 10 milioni di punti, per la memoria del telefono) e si rilegge.
+    const hMed = median(best.words.map(w => w.y1 - w.y0));
+    if (hMed && hMed < 20) {
+        const k = Math.min(26 / hMed, Math.sqrt(10e6 / (page.width * page.height)), 3);
+        if (k >= 1.3) {
+            let big;
+            if (remake) big = rotateCanvas(await remake(k), turn);
+            else {
+                big = document.createElement("canvas");
+                big.width = Math.round(page.width * k); big.height = Math.round(page.height * k);
+                const g = big.getContext("2d");
+                g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high";
+                g.drawImage(page, 0, 0, big.width, big.height);
+            }
+            const again = await ocrCanvas(big, onProgress, `${label}: scritte piccole, rileggo più grande`);
+            if (again.conf >= best.conf - 5) best = again;
+        }
+    }
+    return best.words;
 }
 
 async function pdfToPages(file, onProgress, label) {
@@ -571,7 +812,7 @@ async function pdfToPages(file, onProgress, label) {
             const cx = canvas.getContext("2d");
             cx.fillStyle = "#fff"; cx.fillRect(0, 0, canvas.width, canvas.height);
             await page.render({ canvasContext: cx, viewport: v2 }).promise;
-            words = await ocrOriented(await prepareImage(canvas), onProgress, pl);
+            words = await ocrOriented(await prepareImage(canvas), onProgress, pl, (z) => prepareImage(canvas, z));
             usedOcr = true;
         }
         pages.push({ words });
@@ -595,11 +836,11 @@ export async function readPages(files, onProgress = () => {}) {
             const label = list.length > 1 ? `File ${k + 1} di ${list.length}` : (isPdfFile(file) ? "PDF" : "Foto");
             if (isPdfFile(file)) {
                 const r = await pdfToPages(file, onProgress, label);
-                pages.push(...r.pages); methods.add(r.method); truncated = truncated || r.truncated;
+                pages.push(...r.pages.map(p => ({ ...p, src: "pdf" }))); methods.add(r.method); truncated = truncated || r.truncated;
             } else {
                 onProgress(`${label}: preparo l'immagine…`, null);
                 const canvas = await prepareImage(file);
-                pages.push({ words: await ocrOriented(canvas, onProgress, label) });
+                pages.push({ words: await ocrOriented(canvas, onProgress, label, (z) => prepareImage(file, z)), src: "foto" });
                 methods.add("foto");
             }
         }
@@ -614,6 +855,19 @@ export async function readPages(files, onProgress = () => {}) {
 // Punto d'ingresso: file -> { title, text, lines, merged, chords, method, truncated }
 // onProgress(messaggio, frazione 0..1 oppure null)
 export async function importSongFiles(files, onProgress = () => {}) {
-    const { pages, method, truncated } = await readPages(files, onProgress);
+    // in ordine di nome: screenshot e foto hanno data e ora nel nome (Screenshot_2026-11-18-22-03-43, IMG_20261118_...)
+    const list = [...files].sort((x, y) => String(x.name || "").localeCompare(String(y.name || ""), undefined, { numeric: true }));
+    const { pages, method, truncated } = await readPages(list, onProgress);
+    if (pages.length > 1 && pages.every(p => p.src === "foto")) {
+        // più foto o screenshot: ognuna per conto suo, poi cucite togliendo le righe ripetute
+        const songs = pages.map(p => layoutToSong([p]));
+        const text = stitchSongs(songs.map(s => s.text));
+        const first = songs.find(s => s.title) || {};
+        return {
+            title: first.title || "", author: (songs.find(s => s.author) || {}).author || "", notes: [...new Set(songs.flatMap(s => s.notes))],
+            text, lines: text.split("\n").filter(l => plainOf(l)).length, merged: songs.reduce((a, s) => a + s.merged, 0),
+            chords: (text.match(/\[[^\]]+\]/g) || []).length, method, truncated,
+        };
+    }
     return { ...layoutToSong(pages), method, truncated };
 }
